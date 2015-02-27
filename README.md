@@ -1,4 +1,29 @@
 ### About
+This is forked from https://code.google.com/p/smali/  
+The additional modification is to support convert oat file to dex.
+
+Function concept:  
+boot.oat -> extract optimized boot class dex files -> deoptimize to dex files  
+app.odex(oat) -> reference boot dex files to deoptimize
+
+Compiled jar:
+https://github.com/testwhat/SmaliEx/blob/master/smaliex-bin/oat2dex.jar
+
+Usage:  
+Deoptimize boot classes (The output will in "odex" and "dex" folders):  
+&nbsp;&nbsp;java -jar oat2dex.jar boot &lt;boot.oat file&gt;  
+Deoptimize application:  
+&nbsp;&nbsp;java -jar oat2dex.jar &lt;app.odex&gt; &lt;boot-class-folder output from above&gt;  
+Get odex from oat:  
+&nbsp;&nbsp;java -jar oat2dex.jar odex &lt;oat file&gt;
+
+Used by:  
+[JoelDroid](http://forum.xda-developers.com/android/software-hacking/script-app-joeldroid-lollipop-batch-t2980857)  
+[SVADeodexerForArt](http://forum.xda-developers.com/galaxy-s5/general/tool-deodex-tool-android-l-t2972025)  
+[PUMa - Patch Utility Manager](http://forum.xda-developers.com/showthread.php?t=1434946)
+
+<h3 style="border-bottom:2px solid #666">Original Readme<h3>
+### About
 
 smali/baksmali is an assembler/disassembler for the dex format used by dalvik, Android's Java VM implementation. The syntax is loosely based on Jasmin's/dedexer's syntax, and supports the full functionality of the dex format (annotations, debug info, line info, etc.)
 

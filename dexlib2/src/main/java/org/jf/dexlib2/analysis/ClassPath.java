@@ -58,6 +58,7 @@ public class ClassPath {
     @Nonnull private final TypeProto unknownClass;
     @Nonnull private HashMap<String, ClassDef> availableClasses = Maps.newHashMap();
     private boolean checkPackagePrivateAccess;
+    public final int api;
 
     /**
      * Creates a new ClassPath instance that can load classes from the given dex files
@@ -75,7 +76,7 @@ public class ClassPath {
      * @param api API level
      */
     public ClassPath(@Nonnull Iterable<DexFile> classPath, int api) {
-        this(Lists.newArrayList(classPath), api == 17);
+        this(Lists.newArrayList(classPath), api == 17, api);
     }
 
     /**
@@ -84,13 +85,14 @@ public class ClassPath {
      * @param classPath An iterable of DexFile objects. When loading a class, these dex files will be searched in order
      * @param checkPackagePrivateAccess Whether checkPackagePrivateAccess is needed, enabled for ONLY early API 17 by default
      */
-    public ClassPath(@Nonnull Iterable<DexFile> classPath, boolean checkPackagePrivateAccess) {
+    public ClassPath(@Nonnull Iterable<DexFile> classPath, boolean checkPackagePrivateAccess, int api) {
         // add fallbacks for certain special classes that must be present
         Iterable<DexFile> dexFiles = Iterables.concat(classPath, Lists.newArrayList(getBasicClasses()));
 
         unknownClass = new UnknownClassProto(this);
         loadedClasses.put(unknownClass.getType(), unknownClass);
         this.checkPackagePrivateAccess = checkPackagePrivateAccess;
+        this.api = api;
 
         loadPrimitiveType("Z");
         loadPrimitiveType("B");
@@ -103,11 +105,15 @@ public class ClassPath {
         loadPrimitiveType("L");
 
         for (DexFile dexFile: dexFiles) {
-            for (ClassDef classDef: dexFile.getClasses()) {
-                ClassDef prev = availableClasses.get(classDef.getType());
-                if (prev == null) {
-                    availableClasses.put(classDef.getType(), classDef);
-                }
+            addDex(dexFile);
+        }
+    }
+
+    public final void addDex(DexFile dexFile) {
+        for (ClassDef classDef : dexFile.getClasses()) {
+            ClassDef prev = availableClasses.get(classDef.getType());
+            if (prev == null) {
+                availableClasses.put(classDef.getType(), classDef);
             }
         }
     }
@@ -179,7 +185,7 @@ public class ClassPath {
             } catch (ExceptionWithContext e){}
         }
         dexFiles.add(dexFile);
-        return new ClassPath(dexFiles, checkPackagePrivateAccess);
+        return new ClassPath(dexFiles, checkPackagePrivateAccess, api);
     }
 
     private static final Pattern dalvikCacheOdexPattern = Pattern.compile("@([^@]+)@classes.dex$");

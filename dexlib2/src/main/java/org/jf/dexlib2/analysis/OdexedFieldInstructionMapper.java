@@ -229,9 +229,12 @@ public class OdexedFieldInstructionMapper {
         correctOdexedOpcode = opcodeMap[opcodeType][opcodeSubType][0][typeIndex];
         deodexedOpcode = opcodeMap[opcodeType][opcodeSubType][1][typeIndex];
 
-        if (correctOdexedOpcode != odexedOpcode) {
-            throw new AnalysisException(String.format("Incorrect field type \"%s\" for %s", fieldType,
-                    odexedOpcode.name));
+        if (correctOdexedOpcode != odexedOpcode
+                && odexedOpcode.getMinApi() < Opcode.LOLLIPOP) {
+            throw new AnalysisException(
+                    String.format("Incorrect field type \"%s\" for %s"
+                            + " (correctOdexedOpcode=%s odexedOpcode=%s)", fieldType,
+                            odexedOpcode.name, correctOdexedOpcode.toString(), odexedOpcode.toString()));
         }
 
         return deodexedOpcode;

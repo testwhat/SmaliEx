@@ -1005,8 +1005,8 @@ public abstract class DexWriter<
                         instructionWriter.write((SparseSwitchPayload)instruction);
                         break;
                     default:
-                        throw new ExceptionWithContext("Unsupported instruction format: %s",
-                                instruction.getOpcode().format);
+                        throw new ExceptionWithContext("Unsupported instruction format: %s (%s)",
+                                instruction.getOpcode().format, instruction.getOpcode());
                 }
             }
 

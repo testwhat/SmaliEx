@@ -1,0 +1,42 @@
+configurations {
+    proguard
+}
+
+dependencies {
+    compile project(':smali')
+    compile project(':baksmali')
+    proguard depends.proguard
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
+// Build a separate jar that contains all dependencies
+task fatJar(type: Jar, dependsOn: jar) {
+    from sourceSets.main.output
+    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+
+    manifest {
+        attributes("Main-Class": "org.rh.smaliex.Main")
+    }
+}
+tasks.getByPath('build').dependsOn(fatJar)
+
+task proguard(type: JavaExec, dependsOn: fatJar) {
+    def outFile = fatJar.destinationDir.getPath() + '/' + fatJar.baseName + '-' + fatJar.version + '-small' + '.' + fatJar.extension
+    inputs.file fatJar.archivePath
+    outputs.file outFile
+
+    classpath = configurations.proguard
+    main = 'proguard.ProGuard'
+    args "-injars ${fatJar.archivePath}(!**/TestStringTemplate*.class)"
+    args "-outjars ${outFile}"
+    args "-libraryjars ${System.properties['java.home']}/lib/rt.jar"
+    args '-dontobfuscate'
+    args '-dontoptimize'
+    args '-keep public class org.rh.smaliex.Main { public static void main(java.lang.String[]); }'
+    args '-keepclassmembers enum * { public static **[] values(); public static ** valueOf(java.lang.String); }'
+    args '-dontwarn com.google.common.**'
+    args '-dontnote com.google.common.**'
+}

@@ -39,8 +39,10 @@ import java.util.HashMap;
 public class Opcodes {
     private final Opcode[] opcodesByValue;
     private final HashMap<String, Opcode> opcodesByName;
+    public final int apiLevel;
 
     public Opcodes(int api) {
+        apiLevel = api;
         opcodesByValue = new Opcode[256];
         opcodesByName = Maps.newHashMap();
 
