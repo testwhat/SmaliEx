@@ -6,3 +6,6 @@
 /smali/build
 /smaliex/build
 /util/build
+*.iml
+*.ipr
+*.iws

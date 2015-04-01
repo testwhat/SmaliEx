@@ -5,7 +5,7 @@ configurations {
 dependencies {
     compile project(':smali')
     compile project(':baksmali')
-    proguard depends.proguard
+    proguard depends.proguard_gradle
 }
 
 tasks.withType(JavaCompile) {
