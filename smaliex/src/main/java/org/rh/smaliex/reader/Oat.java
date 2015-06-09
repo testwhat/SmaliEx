@@ -75,9 +75,9 @@ public class Oat {
         final int interpreter_to_interpreter_bridge_offset_;
         final int interpreter_to_compiled_code_bridge_offset_;
         final int jni_dlsym_lookup_offset_;
-        final int portable_imt_conflict_trampoline_offset_;
-        final int portable_resolution_trampoline_offset_;
-        final int portable_to_interpreter_bridge_offset_;
+        int portable_imt_conflict_trampoline_offset_;
+        int portable_resolution_trampoline_offset_;
+        int portable_to_interpreter_bridge_offset_;
         final int quick_generic_jni_trampoline_offset_;
         final int quick_imt_conflict_trampoline_offset_;
         final int quick_resolution_trampoline_offset_;
@@ -105,9 +105,13 @@ public class Oat {
             interpreter_to_interpreter_bridge_offset_ = r.readInt();
             interpreter_to_compiled_code_bridge_offset_ = r.readInt();
             jni_dlsym_lookup_offset_ = r.readInt();
-            portable_imt_conflict_trampoline_offset_ = r.readInt();
-            portable_resolution_trampoline_offset_ = r.readInt();
-            portable_to_interpreter_bridge_offset_ = r.readInt();
+            if (version_[1] <= '4') {
+                // Remove portable. (since oat version 052)
+                // https://android.googlesource.com/platform/art/+/956af0f0
+                portable_imt_conflict_trampoline_offset_ = r.readInt();
+                portable_resolution_trampoline_offset_ = r.readInt();
+                portable_to_interpreter_bridge_offset_ = r.readInt();
+            }
             quick_generic_jni_trampoline_offset_ = r.readInt();
             quick_imt_conflict_trampoline_offset_ = r.readInt();
             quick_resolution_trampoline_offset_ = r.readInt();
@@ -255,7 +259,11 @@ public class Oat {
     }
 
     public Oat(DataReader reader, boolean skipMode) throws IOException {
-        mOatPosition = reader.position(); // Normally start from 4096(0x1000)
+        mOatPosition = reader.position();
+        if (mOatPosition != 4096) {
+             // Normally start from 4096(0x1000)
+            LLog.i("Strange oat position " + mOatPosition);
+        }
         mSrcFile = reader.getFile();
         mHeader = new Header(reader);
         mOatDexFiles = new OatDexFile[mHeader.dex_file_count_];
@@ -282,6 +290,13 @@ public class Oat {
                 reader.readIntArray(odf.methods_offsets_);
             }
         }
+    }
+
+    public int guessApiLevel() {
+        if (mHeader.version_[1] >= '6') {
+            return 23;
+        }
+        return mHeader.version_[1] <= '4' ? 21 : 22;
     }
 
     public void dump() {

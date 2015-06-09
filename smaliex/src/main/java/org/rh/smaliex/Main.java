@@ -35,7 +35,7 @@ public class Main {
 
     public static void main(String[] args) {
         if (args.length < 2) {
-            System.out.println("Easy oat2dex 0.6");
+            System.out.println("Easy oat2dex 0.8");
             System.out.println("Usage:");
             System.out.println("Get dex from boot.oat: boot <boot.oat>");
             System.out.println("Get dex from  app oat: <oat-file> <boot-class-folder>");

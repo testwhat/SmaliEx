@@ -56,7 +56,9 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.TreeSet;
 import org.jf.dexlib2.Opcode;
+import org.jf.dexlib2.dexbacked.DexBackedField;
 
 /**
  * A class "prototype". This contains things like the interfaces, the superclass, the vtable and the instance fields
@@ -69,16 +71,17 @@ public class ClassProto implements TypeProto {
 
     protected boolean vtableFullyResolved = true;
     protected boolean interfacesFullyResolved = true;
+    protected int objectSize;
 
     public ClassProto(@Nonnull ClassPath classPath, @Nonnull String type) {
-        if (type.charAt(0) != 'L') {
+        if (type.charAt(0) != TYPE_OBJECT) {
             throw new ExceptionWithContext("Cannot construct ClassProto for non reference type: %s", type);
         }
         this.classPath = classPath;
         this.type = type;
         instanceFieldsSupplier
-                = Suppliers.memoize(classPath.api < Opcode.LOLLIPOP
-                                ? new DalvikIFieldSupplier() : new ArtIFieldSupplier());
+                = Suppliers.memoize(classPath.apiLevel < Opcode.LOLLIPOP
+                                ? new DalvikIFieldSupplier(this) : new ArtIFieldSupplier(this));
     }
 
     @Override public String toString() { return type; }
@@ -89,7 +92,6 @@ public class ClassProto implements TypeProto {
     public ClassDef getClassDef() {
         return classDefSupplier.get();
     }
-
 
     @Nonnull private final Supplier<ClassDef> classDefSupplier = Suppliers.memoize(new Supplier<ClassDef>() {
         @Override public ClassDef get() {
@@ -366,59 +368,453 @@ public class ClassProto implements TypeProto {
         return instanceFieldsSupplier.get();
     }
 
-    static class FieldOffsetCalulator {
-        final byte REFERENCE = 0;
-        final byte WIDE = 1;
-        final byte OTHER = 2;
+    final static char PRIM_VOID = 'V';
+    final static char PRIM_BOOLEAN = 'Z';
+    final static char PRIM_BYTE = 'B';
+    final static char PRIM_CHAR = 'C';
+    final static char PRIM_SHORT = 'S';
+    final static char PRIM_INT = 'I';
+    final static char PRIM_FLOAT = 'F';
+    final static char PRIM_LONG = 'J';
+    final static char PRIM_DOUBLE = 'D';
+    final static char TYPE_ARRAY = '[';
+    final static char TYPE_OBJECT = 'L';
 
-        static byte getFieldType(@Nonnull FieldReference field) {
-            switch (field.getType().charAt(0)) {
-            case '[':
-            case 'L':
-                return 0; //REFERENCE
-            case 'J':
-            case 'D':
-                return 1; //WIDE
-            default:
-                return 2; //OTHER
-            }
-        }
+    final static byte REFERENCE = 0;
+    final static byte WIDE = 1;
+    final static byte OTHER = 2;
 
-        static void swap(byte[] fieldTypes, List<Field> fields, int position1, int position2) {
-            byte tempType = fieldTypes[position1];
-            fieldTypes[position1] = fieldTypes[position2];
-            fieldTypes[position2] = tempType;
+    static byte getFieldWidthType(@Nonnull FieldReference field) {
+        return getFieldWidthType(field.getType().charAt(0));
+    }
 
-            Field tempField = fields.set(position1, fields.get(position2));
-            fields.set(position2, tempField);
+    static byte getFieldWidthType(char typeChar) {
+        switch (typeChar) {
+        case TYPE_ARRAY:
+        case TYPE_OBJECT:
+            return REFERENCE;
+        case PRIM_LONG:
+        case PRIM_DOUBLE:
+            return WIDE;
+        default:
+            return OTHER;
         }
     }
 
-    abstract class IFieldSupplier extends FieldOffsetCalulator
-            implements Supplier<SparseArray<FieldReference>> {
+    abstract static class FieldOffsetCalulator implements Supplier<SparseArray<FieldReference>> {
+        final ClassProto classProto;
+        int initialFieldOffset;
 
-        @Nonnull
-        abstract ArrayList<Field> getSortedIFieldList();
+        FieldOffsetCalulator(ClassProto cProto) {
+            classProto = cProto;
+        }
+    }
 
-        abstract int getStartFieldOffset();
+    static class ArtIFieldSupplier extends FieldOffsetCalulator {
+        final Comparator<Field> fieldComparator;
+
+        ArtIFieldSupplier(ClassProto clsProto) {
+            super(clsProto);
+            // art/runtime/class_linker.cc LinkFields
+            // art/compiler/dex/dex_to_dex_compiler.cc
+            initialFieldOffset = 0; // MemberOffset field_offset(0);
+            fieldComparator = classProto.classPath.apiLevel <= Opcode.LOLLIPOP
+                    ? new FieldComparatorL50() : new FieldComparatorLatest();
+        }
+
+        SparseArray<FieldReference> getForApiLevelBelow23(ArrayList<Field> fields,
+                int fieldOffset, SparseArray<FieldReference> instanceFields) {
+            final int numFields = fields.size();
+            int currentField = 0;
+            for (; currentField < numFields; currentField++) {
+                Field field = fields.get(0);
+                int type = getTypeAsPrimitiveType(field);
+                boolean isPrimitive = type != kPrimNot;
+                if (isPrimitive) {
+                    break;
+                }
+                fields.remove(0);
+                instanceFields.append(fieldOffset, field);
+                fieldOffset += sizeof_uint32_t;
+            }
+
+            if (currentField != numFields && !isAligned(8, fieldOffset)) {
+                for (int i = 0; i < fields.size(); i++) {
+                    Field field = fields.get(i);
+                    int type = getTypeAsPrimitiveType(field);
+                    if (type == kPrimLong || type == kPrimDouble) {
+                        continue;
+                    }
+                    instanceFields.append(fieldOffset, field);
+                    fields.remove(i);
+                    break;
+                }
+                fieldOffset += sizeof_uint32_t;
+            }
+
+            while (!fields.isEmpty()) {
+                Field field = fields.remove(0);
+                int type = getTypeAsPrimitiveType(field);
+                instanceFields.append(fieldOffset, field);
+                fieldOffset += (type == kPrimLong || type == kPrimDouble) ?
+                        sizeof_uint64_t : sizeof_uint32_t;
+            }
+            classProto.objectSize = fieldOffset; // not for IsVariableSize (String and Array)
+
+            return instanceFields;
+        }
+
+        final static int sizeof_mirror_HeapReference_mirror_Object = 4;
 
         @Override
         public SparseArray<FieldReference> get() {
-            //This is a bit of an "involved" operation. We need to follow the same algorithm that dalvik uses to
-            //arrange fields, so that we end up with the same field offsets (which is needed for deodexing).
-            // For dalvik, see dalvik/vm/oo/Class.c - computeFieldOffsets()
-            // For art, See art/runtime/class_linker.cc - ClassLinker::LinkFields
+            // See art/runtime/class_linker.cc ClassLinker::LinkFields
+            final ArrayList<Field> fields = Lists.newArrayList(
+                    classProto.getClassDef().getInstanceFields());
+            Collections.sort(fields, fieldComparator);
 
-            ArrayList<Field> fields = getSortedIFieldList();
             final int fieldCount = fields.size();
-            //the "type" for each field in fields. 0=reference,1=wide,2=other
-            byte[] fieldTypes = new byte[fields.size()];
-            for (int i = 0; i < fieldCount; i++) {
-                fieldTypes[i] = getFieldType(fields.get(i));
+            int fieldOffset = initialFieldOffset;
+            int superFieldCount = 0;
+            String superclassType = classProto.getSuperclass();
+            SparseArray<FieldReference> superFields = null;
+            if (superclassType != null) {
+                ClassProto superclass = (ClassProto) classProto.classPath.getClass(superclassType);
+                superFields = superclass.getInstanceFields();
+                fieldOffset = superclass.objectSize;
+                superFieldCount = superFields.size();
+            }
+            final int totalFieldCount = superFieldCount + fieldCount;
+            final SparseArray<FieldReference> instanceFields = new SparseArray<>(totalFieldCount);
+            if (superFields != null && superFieldCount > 0) {
+                for (int i = 0; i < superFieldCount; i++) {
+                    instanceFields.append(superFields.keyAt(i), superFields.valueAt(i));
+                }
+            }
+            if (classProto.classPath.apiLevel <= Opcode.LOLLIPOP_MR1) {
+                return getForApiLevelBelow23(fields, fieldOffset, instanceFields);
             }
 
-            //The first operation is to move all of the reference fields to the front. To do this, find the first
-            //non-reference field, then find the last reference field, swap them and repeat
+            // References should be at the front.
+            TreeSet<FieldGap> gaps = new TreeSet<>();
+            int currentField = 0;
+            for (; currentField < fieldCount; currentField++) {
+                Field f = fields.get(0);
+                int type = getTypeAsPrimitiveType(f);
+                boolean isPrimitive = type != kPrimNot;
+                if (isPrimitive) {
+                    break;
+                }
+                if (!isAligned(sizeof_mirror_HeapReference_mirror_Object, fieldOffset)) {
+                    int oldFieldOffset = fieldOffset;
+                    fieldOffset = roundUp(fieldOffset, 4);
+                    FieldGap.add(oldFieldOffset, fieldOffset, gaps);
+                }
+                assert isAligned(sizeof_mirror_HeapReference_mirror_Object, fieldOffset);
+                fields.remove(0);
+                instanceFields.append(fieldOffset, f);
+                fieldOffset += sizeof_mirror_HeapReference_mirror_Object;
+            }
+            FieldOffsetData data = new FieldOffsetData();
+            data.currentField = currentField;
+            data.fieldOffset = fieldOffset;
+            data.fields = fields;
+            data.gaps = gaps;
+            data.instanceFields = instanceFields;
+            shuffleForward(8, data);
+            shuffleForward(4, data);
+            shuffleForward(2, data);
+            shuffleForward(1, data);
+            assert fields.isEmpty();
+            // See runtime/mirror/class.h
+            classProto.objectSize = data.fieldOffset; // not for IsVariableSize (String and Array)
+            return instanceFields;
+        }
+
+        static void shuffleForward(int n, FieldOffsetData data) {
+            while (!data.fields.isEmpty()) {
+                Field f = data.fields.get(0);
+                int type = getTypeAsPrimitiveType(f);
+                if (getComponentSize(type) < n) {
+                    break;
+                }
+                if (!isAligned(n, data.fieldOffset)) {
+                    int oldFieldOffset = data.fieldOffset;
+                    data.fieldOffset = roundUp(data.fieldOffset, n);
+                    FieldGap.add(oldFieldOffset, data.fieldOffset, data.gaps);
+                }
+                data.fields.remove(0);
+                if (!data.gaps.isEmpty() && data.gaps.first().size >= n) {
+                    FieldGap gap = data.gaps.pollFirst();
+                    data.instanceFields.append(gap.startOffset, f);
+                    assert isAligned(n, gap.startOffset);
+                    if (gap.size > n) {
+                        FieldGap.add(gap.startOffset + n, gap.startOffset + gap.size, data.gaps);
+                    }
+                } else {
+                    assert isAligned(n, data.fieldOffset);
+                    data.instanceFields.append(data.fieldOffset, f);
+                    data.fieldOffset += n;
+                }
+                data.currentField++;
+            }
+        }
+
+        static class FieldOffsetData {
+            int currentField;
+            int fieldOffset;
+            ArrayList<Field> fields;
+            TreeSet<FieldGap> gaps;
+            SparseArray<FieldReference> instanceFields;
+        }
+
+        final static int sizeof_uint64_t = 8;
+        final static int sizeof_uint32_t = 4;
+        final static int sizeof_uint16_t = 2;
+        final static int sizeof_uint8_t = 1;
+
+        static class FieldGap implements Comparable<FieldGap> {
+            final int startOffset;
+            final int size;
+
+            public FieldGap(int o, int s) {
+                startOffset = o;
+                size = s;
+            }
+
+            @Override
+            public int compareTo(FieldGap rhs) {
+                // https://android-review.googlesource.com/#/c/133351/
+                if (size != rhs.size) {
+                    return rhs.size - size;
+                } else {
+                    return startOffset - rhs.startOffset;
+                }
+            }
+
+            static void add(int gapStart, int gapEnd, TreeSet<FieldGap> gaps) {
+                int currentOffset = gapStart;
+                while (currentOffset != gapEnd) {
+                    int remaining = gapEnd - currentOffset;
+                    if (remaining >= sizeof_uint32_t && isAligned(4, currentOffset)) {
+                        gaps.add(new FieldGap(currentOffset, sizeof_uint32_t));
+                        currentOffset += sizeof_uint32_t;
+                    } else if (remaining >= sizeof_uint16_t && isAligned(2, currentOffset)) {
+                        gaps.add(new FieldGap(currentOffset, sizeof_uint16_t));
+                        currentOffset += sizeof_uint16_t;
+                    } else {
+                        gaps.add(new FieldGap(currentOffset, sizeof_uint8_t));
+                        currentOffset += sizeof_uint8_t;
+                    }
+                }
+            }
+        }
+
+        final static class FieldComparatorL50 implements Comparator<Field> {
+            // art/runtime/class_linker.cc LinkFieldsComparator
+            //5161  bool operator()(mirror::ArtField* field1, mirror::ArtField* field2)
+            //5162      NO_THREAD_SAFETY_ANALYSIS {
+            //5163    // First come reference fields, then 64-bit, and finally 32-bit
+            //5164    Primitive::Type type1 = field1->GetTypeAsPrimitiveType();
+            //5165    Primitive::Type type2 = field2->GetTypeAsPrimitiveType();
+            //5166    if (type1 != type2) {
+            //5167      bool is_primitive1 = type1 != Primitive::kPrimNot;
+            //5168      bool is_primitive2 = type2 != Primitive::kPrimNot;
+            //5169      bool is64bit1 = is_primitive1 && (type1 == Primitive::kPrimLong ||
+            //5170                                        type1 == Primitive::kPrimDouble);
+            //5171      bool is64bit2 = is_primitive2 && (type2 == Primitive::kPrimLong ||
+            //5172                                        type2 == Primitive::kPrimDouble);
+            //5173      int order1 = !is_primitive1 ? 0 : (is64bit1 ? 1 : 2);
+            //5174      int order2 = !is_primitive2 ? 0 : (is64bit2 ? 1 : 2);
+            //5175      if (order1 != order2) {
+            //5176        return order1 < order2;
+            //5177      }
+            //5178    }
+            //5179    // same basic group? then sort by string.
+            //5180    return strcmp(field1->GetName(), field2->GetName()) < 0;
+            //5181  }
+            @Override
+            public int compare(Field f1, Field f2) {
+                int type1 = getTypeAsPrimitiveType(f1);
+                int type2 = getTypeAsPrimitiveType(f2);
+                if (type1 != type2) {
+                    boolean isPrimitive1 = type1 != kPrimNot;
+                    boolean isPrimitive2 = type2 != kPrimNot;
+                    boolean is64bit1 = isPrimitive1 &&
+                            (type1 == kPrimLong || type1 == kPrimDouble);
+                    boolean is64bit2 = isPrimitive2 &&
+                            (type2 == kPrimLong || type2 == kPrimDouble);
+                    int order1 = !isPrimitive1 ? 0 : (is64bit1 ? 1 : 2);
+                    int order2 = !isPrimitive2 ? 0 : (is64bit2 ? 1 : 2);
+                    return order1 - order2;
+                }
+                return f1.getName().compareTo(f2.getName());
+            }
+        }
+
+        final static class FieldComparatorLatest implements Comparator<Field>  {
+            // art/runtime/class_linker.cc LinkFieldsComparator
+            // https://android-review.googlesource.com/#/c/114281/
+            // https://android-review.googlesource.com/#/c/114814/
+            //5362  bool operator()(mirror::ArtField* field1, mirror::ArtField* field2)
+            //5363      NO_THREAD_SAFETY_ANALYSIS {
+            //5364    // First come reference fields, then 64-bit, and finally 32-bit
+            //5365    Primitive::Type type1 = field1->GetTypeAsPrimitiveType();
+            //5366    Primitive::Type type2 = field2->GetTypeAsPrimitiveType();
+            //5367    if (type1 != type2) {
+            //5368      if (type1 == Primitive::kPrimNot) {
+            //5369        // Reference always goes first.
+            //5370        return true;
+            //5371      }
+            //5372      if (type2 == Primitive::kPrimNot) {
+            //5373        // Reference always goes first.
+            //5374        return false;
+            //5375      }
+            //5376      size_t size1 = Primitive::ComponentSize(type1);
+            //5377      size_t size2 = Primitive::ComponentSize(type2);
+            //5378      if (size1 != size2) {
+            //5379        // Larger primitive types go first.
+            //5380        return size1 > size2;
+            //5381      }
+            //5382      // Primitive types differ but sizes match. Arbitrarily order by primitive type.
+            //5383      return type1 < type2;
+            //5384    }
+            //5385    // Same basic group? Then sort by dex field index. This is guaranteed to be sorted
+            //5386    // by name and for equal names by type id index.
+            //5387    // NOTE: This works also for proxies. Their static fields are assigned appropriate indexes.
+            //5388    return field1->GetDexFieldIndex() < field2->GetDexFieldIndex();
+            //5389  }
+            //5390};
+            @Override
+            public int compare(Field f1, Field f2) {
+                int type1 = getTypeAsPrimitiveType(f1);
+                int type2 = getTypeAsPrimitiveType(f2);
+                if (type1 != type2) {
+                    if (type1 == kPrimNot) {
+                        return -1;
+                    }
+                    if (type2 == kPrimNot) {
+                        return 1;
+                    }
+                    int size1 = getComponentSize(type1);
+                    int size2 = getComponentSize(type2);
+                    if (size1 != size2) {
+                        return size2 - size1;
+                    }
+                    return type1 - type2;
+                }
+                if (f1 instanceof DexBackedField && f2 instanceof DexBackedField) {
+                    return ((DexBackedField) f1).fieldIndex - ((DexBackedField) f2).fieldIndex;
+                }
+                return 0;
+            }
+        }
+
+        static int roundUp(int n, int mul) {
+            return (n > 0) ? ((n + mul - 1) / mul) * mul
+                    : (n / mul) * mul;
+        }
+
+        static boolean isAligned(int n, int x) {
+            assert ((n & (n - 1)) == 0); // n_not_power_of_two
+            return (x & (n - 1)) == 0;
+        }
+
+        // runtime/primitive.h
+        final static int kObjectReferenceSize = 4;
+
+        final static int kPrimNot = 0;
+        final static int kPrimBoolean = 1;
+        final static int kPrimByte = 2;
+        final static int kPrimChar = 3;
+        final static int kPrimShort = 4;
+        final static int kPrimInt = 5;
+        final static int kPrimLong = 6;
+        final static int kPrimFloat = 7;
+        final static int kPrimDouble = 8;
+        final static int kPrimVoid = 9;
+
+        static int getTypeAsPrimitiveType(Field field) {
+            return getPrimitiveType(field.getType().charAt(0));
+        }
+
+        static int getPrimitiveType(char type) {
+            switch (type) {
+            case 'B':
+                return kPrimByte;
+            case 'C':
+                return kPrimChar;
+            case 'D':
+                return kPrimDouble;
+            case 'F':
+                return kPrimFloat;
+            case 'I':
+                return kPrimInt;
+            case 'J':
+                return kPrimLong;
+            case 'S':
+                return kPrimShort;
+            case 'Z':
+                return kPrimBoolean;
+            case 'V':
+                return kPrimVoid;
+            default:
+                return kPrimNot;
+            }
+        }
+
+        static int getComponentSize(int type) {
+            switch (type) {
+            case kPrimVoid:
+                return 0;
+            case kPrimBoolean:
+            case kPrimByte:
+                return 1;
+            case kPrimChar:
+            case kPrimShort:
+                return 2;
+            case kPrimInt:
+            case kPrimFloat:
+                return 4;
+            case kPrimLong:
+            case kPrimDouble:
+                return 8;
+            case kPrimNot:
+                return kObjectReferenceSize;
+            default:
+                assert false;
+                return 0;
+            }
+        }
+    };
+
+    static class DalvikIFieldSupplier extends FieldOffsetCalulator {
+
+        public DalvikIFieldSupplier(ClassProto clsProto) {
+            super(clsProto);
+            initialFieldOffset = 8; // OFFSETOF_MEMBER(DataObject, instanceData)
+        }
+
+        @Override
+        public SparseArray<FieldReference> get() {
+            // This is a bit of an "involved" operation. We need to follow the same
+            // algorithm that dalvik uses to arrange fields, so that we end up with
+            // the same field offsets (which is needed for deodexing).
+            // See dalvik/vm/oo/Class.c computeFieldOffsets()
+
+            ArrayList<Field> fields = Lists.newArrayList(
+                    classProto.getClassDef().getInstanceFields());
+            Collections.sort(fields);
+            final int fieldCount = fields.size();
+            // The "type" for each field in fields. 0=reference,1=wide,2=other
+            byte[] fieldTypes = new byte[fields.size()];
+            for (int i = 0; i < fieldCount; i++) {
+                fieldTypes[i] = getFieldWidthType(fields.get(i));
+            }
+
+            // The first operation is to move all of the reference fields to the front.
+            // To do this, find the first non-reference field, then find the last
+            // reference field, swap them and repeat.
             int back = fields.size() - 1;
             int front;
             for (front = 0; front < fieldCount; front++) {
@@ -437,11 +833,11 @@ public class ClassProto implements TypeProto {
                 }
             }
 
-            int startFieldOffset = getStartFieldOffset();
-            String superclassType = getSuperclass();
+            int startFieldOffset = initialFieldOffset;
+            String superclassType = classProto.getSuperclass();
             ClassProto superclass = null;
             if (superclassType != null) {
-                superclass = (ClassProto) classPath.getClass(superclassType);
+                superclass = (ClassProto) classProto.classPath.getClass(superclassType);
                 startFieldOffset = superclass.getNextFieldOffset();
             }
             //System.out.println("type=" + type + " superclass="
@@ -454,13 +850,15 @@ public class ClassProto implements TypeProto {
                 fieldIndexMod = 1;
             }
 
-            //next, we need to group all the wide fields after the reference fields. But the wide fields have to be
-            //8-byte aligned. If we're on an odd field index, we need to insert a 32-bit field. If the next field
-            //is already a 32-bit field, use that. Otherwise, find the first 32-bit field from the end and swap it in.
-            //If there are no 32-bit fields, do nothing for now. We'll add padding when calculating the field offsets
+            // Next, we need to group all the wide fields after the reference fields.
+            // But the wide fields have to be 8-byte aligned. If we're on an odd field index,
+            // we need to insert a 32-bit field. If the next field is already a 32-bit field,
+            // use that. Otherwise, find the first 32-bit field from the end and swap it in.
+            // If there are no 32-bit fields, do nothing for now. We'll add padding when
+            // calculating the field offsets.
             if (front < fieldCount && (front % 2) != fieldIndexMod) {
                 if (fieldTypes[front] == WIDE) {
-                    //we need to swap in a 32-bit field, so the wide fields will be correctly aligned
+                    // We need to swap in a 32-bit field, so the wide fields will be correctly aligned
                     back = fieldCount - 1;
                     while (back > front) {
                         if (fieldTypes[back] == OTHER) {
@@ -470,12 +868,12 @@ public class ClassProto implements TypeProto {
                         back--;
                     }
                 } else {
-                    //there's already a 32-bit field here that we can use
+                    // There's already a 32-bit field here that we can use
                     front++;
                 }
             }
 
-            //do the swap thing for wide fields
+            // Do the swap thing for wide fields
             back = fieldCount - 1;
             for (; front < fieldCount; front++) {
                 if (fieldTypes[front] != WIDE) {
@@ -501,35 +899,26 @@ public class ClassProto implements TypeProto {
             }
             int superFieldCount = superFields.size();
 
-            //now the fields are in the correct order. Add them to the SparseArray and lookup, and calculate the offsets
+            // Now the fields are in the correct order.
+            // Add them to the SparseArray and lookup, and calculate the offsets
             int totalFieldCount = superFieldCount + fieldCount;
             SparseArray<FieldReference> instanceFields = new SparseArray<>(totalFieldCount);
 
             int fieldOffset;
-
             if (superclass != null && superFieldCount > 0) {
                 for (int i = 0; i < superFieldCount; i++) {
                     instanceFields.append(superFields.keyAt(i), superFields.valueAt(i));
                 }
-
-                fieldOffset = instanceFields.keyAt(superFieldCount - 1);
-
-                FieldReference lastSuperField = superFields.valueAt(superFieldCount - 1);
-                char fieldType = lastSuperField.getType().charAt(0);
-                if (fieldType == 'J' || fieldType == 'D') {
-                    fieldOffset += 8;
-                } else {
-                    fieldOffset += 4;
-                }
+                fieldOffset = superclass.getNextFieldOffset();
             } else {
-                fieldOffset = getStartFieldOffset();
+                fieldOffset = initialFieldOffset;
             }
 
             boolean gotDouble = false;
             for (int i = 0; i < fieldCount; i++) {
                 FieldReference field = fields.get(i);
 
-                //add padding to align the wide fields, if needed
+                // Add padding to align the wide fields, if needed
                 if (fieldTypes[i] == WIDE && !gotDouble) {
                     if (!gotDouble) {
                         if (fieldOffset % 8 != 0) {
@@ -550,56 +939,14 @@ public class ClassProto implements TypeProto {
 
             return instanceFields;
         }
-    }
 
-    class ArtIFieldSupplier extends IFieldSupplier {
+        static void swap(byte[] fieldTypes, List<Field> fields, int position1, int position2) {
+            byte tempType = fieldTypes[position1];
+            fieldTypes[position1] = fieldTypes[position2];
+            fieldTypes[position2] = tempType;
 
-        @Override
-        int getStartFieldOffset() {
-            return 0; // MemberOffset field_offset(0);
-        }
-
-        @Override
-        ArrayList<Field> getSortedIFieldList() {
-            ArrayList<Field> fields = Lists.newArrayList(getClassDef().getInstanceFields());
-            Collections.sort(fields, new Comparator<Field>() {
-                // art/runtime/class_linker.cc LinkFieldsComparator
-                @Override
-                public int compare(Field f1, Field f2) {
-                    char tc1 = f1.getType().charAt(0);
-                    char tc2 = f2.getType().charAt(0);
-                    if (tc1 != tc2) {
-                        byte t1 = getFieldType(f1);
-                        byte t2 = getFieldType(f2);
-                        boolean isPrimitive1 = t1 != REFERENCE;
-                        boolean isPrimitive2 = t2 != REFERENCE;
-                        boolean is64bit1 = isPrimitive1 && (t1 == WIDE);
-                        boolean is64bit2 = isPrimitive2 && (t2 == WIDE);
-                        int order1 = !isPrimitive1 ? 0 : (is64bit1 ? 1 : 2);
-                        int order2 = !isPrimitive2 ? 0 : (is64bit2 ? 1 : 2);
-                        return order1 - order2;
-                    }
-                    // Maybe already sorted by name
-                    return 0; //f1.getName().compareTo(f2.getName());
-                }
-
-            });
-            return fields;
-        }
-    };
-
-    class DalvikIFieldSupplier extends IFieldSupplier {
-
-        @Override
-        int getStartFieldOffset() {
-            return 8; // OFFSETOF_MEMBER(DataObject, instanceData)
-        }
-
-        @Override
-        ArrayList<Field> getSortedIFieldList() {
-            ArrayList<Field> fields = Lists.newArrayList(getClassDef().getInstanceFields());
-            Collections.sort(fields);
-            return fields;
+            Field tempField = fields.set(position1, fields.get(position2));
+            fields.set(position2, tempField);
         }
     }
 
@@ -609,17 +956,14 @@ public class ClassProto implements TypeProto {
             return 8;
         }
 
-        int lastItemIndex = instanceFields.size()-1;
+        int lastItemIndex = instanceFields.size() - 1;
         int fieldOffset = instanceFields.keyAt(lastItemIndex);
         FieldReference lastField = instanceFields.valueAt(lastItemIndex);
 
-        switch (lastField.getType().charAt(0)) {
-            case 'J':
-            case 'D':
-                return fieldOffset + 8;
-            default:
-                return fieldOffset + 4;
+        if (getFieldWidthType(lastField) == WIDE) {
+            return fieldOffset + 8;
         }
+        return fieldOffset + 4;
     }
 
     @Nonnull List<Method> getVtable() {

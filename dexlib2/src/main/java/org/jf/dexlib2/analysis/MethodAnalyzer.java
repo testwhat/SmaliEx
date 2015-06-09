@@ -971,6 +971,14 @@ public class MethodAnalyzer {
             case IPUT_WIDE_QUICK_ART:
             case IPUT_OBJECT_QUICK:
             case IPUT_OBJECT_QUICK_ART:
+            case IPUT_BOOLEAN_QUICK_ART:
+            case IPUT_BYTE_QUICK_ART:
+            case IPUT_CHAR_QUICK_ART:
+            case IPUT_SHORT_QUICK_ART:
+            case IGET_BOOLEAN_QUICK_ART:
+            case IGET_BYTE_QUICK_ART:
+            case IGET_CHAR_QUICK_ART:
+            case IGET_SHORT_QUICK_ART:
                 return analyzeIputIgetQuick(analyzedInstruction);
             case INVOKE_VIRTUAL_QUICK_ART:
             case INVOKE_VIRTUAL_QUICK:
@@ -1591,9 +1599,10 @@ public class MethodAnalyzer {
         if (resolvedField == null) {
             int instrAddress = getInstructionAddress(analyzedInstruction);
             int srcReg = instruction.getRegisterB(); //iget,iput=>set B to A
-            //System.out.println("#Z " + instruction.getOpcode() + " "
-            //        + instruction.getOpcode().setsRegister() + " "
-            //        + instruction.getRegisterA() + " " + instruction.getRegisterB());
+            //System.out.println("#Resolve warning: op=" + instruction.getOpcode() + " setr="
+            //        + instruction.getOpcode().setsRegister() + " regA="
+            //        + instruction.getRegisterA() + " regB=" + instruction.getRegisterB()
+            //        + " fieldOffset=" + fieldOffset + " classTypeProto=" + classTypeProto);
             StartLocal startLocal = findStartLocalByAddress(instrAddress, srcReg);
             if (startLocal != null) {
                 classTypeProto = classPath.getClass(startLocal.getTypeReference());

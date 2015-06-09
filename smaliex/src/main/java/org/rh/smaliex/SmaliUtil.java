@@ -55,7 +55,7 @@ public class SmaliUtil {
     public static String getSmaliContent(ClassDef classDef, ClassPath classPath) {
         baksmaliOptions options = new baksmaliOptions();
         if (classPath != null) {
-            options.apiLevel = classPath.api;
+            options.apiLevel = classPath.apiLevel;
             options.allowOdex = true;
             options.deodex = true;
             options.classPath = classPath;

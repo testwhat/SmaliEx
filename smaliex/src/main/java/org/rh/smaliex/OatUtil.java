@@ -123,7 +123,7 @@ public class OatUtil {
             Oat oat = getOat(e);
             File outFolder = new File(oatFile).getAbsoluteFile().getParentFile();
             outFolder.mkdirs();
-            extractToDex(oat, outFolder, bootClassPath, true);
+            convertToDex(oat, outFolder, bootClassPath, true);
         }
     }
 
@@ -140,7 +140,7 @@ public class OatUtil {
     public static DexFile forceOdex2dex(DexFile d, ClassPath classPath) {
         baksmaliOptions options = new baksmaliOptions();
         options.classPath = classPath;
-        options.apiLevel = classPath.api;
+        options.apiLevel = classPath.apiLevel;
         options.allowOdex = true;
         options.deodex = true;
         options.checkPackagePrivateAccess = false;
@@ -210,20 +210,44 @@ public class OatUtil {
                 outFolder.mkdirs();
             }
             if (noClassJarFolder == null) {
-                extractToDex(oat, outFolder, bootClassPath, false);
+                convertToDex(oat, outFolder, bootClassPath, false);
             } else {
-                extractBootToDexJar(oat, outFolder, bootClassPath, noClassJarFolder);
+                convertToDexJar(oat, outFolder, bootClassPath, noClassJarFolder, true);
             }
         } catch (IOException ex) {
             LLog.ex(ex);
         }
     }
 
-    private static void extractToDex(Oat oat, File outputFolder,
+    static DexBackedDexFile readDex(Oat.DexFile od, int dexSize,
+            Opcodes opcodes, byte[] buf) throws IOException {
+        if (buf == null) {
+            buf = new byte[8192];
+        }
+        ByteBuffer dexBytes = ByteBuffer.allocateDirect(dexSize);
+        od.mReader.seek(od.mDexPosition);
+        int remain = dexSize;
+        int read = buf.length > dexSize ? dexSize : buf.length;
+        int readSize;
+        while ((readSize = od.mReader.readRaw(buf, 0, read)) != -1 && remain > 0) {
+            dexBytes.put(buf, 0, readSize);
+            remain -= readSize;
+            if (remain < buf.length) {
+                read = remain;
+            }
+        }
+        int length = dexBytes.position();
+        dexBytes.flip();
+        byte[] data = new byte[length];
+        dexBytes.get(data);
+        return new DexBackedDexFile(opcodes, data);
+    }
+
+    private static void convertToDex(Oat oat, File outputFolder,
             String bootClassPath, boolean addSelfToBcp) throws IOException {
         final int BSIZE = 8192;
         final byte[] buf = new byte[BSIZE];
-        final Opcodes opcodes = new Opcodes(Opcode.LOLLIPOP);
+        final Opcodes opcodes = new Opcodes(oat.guessApiLevel());
         LLog.i("Preparing bootclasspath from " + bootClassPath);
         if (bootClassPath == null || !new File(bootClassPath).exists()) {
             LLog.e("Invalid bootclasspath: " + bootClassPath);
@@ -235,23 +259,7 @@ public class OatUtil {
         for (int i = 0; i < oat.mOatDexFiles.length; i++) {
             Oat.DexFile dex = oat.mDexFiles[i];
             final int dexSize = dex.mHeader.file_size_;
-            ByteBuffer dexBytes = ByteBuffer.allocateDirect(dexSize);
-            dex.mReader.seek(dex.mDexPosition);
-            int remain = dexSize;
-            int read = BSIZE > dexSize ? dexSize : BSIZE;
-            int readSize;
-            while ((readSize = dex.mReader.readRaw(buf, 0, read)) != -1 && remain > 0) {
-                dexBytes.put(buf, 0, readSize);
-                remain -= readSize;
-                if (remain < BSIZE) {
-                    read = remain;
-                }
-            }
-            int length = dexBytes.position();
-            dexBytes.flip();
-            byte[] data = new byte[length];
-            dexBytes.get(data);
-            dexFiles[i] = new DexBackedDexFile(opcodes, data);
+            dexFiles[i] = readDex(dex, dexSize, opcodes, buf);
             if (addSelfToBcp) {
                 odr.mBootClassPath.addDex(dexFiles[i]);
             }
@@ -283,8 +291,11 @@ public class OatUtil {
         }
     }
 
-    private static void extractBootToDexJar(Oat oat, File outputFolder,
-            String bootClassPath, String noClassJarFolder) throws IOException {
+    public static void convertToDexJar(Oat oat, File outputFolder,
+            String bootClassPath, String noClassJarFolder, boolean isBoot) throws IOException {
+        final Opcodes opcodes = new Opcodes(oat.guessApiLevel());
+        LLog.i("Preparing bootclasspath from " + bootClassPath);
+        final OatDexRewriterModule odr = new OatDexRewriterModule(bootClassPath, opcodes);
         HashMap<String, ArrayList<Oat.DexFile>> dexFileGroup = new HashMap<>();
         for (int i = 0; i < oat.mOatDexFiles.length; i++) {
             Oat.OatDexFile odf = oat.mOatDexFiles[i];
@@ -301,13 +312,15 @@ public class OatUtil {
                 dexFileGroup.put(opath, dfiles);
             }
             dfiles.add(oat.mDexFiles[i]);
+            if (!isBoot) {
+                Oat.DexFile dex = oat.mDexFiles[i];
+                odr.mBootClassPath.addDex(
+                        readDex(dex, dex.mHeader.file_size_, opcodes, null));
+            }
         }
 
         final int BSIZE = 8192;
         final byte[] buf = new byte[BSIZE];
-        final Opcodes opcodes = new Opcodes(Opcode.LOLLIPOP);
-        LLog.i("Preparing bootclasspath from " + bootClassPath);
-        final OatDexRewriterModule odr = new OatDexRewriterModule(bootClassPath, opcodes);
         final DexRewriter deOpt = odr.getRewriter();
 
         for (String jarName : dexFileGroup.keySet()) {

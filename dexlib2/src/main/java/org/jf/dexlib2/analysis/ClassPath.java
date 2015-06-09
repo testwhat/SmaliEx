@@ -58,7 +58,7 @@ public class ClassPath {
     @Nonnull private final TypeProto unknownClass;
     @Nonnull private HashMap<String, ClassDef> availableClasses = Maps.newHashMap();
     private boolean checkPackagePrivateAccess;
-    public final int api;
+    public final int apiLevel;
 
     /**
      * Creates a new ClassPath instance that can load classes from the given dex files
@@ -92,7 +92,7 @@ public class ClassPath {
         unknownClass = new UnknownClassProto(this);
         loadedClasses.put(unknownClass.getType(), unknownClass);
         this.checkPackagePrivateAccess = checkPackagePrivateAccess;
-        this.api = api;
+        this.apiLevel = api;
 
         loadPrimitiveType("Z");
         loadPrimitiveType("B");

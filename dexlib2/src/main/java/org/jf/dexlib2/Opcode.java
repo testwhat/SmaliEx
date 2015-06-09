@@ -283,7 +283,7 @@ public enum Opcode
     SGET_OBJECT_VOLATILE((short)0xfd, "sget-object-volatile", minApi(9), ReferenceType.FIELD, Format.Format21c, Opcode.ODEX_ONLY | Opcode.ODEXED_STATIC_VOLATILE | Opcode.CAN_THROW | Opcode.CAN_CONTINUE | Opcode.SETS_REGISTER),
     SPUT_OBJECT_VOLATILE((short)0xfe, "sput-object-volatile", minApi(9), ReferenceType.FIELD, Format.Format21c, Opcode.ODEX_ONLY | Opcode.ODEXED_STATIC_VOLATILE | Opcode.CAN_THROW | Opcode.CAN_CONTINUE),
 
-    //++ Optimized code for API level 21
+    //++ Optimized code for ART
     // art/runtime/dex_instruction_list.h art/compiler/dex/dex_to_dex_compiler.cc
     // Override dalvik/opcode-gen/bytecode.txt
     // Also see org.jf.dexlib2.analysis.MethodAnalyzer, OdexedFieldInstructionMapper
@@ -291,20 +291,17 @@ public enum Opcode
             Format.Format10x, Opcode.ODEX_ONLY),
 
     IGET_QUICK_ART((short) 0xe3, "iget-quick", minApi(Opcode.LOLLIPOP), ReferenceType.NONE,
-            Format.Format22cs, Opcode.ODEX_ONLY | Opcode.ODEXED_INSTANCE_QUICK
-                    | Opcode.CAN_THROW | Opcode.CAN_CONTINUE | Opcode.SETS_REGISTER),
+            Format.Format22cs, Opcode.FLAGS_GET_QUICK_ART),
     IGET_WIDE_QUICK_ART((short) 0xe4, "iget-wide-quick", minApi(Opcode.LOLLIPOP), ReferenceType.NONE,
-            Format.Format22cs, Opcode.ODEX_ONLY | Opcode.ODEXED_INSTANCE_QUICK
-                    | Opcode.CAN_THROW | Opcode.CAN_CONTINUE | Opcode.SETS_REGISTER | Opcode.SETS_WIDE_REGISTER),
+            Format.Format22cs, Opcode.FLAGS_GET_QUICK_ART | Opcode.SETS_WIDE_REGISTER),
     IGET_OBJECT_QUICK_ART((short) 0xe5, "iget-object-quick", minApi(Opcode.LOLLIPOP), ReferenceType.NONE,
-            Format.Format22cs, Opcode.ODEX_ONLY | Opcode.ODEXED_INSTANCE_QUICK
-                    | Opcode.CAN_THROW | Opcode.CAN_CONTINUE | Opcode.SETS_REGISTER),
+            Format.Format22cs, Opcode.FLAGS_GET_QUICK_ART),
     IPUT_QUICK_ART((short) 0xe6, "iput-quick", minApi(Opcode.LOLLIPOP), ReferenceType.NONE,
-            Format.Format22cs, Opcode.ODEX_ONLY | Opcode.ODEXED_INSTANCE_QUICK | Opcode.CAN_THROW | Opcode.CAN_CONTINUE),
+            Format.Format22cs, Opcode.FLAGS_PUT_QUICK_ART),
     IPUT_WIDE_QUICK_ART((short) 0xe7, "iput-wide-quick", minApi(Opcode.LOLLIPOP), ReferenceType.NONE,
-            Format.Format22cs, Opcode.ODEX_ONLY | Opcode.ODEXED_INSTANCE_QUICK | Opcode.CAN_THROW | Opcode.CAN_CONTINUE),
+            Format.Format22cs, Opcode.FLAGS_PUT_QUICK_ART),
     IPUT_OBJECT_QUICK_ART((short) 0xe8, "iput-object-quick", minApi(Opcode.LOLLIPOP), ReferenceType.NONE,
-            Format.Format22cs, Opcode.ODEX_ONLY | Opcode.ODEXED_INSTANCE_QUICK | Opcode.CAN_THROW | Opcode.CAN_CONTINUE),
+            Format.Format22cs, Opcode.FLAGS_PUT_QUICK_ART),
     // ART:    k35c,  // op {vC, vD, vE, vF, vG}, thing@BBBB (B: count, A: vG)
     // Dalvik: kFmt35ms,       // [opt] invoke-virtual+super
     INVOKE_VIRTUAL_QUICK_ART((short) 0xe9, "invoke-virtual-quick", minApi(Opcode.LOLLIPOP), ReferenceType.NONE,
@@ -314,7 +311,24 @@ public enum Opcode
     // Dalvik: kFmt3rms,       // [opt] invoke-virtual+super/range
     INVOKE_VIRTUAL_RANGE_QUICK_ART((short) 0xea, "invoke-virtual/range-quick", minApi(Opcode.LOLLIPOP), ReferenceType.NONE,
             Format.Format3rms, Opcode.ODEX_ONLY | Opcode.CAN_THROW | Opcode.CAN_CONTINUE | Opcode.SETS_RESULT),
-    //-- Optimized code for API level 21
+
+    IPUT_BOOLEAN_QUICK_ART((short) 0xeb, "iput-boolean-quick", minApi(Opcode.LOLLIPOP), ReferenceType.NONE,
+            Format.Format22cs, Opcode.FLAGS_PUT_QUICK_ART),
+    IPUT_BYTE_QUICK_ART((short) 0xec, "iput-byte-quick", minApi(Opcode.LOLLIPOP), ReferenceType.NONE,
+            Format.Format22cs, Opcode.FLAGS_PUT_QUICK_ART),
+    IPUT_CHAR_QUICK_ART((short) 0xed, "iput-char-quick", minApi(Opcode.LOLLIPOP), ReferenceType.NONE,
+            Format.Format22cs, Opcode.FLAGS_PUT_QUICK_ART),
+    IPUT_SHORT_QUICK_ART((short) 0xee, "iput-short-quick", minApi(Opcode.LOLLIPOP), ReferenceType.NONE,
+            Format.Format22cs, Opcode.FLAGS_PUT_QUICK_ART),
+    IGET_BOOLEAN_QUICK_ART((short) 0xef, "iget-boolean-quick", minApi(Opcode.LOLLIPOP), ReferenceType.NONE,
+            Format.Format22cs, Opcode.FLAGS_GET_QUICK_ART),
+    IGET_BYTE_QUICK_ART((short) 0xf0, "iget-byte-quick", minApi(Opcode.LOLLIPOP), ReferenceType.NONE,
+            Format.Format22cs, Opcode.FLAGS_GET_QUICK_ART),
+    IGET_CHAR_QUICK_ART((short) 0xf1, "iget-char-quick", minApi(Opcode.LOLLIPOP), ReferenceType.NONE,
+            Format.Format22cs, Opcode.FLAGS_GET_QUICK_ART),
+    IGET_SHORT_QUICK_ART((short) 0xf2, "iget-short-quick", minApi(Opcode.LOLLIPOP), ReferenceType.NONE,
+            Format.Format22cs, Opcode.FLAGS_GET_QUICK_ART),
+    //-- Optimized code for ART
 
     PACKED_SWITCH_PAYLOAD((short)0x100, "packed-switch-payload", ReferenceType.NONE, Format.PackedSwitchPayload, 0),
     SPARSE_SWITCH_PAYLOAD((short)0x200, "sparse-switch-payload", ReferenceType.NONE, Format.SparseSwitchPayload, 0),
@@ -358,6 +372,12 @@ public enum Opcode
     private static final int ALL_APIS = 0xFFFF0000;
 
     public static final int LOLLIPOP = 21; // API level
+    public static final int LOLLIPOP_MR1 = 22;
+
+    public static final int FLAGS_QUICK_ART = Opcode.ODEX_ONLY | Opcode.ODEXED_INSTANCE_QUICK
+                    | Opcode.CAN_THROW | Opcode.CAN_CONTINUE;
+    public static final int FLAGS_PUT_QUICK_ART = FLAGS_QUICK_ART;
+    public static final int FLAGS_GET_QUICK_ART = FLAGS_QUICK_ART | Opcode.SETS_REGISTER;
 
     private static int minApi(int api) {
         return 0xFFFF0000 | (api & 0xFFFF);
