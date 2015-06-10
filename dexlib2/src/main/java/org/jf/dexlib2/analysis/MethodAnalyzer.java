@@ -1702,7 +1702,26 @@ public class MethodAnalyzer {
         TypeProto objectRegisterTypeProto = objectRegisterType.type;
 
         if (objectRegisterType.category == RegisterType.NULL) {
-            return false;
+            objectRegisterTypeProto = classPath.getClass("Ljava/lang/String;");
+            addAnalysisInfo("Unresolved " + analyzedInstruction.instruction.getOpcode()
+                + " mIdx=" + methodIndex + " objReg=" + objectRegister
+                + ", use Ljava/lang/String; to invoke (it may have exception but is expected)");
+            /*
+            # Example of SamsungLinkPlatform in Lcom/sec/android/safe/wifiPke/WifiPke <clinit>
+            const/4 v0, 0x0
+            #...
+            :goto_45
+            :try_start_45
+            invoke-virtual-quick {v0}, vtable@41 # get exception looks expected flow
+            :try_end_48
+            .catch Ljava/lang/Exception; {:try_start_45 .. :try_end_48} :catch_49
+
+            goto :goto_45
+
+            :catch_49
+            move-exception v0
+            */
+            //return false;
         }
 
         assert objectRegisterTypeProto != null;
@@ -1722,7 +1741,7 @@ public class MethodAnalyzer {
             }
 
             resolvedMethod = superType.getMethodByVtableIndex(methodIndex);
-        } else{
+        } else {
             resolvedMethod = objectRegisterTypeProto.getMethodByVtableIndex(methodIndex);
         }
 

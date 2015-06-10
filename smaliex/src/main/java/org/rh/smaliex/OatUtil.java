@@ -43,9 +43,7 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
 import java.util.zip.ZipEntry;
-
 import org.jf.baksmali.baksmaliOptions;
-import org.jf.dexlib2.Opcode;
 import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.analysis.AnalysisException;
 import org.jf.dexlib2.analysis.ClassPath;
@@ -175,6 +173,15 @@ public class OatUtil {
         return names;
     }
 
+    public static String getOuputNameForSubDex(String jarPathInOat) {
+        int spos = jarPathInOat.indexOf(':');
+        if (spos > 0) {
+            // framework.jar:classes2.dex -> framework-classes2.dex
+            jarPathInOat = jarPathInOat.substring(0, spos - 4) + "-" + jarPathInOat.substring(spos + 1);
+        }
+        return jarPathInOat.substring(jarPathInOat.lastIndexOf('/') + 1);
+    }
+
     // Get optimized dex from oat
     public static void extractOdexFromOat(File oatFile, File outputFolder) {
         try (Elf e = new Elf(oatFile)) {
@@ -183,12 +190,7 @@ public class OatUtil {
                 Oat.OatDexFile odf = oat.mOatDexFiles[i];
                 Oat.DexFile df = oat.mDexFiles[i];
                 String opath = new String(odf.dex_file_location_data_);
-                int spos = opath.indexOf(':');
-                if (spos > 0) {
-                    // framework.jar:classes2.dex -> framework-classes2.dex
-                    opath = opath.substring(0, spos - 4) + "-" + opath.substring(spos + 1);
-                }
-                opath = opath.substring(opath.lastIndexOf('/') + 1);
+                opath = getOuputNameForSubDex(opath);
                 if (outputFolder == null) {
                     outputFolder = new File(MiscUtil.workingDir());
                 }
@@ -267,13 +269,7 @@ public class OatUtil {
         for (int i = 0; i < oat.mOatDexFiles.length; i++) {
             Oat.OatDexFile odf = oat.mOatDexFiles[i];
             String dexLoc = new String(odf.dex_file_location_data_);
-            String opath = dexLoc;
-            int spos = opath.indexOf(':');
-            if (spos > 0) {
-                // framework.jar:classes2.dex -> framework-classes2.dex
-                opath = opath.substring(0, spos - 4) + "-" + opath.substring(spos + 1);
-            }
-            opath = opath.substring(opath.lastIndexOf('/') + 1);
+            String opath = getOuputNameForSubDex(dexLoc);
             if ("base.apk".equals(opath)) {
                 opath = MiscUtil.getFileNamePrefix(oat.mSrcFile.getName());
             }

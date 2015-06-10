@@ -31,6 +31,8 @@ package org.rh.smaliex.reader;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
+import java.io.RandomAccessFile;
+
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
@@ -564,5 +566,15 @@ public class Elf implements Closeable {
     @Override
     public void close() {
         mReader.close();
+    }
+
+    public static boolean isElf(File f) {
+        long n = 0;
+        try (RandomAccessFile raf = new RandomAccessFile(f, "r")) {
+            n = raf.readInt();
+        } catch (IOException ex) {
+            LLog.ex(ex);
+        }
+        return n == 0x7F454C46;
     }
 }
