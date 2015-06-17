@@ -6,8 +6,8 @@ Function concept:
 boot.oat -> extract optimized boot class dex files -> deoptimize to dex files  
 app.odex(oat) -> reference boot dex files to deoptimize
 
-Compiled jar:
-https://github.com/testwhat/SmaliEx/blob/master/smaliex-bin/oat2dex.jar
+Download latest version:  
+https://github.com/testwhat/SmaliEx/blob/master/smaliex-bin/oat2dex.jar?raw=true
 
 Usage:  
 Deoptimize boot classes (The output will in "odex" and "dex" folders):  
@@ -15,7 +15,11 @@ Deoptimize boot classes (The output will in "odex" and "dex" folders):
 Deoptimize application:  
 &nbsp;&nbsp;java -jar oat2dex.jar &lt;app.odex&gt; &lt;boot-class-folder output from above&gt;  
 Get odex from oat:  
-&nbsp;&nbsp;java -jar oat2dex.jar odex &lt;oat file&gt;
+&nbsp;&nbsp;java -jar oat2dex.jar odex &lt;oat file&gt;  
+Get odex smali (with optimized opcode) from oat/odex:  
+&nbsp;&nbsp;java -jar oat2dex.jar smali &lt;oat/odex file&gt;  
+Deodex /system/framework/ from device (need to connect with adb):  
+&nbsp;&nbsp;java -jar oat2dex.jar devfw
 
 Used by:  
 [JoelDroid](http://forum.xda-developers.com/android/software-hacking/script-app-joeldroid-lollipop-batch-t2980857)  

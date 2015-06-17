@@ -37,19 +37,17 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
 import java.util.zip.ZipEntry;
+
 import org.jf.baksmali.baksmaliOptions;
 import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.analysis.AnalysisException;
 import org.jf.dexlib2.analysis.ClassPath;
 import org.jf.dexlib2.analysis.MethodAnalyzer;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile;
-import org.jf.dexlib2.iface.ClassDef;
 import org.jf.dexlib2.iface.DexFile;
 import org.jf.dexlib2.iface.Method;
 import org.jf.dexlib2.iface.MethodImplementation;
@@ -68,22 +66,63 @@ import org.rh.smaliex.reader.Oat;
 
 public class OatUtil {
 
-    public final static String FOLDER_ORIGINAL_JAR = "original-jar";
-    public final static String FOLDER_RESULT_JAR = "result-jar";
+    public static void smaliRaw(File inputFile) {
+        if (!inputFile.isFile()) {
+            LLog.i(inputFile + " is not a file.");
+        }
+        String folderName = MiscUtil.getFilenamePrefix(inputFile.getName());
+        String outputBaseFolder = MiscUtil.path(
+                inputFile.getAbsoluteFile().getParent(), folderName);
+        baksmaliOptions options = new baksmaliOptions();
+        Opcodes opc = new Opcodes(org.jf.dexlib2.Opcode.LOLLIPOP);
+        options.apiLevel = opc.apiLevel;
+        options.allowOdex = true;
+        options.jobs = 4;
+
+        java.util.List<DexBackedDexFile> dexFiles = new ArrayList<>();
+        java.util.List<String> outSubFolders = new ArrayList<>();
+        if (Elf.isElf(inputFile)) {
+            final byte[] buf = new byte[8192];
+            try (Elf e = new Elf(inputFile)) {
+                Oat oat = getOat(e);
+                for (int i = 0; i < oat.mDexFiles.length; i++) {
+                    Oat.DexFile df = oat.mDexFiles[i];
+                    dexFiles.add(readDex(df, df.mHeader.file_size_, opc, buf));
+                    String opath = new String(oat.mOatDexFiles[i].dex_file_location_data_);
+                    opath = MiscUtil.getFilenamePrefix(getOuputNameForSubDex(opath));
+                    outSubFolders.add(MiscUtil.path(outputBaseFolder, opath));
+                }
+            } catch (IOException ex) {
+                LLog.ex(ex);
+            }
+        } else {
+            dexFiles = DexUtil.loadMultiDex(inputFile, opc);
+            String subFolder = "classes";
+            for (int i = 0; i < dexFiles.size(); i++) {
+                outSubFolders.add(MiscUtil.path(outputBaseFolder, subFolder));
+                subFolder = "classes" + (i + 2);
+            }
+        }
+        if (outSubFolders.size() == 1) {
+            outSubFolders.set(0, outputBaseFolder);
+        }
+
+        for (int i = 0; i < dexFiles.size(); i++) {
+            options.outputDirectory = outSubFolders.get(i);
+            org.jf.baksmali.baksmali.disassembleDexFile(dexFiles.get(i), options);
+            LLog.i("Output to " + options.outputDirectory);
+        }
+        LLog.i("All done");
+    }
+
     // A sample to de-optimize system folder of an extracted ROM
     public static void deOptimizeFiles(String systemFolder, String workingDir) {
         File bootOat = new File(MiscUtil.path(systemFolder, "framework", "arm", "boot.oat"));
         if (!bootOat.exists()) {
-            File bootOat64 = new File(MiscUtil.path(systemFolder, "framework", "arm64", "boot.oat"));
-            if (!bootOat64.exists()) {
-                LLog.i(bootOat + " not found");
-                return;
-            } else {
-                bootOat = bootOat64;
-                LLog.i("Using 64-bit boot oat " + bootOat);
-            }
+            LLog.i(bootOat + " not found");
+            return;
         }
-        String outputJarFolder = MiscUtil.path(workingDir, FOLDER_RESULT_JAR);
+        String outputJarFolder = MiscUtil.path(workingDir, "result-jar");
         try {
             bootOat2Jar(bootOat.getAbsolutePath(),
                     MiscUtil.path(systemFolder, "framework"),
@@ -133,27 +172,6 @@ public class OatUtil {
             return new Oat(r, true);
         }
         throw new IOException("oat not found");
-    }
-
-    public static DexFile forceOdex2dex(DexFile d, ClassPath classPath) {
-        baksmaliOptions options = new baksmaliOptions();
-        options.classPath = classPath;
-        options.apiLevel = classPath.apiLevel;
-        options.allowOdex = true;
-        options.deodex = true;
-        options.checkPackagePrivateAccess = false;
-        options.noAccessorComments = true;
-        final HashSet<ClassDef> out = new HashSet<>();
-        for (ClassDef c : d.getClasses()) {
-            String s = SmaliUtil.getSmaliContent(c, options);
-            out.add(SmaliUtil.assembleSmali(s));
-        }
-        return new DexFile() {
-            @Override
-            public Set<? extends ClassDef> getClasses() {
-                return out;
-            }
-        };
     }
 
     public static ArrayList<String> getBootJarNames(String bootOat) {
@@ -271,7 +289,7 @@ public class OatUtil {
             String dexLoc = new String(odf.dex_file_location_data_);
             String opath = getOuputNameForSubDex(dexLoc);
             if ("base.apk".equals(opath)) {
-                opath = MiscUtil.getFileNamePrefix(oat.mSrcFile.getName());
+                opath = MiscUtil.getFilenamePrefix(oat.mSrcFile.getName());
             }
             File outputFile = MiscUtil.changeExt(new File(outputFolder, opath), "dex");
             LLog.i("De-optimizing " + dexLoc);
@@ -499,10 +517,8 @@ public class OatUtil {
     }
 
     public static class OatDexRewriter extends DexRewriter {
-        private final OatDexRewriterModule mModule;
         public OatDexRewriter(OatDexRewriterModule module) {
             super(module);
-            mModule = module;
         }
 
         @Override
@@ -511,9 +527,9 @@ public class OatUtil {
                 return org.jf.dexlib2.immutable.ImmutableDexFile.of(super.rewriteDexFile(dexFile));
                 //return super.rewriteDexFile(dexFile);
             } catch (Exception e) {
-                LLog.i("Fall into force mode, there may have unresolved instructions:\n" + e);
+                LLog.ex(e);
+                throw new AnalysisException(e);
             }
-            return forceOdex2dex(dexFile, mModule.mBootClassPath);
         }
     }
 

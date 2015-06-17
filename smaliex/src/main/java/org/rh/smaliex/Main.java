@@ -30,94 +30,63 @@ package org.rh.smaliex;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-
-import org.jf.baksmali.baksmaliOptions;
-import org.jf.dexlib2.Opcode;
-import org.jf.dexlib2.Opcodes;
-import org.jf.dexlib2.dexbacked.DexBackedDexFile;
-import org.rh.smaliex.reader.Elf;
-import org.rh.smaliex.reader.Oat;
 
 public class Main {
 
+    static void printUsage() {
+        System.out.println("Easy oat2dex 0.82");
+        System.out.println("Usage:");
+        System.out.println("Get dex from boot.oat: boot <boot.oat>");
+        System.out.println("Get dex from  app oat: <oat-file> <boot-class-folder>");
+        System.out.println("Get raw odex from oat: odex <oat-file>");
+        System.out.println("Get raw odex smali   : smali <oat/odex file>");
+        System.out.println("Deodex framework     : devfw");
+    }
+
     public static void main(String[] args) {
-        if (args.length < 2) {
-            System.out.println("Easy oat2dex 0.81");
-            System.out.println("Usage:");
-            System.out.println("Get dex from boot.oat: boot <boot.oat>");
-            System.out.println("Get dex from  app oat: <oat-file> <boot-class-folder>");
-            System.out.println("Get raw odex from oat: odex <oat-file>");
-            System.out.println("Get raw odex smali   : smali <oat/odex file>");
+        if (args.length < 1) {
+            printUsage();
             return;
         }
-        if ("boot".equals(args[0])) {
-            OatUtil.bootOat2Dex(args[1]);
+        String cmd = args[0];
+        if ("devfw".equals(cmd)) {
+            String[] shiftArgs = new String[args.length - 1];
+            System.arraycopy(args, 1, shiftArgs, 0, shiftArgs.length);
+            DeodexFrameworkFromDevice.main(shiftArgs);
             return;
         }
-        if ("odex".equals(args[0])) {
-            OatUtil.extractOdexFromOat(new File(args[1]), null);
-            return;
-        }
-        if ("smali".equals(args[0])) {
+        if (args.length == 2) {
+            if ("boot".equals(cmd)) {
+                checkExist(args[1]);
+                OatUtil.bootOat2Dex(args[1]);
+                return;
+            }
+            if ("odex".equals(cmd)) {
+                OatUtil.extractOdexFromOat(checkExist(args[1]), null);
+                return;
+            }
+            if ("smali".equals(cmd)) {
+                OatUtil.smaliRaw(checkExist(args[1]));
+                return;
+            }
+            checkExist(args[0]);
+            checkExist(args[1]);
             try {
-                smaliRaw(new File(args[1]));
+                OatUtil.oat2dex(args[0], args[1]);
             } catch (IOException ex) {
                 LLog.ex(ex);
             }
-            return;
-        }
-        try {
-            OatUtil.oat2dex(args[0], args[1]);
-        } catch (IOException ex) {
-            LLog.ex(ex);
+        } else {
+            printUsage();
         }
     }
 
-    public static void smaliRaw(File inputFile) throws IOException {
-        if (!inputFile.isFile()) {
-            LLog.i(inputFile + " is not a file.");
+    static File checkExist(String path) {
+        File input = new File(path);
+        if (!input.exists()) {
+            System.out.println("Input file not found: " + input);
+            System.exit(0);
         }
-        String folderName = MiscUtil.getFileNamePrefix(inputFile.getName());
-        String outputBaseFolder = MiscUtil.path(inputFile.getParent(), folderName);
-        baksmaliOptions options = new baksmaliOptions();
-        Opcodes opc = new Opcodes(Opcode.LOLLIPOP);
-        options.apiLevel = opc.apiLevel;
-        options.allowOdex = true;
-        options.jobs = 4;
-
-        List<DexBackedDexFile> dexFiles = new ArrayList<>();
-        List<String> outSubFolders = new ArrayList<>();
-        if (Elf.isElf(inputFile)) {
-            byte[] buf = new byte[8192];
-            try (Elf e = new Elf(inputFile)) {
-                Oat oat = OatUtil.getOat(e);
-                for (int i = 0; i < oat.mDexFiles.length; i++) {
-                    Oat.DexFile df = oat.mDexFiles[i];
-                    dexFiles.add(OatUtil.readDex(df, df.mHeader.file_size_, opc, buf));
-                    String opath = new String(oat.mOatDexFiles[i].dex_file_location_data_);
-                    opath = MiscUtil.getFileNamePrefix(OatUtil.getOuputNameForSubDex(opath));
-                    outSubFolders.add(MiscUtil.path(outputBaseFolder, opath));
-                }
-            }
-        } else {
-            dexFiles = DexUtil.loadMultiDex(inputFile, opc);
-            String subFolder = "classes";
-            for (int i = 0; i < dexFiles.size(); i++) {
-                outSubFolders.add(MiscUtil.path(outputBaseFolder, subFolder));
-                subFolder = "classes" + (i + 2);
-            }
-        }
-        if (outSubFolders.size() == 1) {
-            outSubFolders.set(0, outputBaseFolder);
-        }
-
-        for (int i = 0; i < dexFiles.size(); i++) {
-            options.outputDirectory = outSubFolders.get(i);
-            org.jf.baksmali.baksmali.disassembleDexFile(dexFiles.get(i), options);
-            LLog.i("Output to " + options.outputDirectory);
-        }
-        LLog.i("All done");
+        return input;
     }
 }

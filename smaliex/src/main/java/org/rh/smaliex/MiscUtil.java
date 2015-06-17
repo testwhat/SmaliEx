@@ -54,8 +54,8 @@ public class MiscUtil {
     }
 
     public static File appendTail(File f, String str) {
-        String name = getFileNamePrefix(f.getName())
-                + str + "." + getFileNameSuffix(f.getName());
+        String name = getFilenamePrefix(f.getName())
+                + str + "." + getFilenameSuffix(f.getName());
         return new File(getFileDirPath(f.getAbsolutePath()), name);
     }
 
@@ -78,7 +78,7 @@ public class MiscUtil {
         });
     }
 
-    public static String getFileNamePrefix(String filename) {
+    public static String getFilenamePrefix(String filename) {
         int dotPos = filename.lastIndexOf('.');
         if (dotPos == -1) {
             return filename;
@@ -86,7 +86,7 @@ public class MiscUtil {
         return filename.substring(0, dotPos);
     }
 
-    public static String getFileNameSuffix(String filename) {
+    public static String getFilenameSuffix(String filename) {
         int dotPos = filename.lastIndexOf('.');
         if (dotPos == -1) {
             return "";

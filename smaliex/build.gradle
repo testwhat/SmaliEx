@@ -1,11 +1,15 @@
-configurations {
-    proguard
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath depends.proguard_gradle
+    }
 }
 
 dependencies {
     compile project(':smali')
     compile project(':baksmali')
-    proguard depends.proguard_gradle
 }
 
 tasks.withType(JavaCompile) {
@@ -23,22 +27,20 @@ task fatJar(type: Jar, dependsOn: jar) {
 }
 tasks.getByPath('build').dependsOn(fatJar)
 
-task proguard(type: JavaExec, dependsOn: fatJar) {
+task proguard(type: proguard.gradle.ProGuardTask, dependsOn: fatJar) {
     def outFile = fatJar.destinationDir.getPath() + '/' + fatJar.baseName + '-' + fatJar.version + '-small' + '.' + fatJar.extension
-    inputs.file fatJar.archivePath
-    outputs.file outFile
 
-    classpath = configurations.proguard
-    main = 'proguard.ProGuard'
-    args "-injars ${fatJar.archivePath}(!**/TestStringTemplate*.class)"
-    args "-outjars ${outFile}"
-    args "-libraryjars ${System.properties['java.home']}/lib/rt.jar"
-    args '-dontobfuscate'
-    args '-dontoptimize'
-    args '-keepattributes *Annotation*'
-    args '-keepattributes Signature'
-    args '-keep public class org.rh.smaliex.Main { public static void main(java.lang.String[]); }'
-    args '-keepclassmembers enum * { public static **[] values(); public static ** valueOf(java.lang.String); }'
-    args '-dontwarn com.google.common.**'
-    args '-dontnote com.google.common.**'
+    injars fatJar.archivePath
+    outjars outFile
+
+    libraryjars "${System.properties['java.home']}/lib/rt.jar"
+
+    dontobfuscate
+    dontoptimize
+    keepattributes '*Annotation*'
+    keepattributes 'Signature'
+    keep 'public class org.rh.smaliex.Main { public static void main(java.lang.String[]); }'
+    keepclassmembers 'enum * { public static **[] values(); public static ** valueOf(java.lang.String); }'
+    dontwarn 'com.google.common.**'
+    dontnote 'com.google.common.**'
 }
