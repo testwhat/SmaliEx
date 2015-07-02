@@ -293,10 +293,14 @@ public class Oat {
     }
 
     public int guessApiLevel() {
-         if (mHeader.version_[1] >= '6') {
+        // See runtime/oat kOatVersion
+        // Android 5.0 { '0', '3', '9', '\0' };
+        // Android 5.1 { '0', '4', '5', '\0' };
+        // Android M   { '0', '6', '4', '\0' };
+        if (mHeader.version_[1] >= '6') {
             return 23;
         }
-        return mHeader.version_[1] <= '4' ? 21 : 22;
+        return mHeader.version_[1] < '4' ? 21 : 22;
     }
 
     public void dump() {
