@@ -216,7 +216,7 @@ public class Oat {
                 outputFile = new File(outPath);
             }
             try (FileOutputStream output = new FileOutputStream(outputFile)) {
-                mReader.getChannel().transferTo(mDexPosition, mHeader.file_size_, output.getChannel());    
+                mReader.getChannel().transferTo(mDexPosition, mHeader.file_size_, output.getChannel());
             }
         }
     }
@@ -275,7 +275,7 @@ public class Oat {
             reader.seek(mOatPosition + odf.dex_file_offset_);
             DexFile dex = new DexFile(reader);
             mDexFiles[i] = dex;
-            
+
             int num_methods_offsets_ = dex.mHeader.class_defs_size_;
             reader.seek(thisOatPos + 4 * num_methods_offsets_);
             if (reader.previewInt() > 0xff) { // workaround for samsung offest
@@ -293,7 +293,7 @@ public class Oat {
     }
 
     public int guessApiLevel() {
-        if (mHeader.version_[1] >= '6') {
+         if (mHeader.version_[1] >= '6') {
             return 23;
         }
         return mHeader.version_[1] <= '4' ? 21 : 22;

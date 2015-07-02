@@ -263,7 +263,7 @@ public class Elf implements Closeable {
     static abstract class Elf_Phdr {
         int p_type;   // Type of segment
         int p_offset; // File offset where segment is located, in bytes
-        
+
         abstract long getFlags();
 
         String flagsString() {
