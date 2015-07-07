@@ -408,6 +408,46 @@ public class ClassProto implements TypeProto {
         FieldOffsetCalulator(ClassProto cProto) {
             classProto = cProto;
         }
+
+        void debugOffset(String className, SparseArray<FieldReference> fields) {
+            if (classProto.type.equals(className)) {
+                System.out.println("## Field offset of " + className);
+                ArrayList<ClassProto> classHierarchy = new ArrayList<>();
+                ClassProto cp = classProto;
+                for (String superclassType = cp.getSuperclass(); superclassType != null;
+                        superclassType = cp.getSuperclass()) {
+                    cp = (ClassProto) classProto.classPath.getClass(superclassType);
+                    classHierarchy.add(0, cp);
+                }
+
+                for (int i = 0; i < fields.size(); i++) {
+                    int offset = fields.keyAt(i);
+                    FieldReference f = fields.valueAt(i);
+                    if (!classHierarchy.isEmpty()) {
+                        cp = classHierarchy.get(0);
+                        int countInstanceField = cp.getInstanceFields().size();
+                        if (countInstanceField <= i) {
+                            System.out.println(" --- " + cp.type + " " + countInstanceField);
+                            classHierarchy.remove(0);
+                        }
+                    }
+                    System.out.println(" #" + i + "# " + offset + " (0x"
+                            + Integer.toHexString(offset) + ") "
+                            + ":" + f.getType() + " " + f.getName());
+                }
+                System.exit(0);
+            }
+        }
+
+        void debugFieldsOrder(String className, List<Field> fields) {
+            if (classProto.type.equals(className)) {
+                System.out.println(" ===== " + className + " " + fields.size() + " =====");
+                for (int i = 0; i < fields.size(); i++) {
+                    Field f = fields.get(i);
+                    System.out.println(" #" + i + "# " + f.getType() + " " + f.getName());
+                }
+            }
+        }
     }
 
     static class ArtIFieldSupplier extends FieldOffsetCalulator {
@@ -483,6 +523,10 @@ public class ClassProto implements TypeProto {
                 superFields = superclass.getInstanceFields();
                 fieldOffset = superclass.objectSize;
                 superFieldCount = superFields.size();
+                //if (superFieldCount == 0 && fieldOffset == 0) {
+                //    // There is something missing.
+                //    fieldOffset = 8;
+                //}
             }
             final int totalFieldCount = superFieldCount + fieldCount;
             final SparseArray<FieldReference> instanceFields = new SparseArray<>(totalFieldCount);

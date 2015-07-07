@@ -32,7 +32,6 @@ import java.io.File;
 import java.io.FilenameFilter;
 import java.util.ArrayList;
 
-import org.jf.dexlib2.Opcode;
 import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.analysis.ClassPath;
 import org.jf.dexlib2.iface.DexFile;
@@ -102,9 +101,8 @@ public class MiscUtil {
         ArrayList<DexFile> dexFiles = new ArrayList<>();
         for (File f : MiscUtil.getFiles(path, ext)) {
             dexFiles.addAll(DexUtil.loadMultiDex(f, opcodes));
-            //LLog.i("Add bcp " + f);
         }
-        return new ClassPath(dexFiles, Opcode.LOLLIPOP);
+        return new ClassPath(dexFiles, opcodes.apiLevel);
     }
 
     public static String workingDir() {

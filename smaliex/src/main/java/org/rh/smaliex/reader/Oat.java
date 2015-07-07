@@ -221,6 +221,7 @@ public class Oat {
         }
     }
 
+    // art/compiler/oat_writer art/runtime/oat_file
     public static class OatDexFile {
         public final int dex_file_location_size_;
         @DumpFormat(type = DumpFormat.TYPE_BYTE, isString = true)

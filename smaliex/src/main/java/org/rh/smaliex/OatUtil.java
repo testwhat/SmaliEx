@@ -263,10 +263,23 @@ public class OatUtil {
         return new DexBackedDexFile(opcodes, data);
     }
 
-    private static void convertToDex(Oat oat, File outputFolder,
-            String bootClassPath, boolean addSelfToBcp) throws IOException {
+    public static DexFile[] getOdexFromOat(Oat oat, Opcodes opcodes) throws IOException {
         final int BSIZE = 8192;
         final byte[] buf = new byte[BSIZE];
+        if (opcodes == null) {
+            opcodes = new Opcodes(oat.guessApiLevel());
+        }
+        DexFile[] dexFiles = new DexFile[oat.mOatDexFiles.length];
+        for (int i = 0; i < oat.mOatDexFiles.length; i++) {
+            Oat.DexFile dex = oat.mDexFiles[i];
+            final int dexSize = dex.mHeader.file_size_;
+            dexFiles[i] = readDex(dex, dexSize, opcodes, buf);
+        }
+        return dexFiles;
+    }
+
+    private static void convertToDex(Oat oat, File outputFolder,
+            String bootClassPath, boolean addSelfToBcp) throws IOException {
         final Opcodes opcodes = new Opcodes(oat.guessApiLevel());
         LLog.i("Preparing bootclasspath from " + bootClassPath);
         if (bootClassPath == null || !new File(bootClassPath).exists()) {
@@ -275,13 +288,10 @@ public class OatUtil {
         final OatDexRewriterModule odr = new OatDexRewriterModule(bootClassPath, opcodes);
         final DexRewriter deOpt = odr.getRewriter();
 
-        DexFile[] dexFiles = new DexFile[oat.mOatDexFiles.length];
-        for (int i = 0; i < oat.mOatDexFiles.length; i++) {
-            Oat.DexFile dex = oat.mDexFiles[i];
-            final int dexSize = dex.mHeader.file_size_;
-            dexFiles[i] = readDex(dex, dexSize, opcodes, buf);
-            if (addSelfToBcp) {
-                odr.mBootClassPath.addDex(dexFiles[i]);
+        DexFile[] dexFiles = getOdexFromOat(oat, opcodes);
+        if (addSelfToBcp) {
+            for (DexFile d : dexFiles) {
+                odr.mBootClassPath.addDex(d);
             }
         }
         for (int i = 0; i < oat.mOatDexFiles.length; i++) {
@@ -294,6 +304,10 @@ public class OatUtil {
             File outputFile = MiscUtil.changeExt(new File(outputFolder, opath), "dex");
             LLog.i("De-optimizing " + dexLoc);
             DexFile d = deOpt.rewriteDexFile(dexFiles[i]);
+            if (!OatDexRewriter.isValid(d)) {
+                LLog.i("convertToDex: skip " + dexLoc);
+                continue;
+            }
 
             if (outputFile.exists()) {
                 File old = outputFile;
@@ -365,6 +379,10 @@ public class OatUtil {
                     dexBytes.get(data);
                     DexFile d = new DexBackedDexFile(opcodes, data);
                     d = deOpt.rewriteDexFile(d);
+                    if (!OatDexRewriter.isValid(d)) {
+                        LLog.i("convertToDexJar: skip " + jarName);
+                        continue;
+                    }
 
                     MemoryDataStore m = new MemoryDataStore(dexSize + 512);
                     DexPool.writeTo(m, d);
@@ -525,10 +543,21 @@ public class OatUtil {
         public DexFile rewriteDexFile(DexFile dexFile) {
             try {
                 return org.jf.dexlib2.immutable.ImmutableDexFile.of(super.rewriteDexFile(dexFile));
-                //return super.rewriteDexFile(dexFile);
             } catch (Exception e) {
-                LLog.ex(e);
-                throw new AnalysisException(e);
+                LLog.i("Failed to re-construct dex " + e);
+                //LLog.ex(e);
+            }
+            return new FailedDexFile();
+        }
+
+        public static boolean isValid(DexFile dexFile) {
+            return !(dexFile instanceof FailedDexFile);
+        }
+
+        static final class FailedDexFile implements DexFile {
+            @Override
+            public java.util.Set<? extends org.jf.dexlib2.iface.ClassDef> getClasses() {
+                return new java.util.HashSet<>(0);
             }
         }
     }
@@ -573,7 +602,7 @@ public class OatUtil {
                             AnalysisException ae = ma.getAnalysisException();
                             if (ae != null) {
                                 LLog.e("Analysis error in class=" + mCurrentMethod.getDefiningClass()
-                                    + " method=" + mCurrentMethod.getName());
+                                    + " method=" + mCurrentMethod.getName() + "\n" + ae.getContext());
                                 LLog.ex(ae);
                             }
                             return ma.getInstructions();

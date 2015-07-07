@@ -34,7 +34,7 @@ import java.io.IOException;
 public class Main {
 
     static void printUsage() {
-        System.out.println("Easy oat2dex 0.82");
+        System.out.println("Easy oat2dex 0.83");
         System.out.println("Usage:");
         System.out.println("Get dex from boot.oat: boot <boot.oat>");
         System.out.println("Get dex from  app oat: <oat-file> <boot-class-folder>");
@@ -73,7 +73,7 @@ public class Main {
             checkExist(args[1]);
             try {
                 OatUtil.oat2dex(args[0], args[1]);
-            } catch (IOException ex) {
+            } catch (Exception ex) {
                 LLog.ex(ex);
             }
         } else {
