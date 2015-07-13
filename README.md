@@ -10,7 +10,7 @@ Download latest version:
 https://github.com/testwhat/SmaliEx/blob/master/smaliex-bin/oat2dex.jar?raw=true
 
 Usage:  
-Deoptimize boot classes (The output will in "odex" and "dex" folders):  
+Deoptimize boot classes (The output will be in "odex" and "dex" folders):  
 &nbsp;&nbsp;java -jar oat2dex.jar boot &lt;boot.oat file&gt;  
 Deoptimize application:  
 &nbsp;&nbsp;java -jar oat2dex.jar &lt;app.odex&gt; &lt;boot-class-folder output from above&gt;  
