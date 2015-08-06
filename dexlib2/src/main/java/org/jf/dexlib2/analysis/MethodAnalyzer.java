@@ -215,13 +215,12 @@ public class MethodAnalyzer {
                             didSomething = true;
                             undeodexedInstructions.clear(i);
                         }
-                    } catch (AnalysisException ex) {
-                        this.analysisException = ex;
-                        int codeAddress = getInstructionAddress(instructionToAnalyze);
-                        ex.codeAddress = codeAddress;
-                        ex.addContext(String.format("opcode: %s", instructionToAnalyze.instruction.getOpcode().name));
-                        ex.addContext(String.format("code address: %d", codeAddress));
-                        ex.addContext(String.format("method: %s", ReferenceUtil.getReferenceString(method)));
+                    } catch (Exception ex) {
+                        if (ex instanceof AnalysisException) {
+                            setAnalysisException((AnalysisException) ex, instructionToAnalyze);
+                        } else  {
+                            setAnalysisException(new AnalysisException(ex), instructionToAnalyze);
+                        }
                         break;
                     }
 
@@ -323,6 +322,16 @@ public class MethodAnalyzer {
                 return input.instruction;
             }
         });
+    }
+
+    private void setAnalysisException(AnalysisException ex, AnalyzedInstruction instr) {
+        analysisException = ex;
+        int codeAddress = getInstructionAddress(instr);
+        ex.codeAddress = codeAddress;
+        ex.addContext("Method: " + ReferenceUtil.getReferenceString(method));
+        ex.addContext("Opcode: " + instr.instruction.getOpcode().name);
+        ex.addContext("Code address: " + codeAddress);
+        ex.addContext("Near line: " + getNearsetLineByAddress(codeAddress));
     }
 
     @Nullable
@@ -1559,6 +1568,14 @@ public class MethodAnalyzer {
         return startLocal;
     }
 
+    private TypeProto findTypeProtoByAddress(int address, int reg) {
+        StartLocal local = findStartLocalByAddress(address, reg);
+        if (local != null) {
+            return classPath.getClass(local.getTypeReference());
+        }
+        return null;
+    }
+
     private TypeProto guessTypeByNearestInstanceOf(int instrIndex, int reg) {
         for (int i = instrIndex; i > 0; i--) {
             AnalyzedInstruction instr = analyzedInstructions.valueAt(i);
@@ -1577,6 +1594,20 @@ public class MethodAnalyzer {
             }
         }
         return null;
+    }
+
+    private int getNearsetLineByAddress(int instrAddress) {
+        LineNumber prev = null;
+        for (DebugItem di : methodImpl.getDebugItems()) {
+            if (di.getDebugItemType() == DebugItemType.LINE_NUMBER) {
+                LineNumber ln = (LineNumber) di;
+                if (instrAddress < ln.getCodeAddress() && prev != null) {
+                    return prev.getLineNumber();
+                }
+                prev = ln;
+            }
+        }
+        return -1;
     }
 
     private boolean analyzeIputIgetQuick(@Nonnull AnalyzedInstruction analyzedInstruction) {
@@ -1603,9 +1634,8 @@ public class MethodAnalyzer {
             //        + instruction.getOpcode().setsRegister() + " regA="
             //        + instruction.getRegisterA() + " regB=" + instruction.getRegisterB()
             //        + " fieldOffset=" + fieldOffset + " classTypeProto=" + classTypeProto);
-            StartLocal startLocal = findStartLocalByAddress(instrAddress, srcReg);
-            if (startLocal != null) {
-                classTypeProto = classPath.getClass(startLocal.getTypeReference());
+            classTypeProto = findTypeProtoByAddress(instrAddress, srcReg);
+            if (classTypeProto != null) {
                 resolvedField = classTypeProto.getFieldByOffset(fieldOffset);
                 if (resolvedField != null) {
                     addAnalysisInfo("Risky resolved field from debug info."
@@ -1626,14 +1656,9 @@ public class MethodAnalyzer {
                 }
             }
             if (resolvedField == null) {
-                for (DebugItem di : methodImpl.getDebugItems()) {
-                    if (di.getDebugItemType() == DebugItemType.LINE_NUMBER) {
-                        LineNumber ln = (LineNumber) di;
-                        if (instrAddress < ln.getCodeAddress()) {
-                            addAnalysisInfo("Near .line " + ln.getLineNumber());
-                            break;
-                        }
-                    }
+                int line = getNearsetLineByAddress(instrAddress);
+                if (line > 0) {
+                    addAnalysisInfo("Near .line " + line);
                 }
                 throw new AnalysisException("Could not resolve the field in class %s at offset %d in %s",
                         objectRegisterTypeProto.getType(), fieldOffset, method.getName());
@@ -1702,10 +1727,19 @@ public class MethodAnalyzer {
         TypeProto objectRegisterTypeProto = objectRegisterType.type;
 
         if (objectRegisterType.category == RegisterType.NULL) {
-            objectRegisterTypeProto = classPath.getClass("Ljava/lang/String;");
-            addAnalysisInfo("Unresolved " + analyzedInstruction.instruction.getOpcode()
-                + " mIdx=" + methodIndex + " objReg=" + objectRegister
-                + ", use Ljava/lang/String; to invoke (it may have exception but is expected)");
+            objectRegisterTypeProto = findTypeProtoByAddress(
+                    getInstructionAddress(analyzedInstruction), objectRegister);
+            // TODO, it may also search the nearest new-instance for the register.
+            if (objectRegisterTypeProto != null) {
+                addAnalysisInfo("Risky resolved invocation target from debug info."
+                        + " type=" + objectRegisterTypeProto.getType()
+                        + " mIdx=" + methodIndex + " objReg=" + objectRegister);
+            } else {
+                objectRegisterTypeProto = classPath.getClass("Ljava/lang/String;");
+                addAnalysisInfo("Unresolved " + analyzedInstruction.instruction.getOpcode()
+                        + " mIdx=" + methodIndex + " objReg=" + objectRegister
+                        + ", use Ljava/lang/String; to invoke (it may have exception but is expected)");
+            }
             /*
             # Example of SamsungLinkPlatform in Lcom/sec/android/safe/wifiPke/WifiPke <clinit>
             const/4 v0, 0x0
@@ -1747,9 +1781,8 @@ public class MethodAnalyzer {
 
         if (resolvedMethod == null) {
             int instrAddress = getInstructionAddress(analyzedInstruction);
-            StartLocal startLocal = findStartLocalByAddress(instrAddress, objectRegister);
-            if (startLocal != null) {
-                objectRegisterTypeProto = classPath.getClass(startLocal.getTypeReference());
+            objectRegisterTypeProto = findTypeProtoByAddress(instrAddress, objectRegister);
+            if (objectRegisterTypeProto != null) {
                 resolvedMethod = objectRegisterTypeProto.getMethodByVtableIndex(methodIndex);
                 if (resolvedMethod != null) {
                     addAnalysisInfo("Risky resolved method from debug info."
