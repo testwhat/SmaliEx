@@ -265,7 +265,7 @@ public class main {
             final int MAX_DEX_ID = 65536;
             int dexNum = 0;
             ArrayList<DexPool> pools = new ArrayList<DexPool>();
-            DexPool dexPool = DexPool.makeDexPool();
+            DexPool dexPool = DexPool.makeDexPool(apiLevel);
             ClassPool clsPool = (ClassPool) dexPool.classSection;
             pools.add(dexPool);
 
@@ -292,7 +292,7 @@ public class main {
                     System.out.println("output:" + outName);
                     dexPool.writeTo(new FileDataStore(new File(outName)));
                     dexNum++;
-                    dexPool = DexPool.makeDexPool();
+                    dexPool = DexPool.makeDexPool(apiLevel);
                     pools.add(dexPool);
                     clsPool = (ClassPool) dexPool.classSection;
                 }
@@ -435,7 +435,7 @@ public class main {
         dexGen.setApiLevel(apiLevel, experimental);
 
         dexGen.setVerboseErrors(verboseErrors);
-        dexGen.setDexBuilder(DexBuilder.makeDexBuilder());
+        dexGen.setDexBuilder(DexBuilder.makeDexBuilder(apiLevel));
         classes.add((BuilderClassDef) dexGen.smali_file());
 
         return dexGen.getNumberOfSyntaxErrors() == 0;

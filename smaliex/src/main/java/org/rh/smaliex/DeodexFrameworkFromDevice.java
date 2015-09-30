@@ -46,12 +46,11 @@ public class DeodexFrameworkFromDevice {
     public final static String FRAMEWORK_ARM64 = SYS_FRAMEWORK + "arm64/";
 
     public static void deOptimizeAuto() {
-        final String workingDir = MiscUtil.workingDir();
         AdbUtil.runOneTimeAction(new AdbUtil.OneTimeAction() {
 
             @Override
             public void run(Device device) throws Exception {
-                deOptimizeFramework(device, workingDir);
+                deOptimizeFramework(device, MiscUtil.workingDir());
             }
 
             @Override

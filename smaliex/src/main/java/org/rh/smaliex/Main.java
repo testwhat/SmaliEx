@@ -36,33 +36,65 @@ public class Main {
     static void printUsage() {
         System.out.println("Easy oat2dex 0.83");
         System.out.println("Usage:");
-        System.out.println("Get dex from boot.oat: boot <boot.oat>");
-        System.out.println("Get dex from  app oat: <oat-file> <boot-class-folder>");
-        System.out.println("Get raw odex from oat: odex <oat-file>");
-        System.out.println("Get raw odex smali   : smali <oat/odex file>");
-        System.out.println("Deodex framework     : devfw");
+        System.out.println(" java -jar oat2dex.jar [options] <action>");
+        System.out.println("[options]");
+        System.out.println(" Output folder: -o <folder path>");
+        System.out.println("<action>");
+        System.out.println(" Get dex from boot.oat: boot <boot.oat>");
+        System.out.println(" Get dex from  app oat: <oat-file> <boot-class-folder>");
+        System.out.println(" Get raw odex from oat: odex <oat-file>");
+        System.out.println(" Get raw odex smali   : smali <oat/odex file>");
+        System.out.println(" Deodex framework     : devfw");
     }
 
     public static void main(String[] args) {
+        try {
+            mainImpl(args);
+        } catch (IOException ex) {
+            System.out.println("Unhandled IOException: " + ex.getMessage());
+            System.exit(1);
+        }
+    }
+
+    public static void mainImpl(String[] args) throws IOException {
+        String outputFolder = null;
+        if (args.length > 2) {
+            String opt = args[0];
+            while (opt.length() > 1 && opt.charAt(0) == '-') {
+                switch (opt.charAt(1)) {
+                    case 'o':
+                        outputFolder = args[1];
+                        break;
+                    default:
+                        System.out.println("Unrecognized option: " + opt);
+                }
+                String[] newArgs = shiftArgs(args, 2);
+                if (newArgs == args || newArgs.length < 2) {
+                    break;
+                }
+                args = newArgs;
+                opt = args[0];
+            }
+        }
         if (args.length < 1) {
             printUsage();
             return;
         }
+
         String cmd = args[0];
         if ("devfw".equals(cmd)) {
-            String[] shiftArgs = new String[args.length - 1];
-            System.arraycopy(args, 1, shiftArgs, 0, shiftArgs.length);
-            DeodexFrameworkFromDevice.main(shiftArgs);
+            DeodexFrameworkFromDevice.main(shiftArgs(args, 1));
             return;
         }
         if (args.length == 2) {
             if ("boot".equals(cmd)) {
                 checkExist(args[1]);
-                OatUtil.bootOat2Dex(args[1]);
+                OatUtil.bootOat2Dex(args[1], outputFolder);
                 return;
             }
             if ("odex".equals(cmd)) {
-                OatUtil.extractOdexFromOat(checkExist(args[1]), null);
+                OatUtil.extractOdexFromOat(checkExist(args[1]),
+                        outputFolder == null ? null : new File(outputFolder));
                 return;
             }
             if ("smali".equals(cmd)) {
@@ -71,14 +103,19 @@ public class Main {
             }
             checkExist(args[0]);
             checkExist(args[1]);
-            try {
-                OatUtil.oat2dex(args[0], args[1]);
-            } catch (Exception ex) {
-                LLog.ex(ex);
-            }
+            OatUtil.oat2dex(args[0], args[1], outputFolder);
         } else {
             printUsage();
         }
+    }
+
+    static String[] shiftArgs(String[] args, int n) {
+        if (n >= args.length) {
+            return args;
+        }
+        String[] shiftArgs = new String[args.length - n];
+        System.arraycopy(args, n, shiftArgs, 0, shiftArgs.length);
+        return shiftArgs;
     }
 
     static File checkExist(String path) {

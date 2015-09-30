@@ -31,28 +31,19 @@ package org.rh.smaliex;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
-import java.util.jar.Attributes;
-import java.util.jar.JarOutputStream;
-import java.util.jar.Manifest;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
-import javax.annotation.Nonnull;
-
-import org.jf.dexlib2.AccessFlags;
 import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile;
-import org.jf.dexlib2.iface.ClassDef;
-import org.jf.dexlib2.iface.DexFile;
-import org.jf.dexlib2.iface.Method;
-import org.jf.dexlib2.iface.MethodParameter;
+import org.jf.dexlib2.writer.io.DexDataStore;
 
 public class DexUtil {
     public static final int API_LEVEL = 19;
@@ -68,7 +59,7 @@ public class DexUtil {
         return n == 0x504B0304;
     }
 
-    static Opcodes getDefaultOpCodes(Opcodes opc) {
+    public static Opcodes getDefaultOpCodes(Opcodes opc) {
         if (opc == null) {
             if (DEFAULT_OPCODES == null) {
                 DEFAULT_OPCODES = new Opcodes(API_LEVEL);
@@ -137,101 +128,123 @@ public class DexUtil {
         }
     }
 
-    @Nonnull
-    public static String getMethodString(Method m, StringBuilder sb) {
-        sb.setLength(0);
-        for (MethodParameter param : m.getParameters()) {
-            String pname = param.getName();
-            if (pname == null) {
-                pname = "obj";
-            }
-            sb.append(DexUtil.typeString(param.getType())).append(" ").append(pname).append(", ");
-        }
-        if (sb.length() > 1) {
-            sb.setLength(sb.length() - 2);
-        }
-        String paramStr = sb.toString();
-        sb.setLength(0);
-        String accStr = AccessFlags.formatAccessFlagsForMethod(m.getAccessFlags());
-        return sb.append(accStr).append((accStr.length() > 0 ? " " : ""))
-                .append(DexUtil.typeString(m.getReturnType())).append(" ").append(m.getName())
-                .append("(").append(paramStr).append(")").toString();
-    }
+    public static class ByteData {
+        private int mMaxDataPosition;
+        private int mPosition;
+        private byte[] mData;
 
-    public static boolean isSyntheticMethod(Method m) {
-        return (m.getAccessFlags() & AccessFlags.SYNTHETIC.getValue()) != 0;
-    }
-
-    public static String typeString(String type) {
-        switch (type.charAt(0)) {
-            case 'V':
-                return "void";
-            case 'Z':
-                return "boolean";
-            case 'L':
-                return type.substring(1, type.length() - 1).replace("/", ".");
-            case 'C':
-                return "char";
-            case 'B':
-                return "byte";
-            case 'S':
-                return "short";
-            case 'I':
-                return "int";
-            case 'F':
-                return "float";
-            case 'J':
-                return "long";
-            case 'D':
-                return "double";
-            case '[':
-                return typeString(type.substring(1)) + "[]";
+        public ByteData(int initSize) {
+            mData = new byte[initSize];
         }
-        return "void";
-    }
 
-    public static void dumpMethodList(DexFile df) {
-        StringBuilder sb = new StringBuilder();
-        for (ClassDef c : df.getClasses()) {
-            String accStr = AccessFlags.formatAccessFlagsForMethod(c.getAccessFlags());
-            LLog.i(accStr + (accStr.length() > 0 ? " " : "")
-                    + DexUtil.typeString(c.getType()));
-            for (Method m : c.getMethods()) {
-                if (DexUtil.isSyntheticMethod(m)) {
-                    continue;
+        private void ensureCapacity(int writingPos) {
+            int oldSize = mData.length;
+            if (writingPos >= oldSize) {
+                int newSize = (oldSize * 3) / 2 + 1;
+                if (newSize <= writingPos) {
+                    newSize = writingPos + 1;
                 }
-                LLog.i(DexUtil.getMethodString(m, sb));
+                mData = java.util.Arrays.copyOf(mData, newSize);
             }
+            if (writingPos > mMaxDataPosition) {
+                mMaxDataPosition = writingPos;
+            }
+        }
+
+        public void put(byte c) {
+            ensureCapacity(mPosition);
+            mData[mPosition] = c;
+        }
+
+        public void put(byte[] bytes, int off, int len) {
+            ensureCapacity(mPosition + len);
+            System.arraycopy(bytes, off, mData, mPosition, len);
+        }
+
+        public byte get() {
+            return mData[mPosition];
+        }
+
+        public void get(byte[] bytes, int off, int len) {
+            System.arraycopy(mData, mPosition, bytes, off, len);
+        }
+
+        public boolean isPositionHasData() {
+            return mPosition <= mMaxDataPosition;
+        }
+
+        public int remaining() {
+            return mMaxDataPosition - mPosition;
+        }
+
+        public void position(int p) {
+            mPosition = p;
         }
     }
 
-    public static void createDexJar(String[] files, String output) {
-        Manifest manifest = new Manifest();
-        Attributes attribute = manifest.getMainAttributes();
-        attribute.putValue("Manifest-Version", "1.0");
+    public static class MemoryDataStore implements DexDataStore {
+        final ByteData mBuffer;
 
-        final byte[] buf = new byte[8192];
-        int readSize;
-        try (JarOutputStream jos = new JarOutputStream(new FileOutputStream(output), manifest)) {
-            String idx = "";
-            int i = 1;
-            for (String file : files) {
-                try (FileInputStream in = new FileInputStream(file)) {
-                    String filename = file.replace('\\', '/');
-                    filename = filename.substring(filename.lastIndexOf('/') + 1);
-                    if (filename.endsWith(".dex")) {
-                        jos.putNextEntry(new ZipEntry("classes" + idx + ".dex"));
-                        idx = String.valueOf(++i);
-                    }
-                    jos.putNextEntry(new ZipEntry(filename));
-                    while ((readSize = in.read(buf, 0, buf.length)) != -1) {
-                        jos.write(buf, 0, readSize);
-                    }
+        public MemoryDataStore(int size) {
+            mBuffer = new ByteData(size);
+        }
+
+        @Override
+        public OutputStream outputAt(final int offset) {
+            return new OutputStream() {
+                private int mPos = offset;
+                @Override
+                public void write(int b) throws IOException {
+                    mBuffer.position(mPos);
+                    mPos++;
+                    mBuffer.put((byte) b);
                 }
-                jos.closeEntry();
-            }
-        } catch (IOException e) {
-            LLog.ex(e);
+
+                @Override
+                public void write(byte[] bytes, int off, int len) throws IOException {
+                    mBuffer.position(mPos);
+                    mPos += len;
+                    mBuffer.put(bytes, off, len);
+                }
+            };
+        }
+
+        @Override
+        public InputStream readAt(final int offset) {
+            mBuffer.position(offset);
+            return new InputStream() {
+                private int mPos = offset;
+
+                @Override
+                public int read() throws IOException {
+                    mBuffer.position(mPos);
+                    if (!mBuffer.isPositionHasData()) {
+                        return -1;
+                    }
+                    mPos++;
+                    return mBuffer.get() & 0xff;
+                }
+
+                @Override
+                public int read(byte[] bytes, int off, int len) throws IOException {
+                    mBuffer.position(mPos);
+                    if (mBuffer.remaining() == 0 || !mBuffer.isPositionHasData()) {
+                        return -1;
+                    }
+                    len = Math.min(len, mBuffer.remaining());
+                    mPos += len;
+                    mBuffer.get(bytes, off, len);
+                    return len;
+                }
+            };
+        }
+
+        public void writeTo(OutputStream os) throws IOException {
+            os.write(mBuffer.mData, 0, mBuffer.mMaxDataPosition);
+        }
+
+        @Override
+        public void close() throws IOException {
         }
     }
 }

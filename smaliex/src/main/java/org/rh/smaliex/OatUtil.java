@@ -32,7 +32,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Enumeration;
@@ -58,7 +57,6 @@ import org.jf.dexlib2.rewriter.MethodRewriter;
 import org.jf.dexlib2.rewriter.Rewriter;
 import org.jf.dexlib2.rewriter.RewriterModule;
 import org.jf.dexlib2.rewriter.Rewriters;
-import org.jf.dexlib2.writer.io.DexDataStore;
 import org.jf.dexlib2.writer.pool.DexPool;
 import org.rh.smaliex.reader.DataReader;
 import org.rh.smaliex.reader.Elf;
@@ -66,7 +64,7 @@ import org.rh.smaliex.reader.Oat;
 
 public class OatUtil {
 
-    public static void smaliRaw(File inputFile) {
+    public static void smaliRaw(File inputFile) throws IOException {
         if (!inputFile.isFile()) {
             LLog.i(inputFile + " is not a file.");
         }
@@ -93,7 +91,7 @@ public class OatUtil {
                     outSubFolders.add(MiscUtil.path(outputBaseFolder, opath));
                 }
             } catch (IOException ex) {
-                LLog.ex(ex);
+                throw handleIOE(ex);
             }
         } else {
             dexFiles = DexUtil.loadMultiDex(inputFile, opc);
@@ -116,7 +114,7 @@ public class OatUtil {
     }
 
     // A sample to de-optimize system folder of an extracted ROM
-    public static void deOptimizeFiles(String systemFolder, String workingDir) {
+    public static void deOptimizeFiles(String systemFolder, String workingDir) throws IOException {
         File bootOat = new File(MiscUtil.path(systemFolder, "framework", "arm", "boot.oat"));
         if (!bootOat.exists()) {
             LLog.i(bootOat + " not found");
@@ -128,7 +126,7 @@ public class OatUtil {
                     MiscUtil.path(systemFolder, "framework"),
                     outputJarFolder);
         } catch (IOException ex) {
-            LLog.ex(ex);
+            throw handleIOE(ex);
         }
     }
 
@@ -140,14 +138,15 @@ public class OatUtil {
         extractDexFromBootOat(bootOat, outputJarFolder, bootClassPathFolder, noClassJarFolder);
     }
 
-    public static void bootOat2Dex(String bootOat) {
+    public static void bootOat2Dex(String bootOat, String outFolder) throws IOException {
         File odexFolder = prepareOdex(bootOat);
-        File outputJarFolder = new File(new File(bootOat).getParent(), "dex");
+        File outputJarFolder = outFolder != null ? new File(outFolder) :
+                new File(new File(bootOat).getParent(), "dex");
         extractDexFromBootOat(bootOat, outputJarFolder.getAbsolutePath(),
                 odexFolder.getAbsolutePath(), null);
     }
 
-    private static File prepareOdex(String bootOat) {
+    private static File prepareOdex(String bootOat) throws IOException {
         File oatFile = new File(bootOat);
         File odexFolder = new File(oatFile.getParentFile(), "odex");
         odexFolder.mkdirs();
@@ -155,12 +154,14 @@ public class OatUtil {
         return odexFolder;
     }
 
-    public static void oat2dex(String oatFile, String bootClassPath) throws IOException {
+    public static void oat2dex(String oatFile, String bootClassPath, String outFolder)
+            throws IOException {
         try (Elf e = new Elf(oatFile)) {
             Oat oat = getOat(e);
-            File outFolder = new File(oatFile).getAbsoluteFile().getParentFile();
-            outFolder.mkdirs();
-            convertToDex(oat, outFolder, bootClassPath, true);
+            File outputFolder = outFolder != null ? new File(outFolder) :
+                    new File(oatFile).getAbsoluteFile().getParentFile();
+            outputFolder.mkdirs();
+            convertToDex(oat, outputFolder, bootClassPath, true);
         }
     }
 
@@ -174,7 +175,7 @@ public class OatUtil {
         throw new IOException("oat not found");
     }
 
-    public static ArrayList<String> getBootJarNames(String bootOat) {
+    public static ArrayList<String> getBootJarNames(String bootOat) throws IOException {
         ArrayList<String> names = new ArrayList<>();
         try (Elf e = new Elf(bootOat)) {
             Oat oat = getOat(e);
@@ -186,7 +187,7 @@ public class OatUtil {
                 names.add(s.substring(s.lastIndexOf('/') + 1));
             }
         } catch (IOException ex) {
-            LLog.ex(ex);
+            throw handleIOE(ex);
         }
         return names;
     }
@@ -195,13 +196,18 @@ public class OatUtil {
         int spos = jarPathInOat.indexOf(':');
         if (spos > 0) {
             // framework.jar:classes2.dex -> framework-classes2.dex
-            jarPathInOat = jarPathInOat.substring(0, spos - 4) + "-" + jarPathInOat.substring(spos + 1);
+            jarPathInOat = jarPathInOat.substring(0, spos - 4)
+                    + "-" + jarPathInOat.substring(spos + 1);
         }
         return jarPathInOat.substring(jarPathInOat.lastIndexOf('/') + 1);
     }
 
     // Get optimized dex from oat
-    public static void extractOdexFromOat(File oatFile, File outputFolder) {
+    public static void extractOdexFromOat(File oatFile, File outputFolder) throws IOException {
+        if (outputFolder == null) {
+            outputFolder = new File(MiscUtil.workingDir());
+            outputFolder.mkdirs();
+        }
         try (Elf e = new Elf(oatFile)) {
             Oat oat = getOat(e);
             for (int i = 0; i < oat.mDexFiles.length; i++) {
@@ -209,20 +215,17 @@ public class OatUtil {
                 Oat.DexFile df = oat.mDexFiles[i];
                 String opath = new String(odf.dex_file_location_data_);
                 opath = getOuputNameForSubDex(opath);
-                if (outputFolder == null) {
-                    outputFolder = new File(MiscUtil.workingDir());
-                }
                 File out = MiscUtil.changeExt(new File(outputFolder, opath), "dex");
                 df.saveTo(out);
                 LLog.i("Output raw dex: " + out.getAbsolutePath());
             }
         } catch (IOException ex) {
-            LLog.ex(ex);
+            throw handleIOE(ex);
         }
     }
 
     public static void extractDexFromBootOat(String oatFile, String outputFolder,
-            String bootClassPath, String noClassJarFolder) {
+            String bootClassPath, String noClassJarFolder) throws IOException {
         try (Elf e = new Elf(oatFile)) {
             Oat oat = getOat(e);
             File outFolder = new File(outputFolder);
@@ -235,7 +238,7 @@ public class OatUtil {
                 convertToDexJar(oat, outFolder, bootClassPath, noClassJarFolder, true);
             }
         } catch (IOException ex) {
-            LLog.ex(ex);
+            throw handleIOE(ex);
         }
     }
 
@@ -281,9 +284,8 @@ public class OatUtil {
     private static void convertToDex(Oat oat, File outputFolder,
             String bootClassPath, boolean addSelfToBcp) throws IOException {
         final Opcodes opcodes = new Opcodes(oat.guessApiLevel());
-        LLog.i("Preparing bootclasspath from " + bootClassPath);
         if (bootClassPath == null || !new File(bootClassPath).exists()) {
-            LLog.e("Invalid bootclasspath: " + bootClassPath);
+            throw new IOException("Invalid bootclasspath: " + bootClassPath);
         }
         final OatDexRewriterModule odr = new OatDexRewriterModule(bootClassPath, opcodes);
         final DexRewriter deOpt = odr.getRewriter();
@@ -310,11 +312,12 @@ public class OatUtil {
             }
 
             if (outputFile.exists()) {
-                File old = outputFile;
-                outputFile = MiscUtil.appendTail(outputFile, "-deodex");
-                LLog.i(old + " already existed, use name " + outputFile.getName());
+                outputFile.delete();
+                //File old = outputFile;
+                //outputFile = MiscUtil.appendTail(outputFile, "-deodex");
+                //LLog.i(old + " already existed, use name " + outputFile.getName());
             }
-            DexPool.writeTo(outputFile.getAbsolutePath() , d);
+            DexPool.writeTo(outputFile.getAbsolutePath(), d);
             LLog.i("Output to " + outputFile);
         }
     }
@@ -384,10 +387,9 @@ public class OatUtil {
                         continue;
                     }
 
-                    MemoryDataStore m = new MemoryDataStore(dexSize + 512);
+                    DexUtil.MemoryDataStore m = new DexUtil.MemoryDataStore(dexSize + 512);
                     DexPool.writeTo(m, d);
-
-                    jos.write(m.mBuffer.mData, 0, m.mBuffer.mMaxDataPosition);
+                    m.writeTo(jos);
                     classesIdx = String.valueOf(++i);
                     jos.closeEntry();
                 }
@@ -412,126 +414,15 @@ public class OatUtil {
                     }
                 }
                 LLog.i("Output " + outputFile);
-            } catch (IOException e) {
-                LLog.ex(e);
+            } catch (IOException ex) {
+                throw handleIOE(ex);
             }
         }
     }
 
-    static class ByteData {
-        private int mMaxDataPosition;
-        private int mPosition;
-        private byte[] mData;
-
-        public ByteData(int initSize) {
-            mData = new byte[initSize];
-        }
-
-        private void ensureCapacity(int writingPos) {
-            int oldSize = mData.length;
-            if (writingPos >= oldSize) {
-                int newSize = (oldSize * 3) / 2 + 1;
-                if (newSize <= writingPos) {
-                    newSize = writingPos + 1;
-                }
-                mData = java.util.Arrays.copyOf(mData, newSize);
-            }
-            if (writingPos > mMaxDataPosition) {
-                mMaxDataPosition = writingPos;
-            }
-        }
-
-        public void put(byte c) {
-            ensureCapacity(mPosition);
-            mData[mPosition] = c;
-        }
-
-        public void put(byte[] bytes, int off, int len) {
-            ensureCapacity(mPosition + len);
-            System.arraycopy(bytes, off, mData, mPosition, len);
-        }
-
-        public byte get() {
-            return mData[mPosition];
-        }
-
-        public void get(byte[] bytes, int off, int len) {
-            System.arraycopy(mData, mPosition, bytes, off, len);
-        }
-
-        public boolean isPositionHasData() {
-            return mPosition <= mMaxDataPosition;
-        }
-
-        public int remaining() {
-            return mMaxDataPosition - mPosition;
-        }
-
-        public void position(int p) {
-            mPosition = p;
-        }
-    }
-
-    static class MemoryDataStore implements DexDataStore {
-        final ByteData mBuffer;
-
-        public MemoryDataStore(int size) {
-            mBuffer = new ByteData(size);
-        }
-
-        @Override
-        public OutputStream outputAt(final int offset) {
-            return new OutputStream() {
-                private int mPos = offset;
-                @Override
-                public void write(int b) throws IOException {
-                    mBuffer.position(mPos);
-                    mPos++;
-                    mBuffer.put((byte) b);
-                }
-
-                @Override
-                public void write(byte[] bytes, int off, int len) throws IOException {
-                    mBuffer.position(mPos);
-                    mPos += len;
-                    mBuffer.put(bytes, off, len);
-                }
-            };
-        }
-
-        @Override
-        public InputStream readAt(final int offset) {
-            mBuffer.position(offset);
-            return new InputStream() {
-                private int mPos = offset;
-
-                @Override
-                public int read() throws IOException {
-                    mBuffer.position(mPos);
-                    if (!mBuffer.isPositionHasData()) {
-                        return -1;
-                    }
-                    mPos++;
-                    return mBuffer.get() & 0xff;
-                }
-
-                @Override
-                public int read(byte[] bytes, int off, int len) throws IOException {
-                    mBuffer.position(mPos);
-                    if (mBuffer.remaining() == 0 || !mBuffer.isPositionHasData()) {
-                        return -1;
-                    }
-                    len = Math.min(len, mBuffer.remaining());
-                    mPos += len;
-                    mBuffer.get(bytes, off, len);
-                    return len;
-                }
-            };
-        }
-
-        @Override
-        public void close() throws IOException {
-        }
+    static IOException handleIOE(IOException ex) {
+        LLog.ex(ex);
+        return ex;
     }
 
     public static class OatDexRewriter extends DexRewriter {
