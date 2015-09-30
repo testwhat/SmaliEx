@@ -131,6 +131,7 @@ uploadArchives {
 task proguard(type: proguard.gradle.ProGuardTask, dependsOn: fatJar) {
     def outFile = fatJar.destinationDir.getPath() + '/' + fatJar.baseName + '-' +
             fatJar.version + '-small' + '.' + fatJar.extension
+    project.ext.set("outFile", outFile)
 
     injars fatJar.archivePath
     outjars outFile
@@ -148,3 +149,11 @@ task proguard(type: proguard.gradle.ProGuardTask, dependsOn: fatJar) {
 }
 
 tasks.getByPath(':release').dependsOn(proguard)
+
+task dist(dependsOn: proguard) {
+    doLast {
+        def dist = file("../smaliex-bin/smali.jar")
+        dist.delete()
+        file(project.outFile).renameTo(dist)
+    }
+}
