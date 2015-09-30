@@ -40,6 +40,8 @@ import org.jf.util.ExceptionWithContext;
 
 import javax.annotation.Nonnull;
 import java.io.*;
+import java.util.Enumeration;
+import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -71,6 +73,73 @@ public final class DexFileFactory {
     public static DexBackedDexFile loadDexFile(File dexFile, String dexEntry, int api,
             boolean experimental) throws IOException {
         return loadDexFile(dexFile, dexEntry, new Opcodes(api, experimental));
+    }
+
+    @Nonnull
+    public static List<DexBackedDexFile> loadDexFiles(
+            File dexFile, String dexEntry, int api, boolean experimental) throws IOException {
+        return loadDexFiles(dexFile, dexEntry, new Opcodes(api, experimental));
+    }
+
+    @Nonnull
+    public static List<DexBackedDexFile> loadDexFiles(
+            File dexFile, String dexEntry, @Nonnull Opcodes opcodes) throws IOException {
+        int dotPos = dexEntry.lastIndexOf('.');
+        String prefix = "classes";
+        if (dotPos > 0) {
+            prefix = dexEntry.substring(0, dotPos);
+        }
+        List<DexBackedDexFile> dexFiles = com.google.common.collect.Lists.newArrayList();
+        boolean isZipFile = false;
+        ZipFile zipFile = null;
+        try {
+            zipFile = new ZipFile(dexFile);
+            isZipFile = true;
+            Enumeration<? extends ZipEntry> zs = zipFile.entries();
+            while (zs.hasMoreElements()) {
+                ZipEntry zipEntry = zs.nextElement();
+                String name = zipEntry.getName();
+                if (name.startsWith(prefix) && name.endsWith(".dex")) {
+                    int fileLength = (int) zipEntry.getSize();
+                    if (fileLength < 40) {
+                        continue;
+                    }
+                    byte[] dexBytes = new byte[fileLength];
+                    ByteStreams.readFully(zipFile.getInputStream(zipEntry), dexBytes);
+                    dexFiles.add(new DexBackedDexFile(opcodes, dexBytes));
+                }
+            }
+        } catch (IOException ex) {
+            if (isZipFile) {
+                throw ex;
+            }
+        } finally {
+            if (zipFile != null) {
+                try {
+                    zipFile.close();
+                } catch (IOException ex) {
+                }
+            }
+        }
+        if (!isZipFile) {
+            InputStream inputStream = new BufferedInputStream(new FileInputStream(dexFile));
+            try {
+                try {
+                    dexFiles.add(DexBackedDexFile.fromInputStream(opcodes, inputStream));
+                } catch (DexBackedDexFile.NotADexFile ex) {
+                }
+                try {
+                    dexFiles.add( DexBackedOdexFile.fromInputStream(opcodes, inputStream));
+                } catch (DexBackedOdexFile.NotAnOdexFile ex) {
+                }
+            } finally {
+                inputStream.close();
+            }
+        }
+        if (dexFiles.isEmpty()) {
+            throw new ExceptionWithContext("%s is not an apk, dex file or odex file.", dexFile.getPath());
+        }
+        return dexFiles;
     }
 
     @Nonnull

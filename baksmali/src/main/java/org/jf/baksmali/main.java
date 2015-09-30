@@ -256,49 +256,53 @@ public class main {
         }
 
         //Read in and parse the dex file
-        DexBackedDexFile dexFile = DexFileFactory.loadDexFile(dexFileFile, options.dexEntry,
+        List<DexBackedDexFile> dexFiles = DexFileFactory.loadDexFiles(dexFileFile, options.dexEntry,
                 options.apiLevel, options.experimental);
 
-        if (dexFile.isOdexFile()) {
-            if (!options.deodex) {
-                System.err.println("Warning: You are disassembling an odex file without deodexing it. You");
-                System.err.println("won't be able to re-assemble the results unless you deodex it with the -x");
-                System.err.println("option");
-                options.allowOdex = true;
-            }
-        } else {
-            options.deodex = false;
-        }
-
-        if (!setBootClassPath && (options.deodex || options.registerInfo != 0)) {
-            if (dexFile instanceof DexBackedOdexFile) {
-                options.bootClassPathEntries = ((DexBackedOdexFile)dexFile).getDependencies();
+        for (int i = 0; i < dexFiles.size(); i++) {
+            DexBackedDexFile dexFile = dexFiles.get(i);
+            if (dexFile.isOdexFile()) {
+                if (!options.deodex) {
+                    System.err.println("Warning: You are disassembling an odex file without deodexing it. You");
+                    System.err.println("won't be able to re-assemble the results unless you deodex it with the -x");
+                    System.err.println("option");
+                    options.allowOdex = true;
+                }
             } else {
-                options.bootClassPathEntries = getDefaultBootClassPathForApi(options.apiLevel,
-                        options.experimental);
+                options.deodex = false;
             }
-        }
 
-        if (options.customInlineDefinitions == null && dexFile instanceof DexBackedOdexFile) {
-            options.inlineResolver =
-                    InlineMethodResolver.createInlineMethodResolver(
-                            ((DexBackedOdexFile)dexFile).getOdexVersion());
-        }
-
-        boolean errorOccurred = false;
-        if (disassemble) {
-            errorOccurred = !baksmali.disassembleDexFile(dexFile, options);
-        }
-
-        if (doDump) {
-            if (dumpFileName == null) {
-                dumpFileName = commandLine.getOptionValue(inputDexFileName + ".dump");
+            if (!setBootClassPath && (options.deodex || options.registerInfo != 0)) {
+                if (dexFile instanceof DexBackedOdexFile) {
+                    options.bootClassPathEntries = ((DexBackedOdexFile) dexFile).getDependencies();
+                } else {
+                    options.bootClassPathEntries = getDefaultBootClassPathForApi(options.apiLevel,
+                            options.experimental);
+                }
             }
-            dump.dump(dexFile, dumpFileName, options.apiLevel, options.experimental);
-        }
 
-        if (errorOccurred) {
-            System.exit(1);
+            if (options.customInlineDefinitions == null && dexFile instanceof DexBackedOdexFile) {
+                options.inlineResolver =
+                        InlineMethodResolver.createInlineMethodResolver(
+                                ((DexBackedOdexFile) dexFile).getOdexVersion());
+            }
+
+            boolean errorOccurred = false;
+            if (disassemble) {
+                errorOccurred = !baksmali.disassembleDexFile(dexFile, options);
+            }
+
+            if (doDump) {
+                if (dumpFileName == null) {
+                    dumpFileName = commandLine.getOptionValue(inputDexFileName
+                            + (i > 0 ? (i + 1) : "") + ".dump");
+                }
+                dump.dump(dexFile, dumpFileName, options.apiLevel, options.experimental);
+            }
+
+            if (errorOccurred) {
+                System.exit(1);
+            }
         }
     }
 
