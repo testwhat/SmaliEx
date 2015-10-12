@@ -34,7 +34,7 @@ import java.io.IOException;
 public class Main {
 
     static void printUsage() {
-        System.out.println("Easy oat2dex 0.83");
+        System.out.println("Easy oat2dex 0.84");
         System.out.println("Usage:");
         System.out.println(" java -jar oat2dex.jar [options] <action>");
         System.out.println("[options]");

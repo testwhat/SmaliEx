@@ -298,6 +298,9 @@ public class RegisterType {
 
         if (mergedType != null) {
             if (mergedType.equals(this.type)) {
+                if ("Ljava/lang/Object;".equals(mergedType.getType())) {
+                    return other;
+                }
                 return this;
             }
             if (mergedType.equals(other.type)) {

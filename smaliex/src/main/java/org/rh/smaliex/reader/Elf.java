@@ -43,14 +43,14 @@ public class Elf implements Closeable {
     // Elf32 [Addr, Off, Word, Sword]=(int), [Half]=(short)
     // Elf64 [Addr, Off, Xword, Sxword]=(long), [Word]=(int), [Half]=(short)
 
-    final static char ElfMagic[] = {0x7f, 'E', 'L', 'F', '\0'};
+    final static char ELF_MAGIC[] = {0x7f, 'E', 'L', 'F', '\0'};
     final static int EI_CLASS = 4; // File class
     final static int EI_DATA = 5; // Data encoding
     final static int EI_NIDENT = 16;
     final char[] e_ident = new char[EI_NIDENT]; // ELF Identification bytes
 
     final boolean checkMagic() {
-        return e_ident[0] == ElfMagic[0];
+        return java.util.Arrays.equals(e_ident, ELF_MAGIC);
     }
 
     final char getFileClass() {
@@ -59,10 +59,6 @@ public class Elf implements Closeable {
 
     final char getDataEncoding() {
         return e_ident[EI_DATA];
-    }
-
-    public final boolean is64bit() {
-        return getFileClass() == 2;
     }
 
     public final boolean isLittleEndian() {
@@ -189,7 +185,7 @@ public class Elf implements Closeable {
     };
 
     // --- Begin symbol table ---
-    static abstract class Elf_Sym {
+    public static abstract class Elf_Sym {
         int st_name;  // Symbol name (index into string table)
         char st_info;  // Symbol's type and binding attributes
         char st_other; // Must be zero; reserved
@@ -218,6 +214,15 @@ public class Elf implements Closeable {
         }
 
         abstract long getSize();
+
+        public long getOffset(Elf elf) {
+            for (int i = 0; i < elf.mSectionHeaders.length; i++) {
+                if (st_shndx == i) {
+                    return elf.mSectionHeaders[i].getOffset();
+                }
+            }
+            return -1;
+        }
     }
 
     // Symbol table entries for ELF32.
@@ -343,6 +348,12 @@ public class Elf implements Closeable {
     private final Elf_Shdr[] mSectionHeaders;
     private byte[] mStringTable;
 
+    public final boolean is64bit;
+    boolean mReadFull;
+    Elf_Phdr[] mProgHeaders;
+    Elf_Sym[] mDynamicSymbols;
+    byte[] mDynStringTable;
+
     public Elf(String file, boolean closeNow) throws IOException {
         this(file);
         if (closeNow) {
@@ -362,7 +373,7 @@ public class Elf implements Closeable {
         }
         r.setIsLittleEndian(isLittleEndian());
 
-        final boolean is64bit = is64bit();
+        is64bit = getFileClass() == 2;
         if (is64bit) {
             Elf64_Ehdr header = new Elf64_Ehdr();
             header.e_type = r.readShort();
@@ -439,20 +450,16 @@ public class Elf implements Closeable {
         } else {
             LLog.e("Invalid e_shstrndx=" + h.e_shstrndx);
         }
-        if (mReadMore) {
-            readMore();
+
+        if (mReadFull) {
+            readSymbolTables();
+            readProgramHeaders();
         }
     }
 
-    boolean mReadMore;// = true;
-    Elf_Phdr[] mProgHeaders;
-    Elf_Sym[] mDynamicSymbols;
-    byte[] mDynStringTable;
-    private void readMore() throws IOException {
-        final Ehdr h = mHeader;
+    private void readSymbolTables() throws IOException {
         final DataReader r = mReader;
-        final boolean is64bit = is64bit();
-        Elf_Shdr dynsym = getSectionByName(SHN_DYNSYM);
+        Elf_Shdr dynsym = getSection(SHN_DYNSYM);
         if (dynsym != null) {
             r.seek(dynsym.getOffset());
             int len = dynsym.getSize() / (is64bit ? 24 : 16); // sizeof Elf_Sym
@@ -495,7 +502,11 @@ public class Elf implements Closeable {
             //    System.out.println(getDynString(ds.st_name));
             //}
         }
+    }
 
+    private void readProgramHeaders() throws IOException {
+        final Ehdr h = mHeader;
+        final DataReader r = mReader;
         mProgHeaders = new Elf_Phdr[h.e_phnum];
         for (int i = 0; i < h.e_phnum; i++) {
             final long offset = h.getProgramOffset() + (i * h.e_phentsize);
@@ -528,10 +539,22 @@ public class Elf implements Closeable {
     }
 
     @Nullable
-    public final Elf_Shdr getSectionByName(@Nonnull String name) {
+    public final Elf_Shdr getSection(@Nonnull String name) {
         for (Elf_Shdr sec : mSectionHeaders) {
             if (name.equals(getString(sec.sh_name))) {
                 return sec;
+            }
+        }
+        return null;
+    }
+
+    @Nullable
+    public final Elf_Sym getSymbolTable(@Nonnull String name) {
+        if (mDynamicSymbols != null) {
+            for (Elf_Sym sym : mDynamicSymbols) {
+                if (name.equals(getDynString(sym.st_name))) {
+                    return sym;
+                }
             }
         }
         return null;

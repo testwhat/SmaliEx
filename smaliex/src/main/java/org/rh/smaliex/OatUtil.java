@@ -86,9 +86,9 @@ public class OatUtil {
                 for (int i = 0; i < oat.mDexFiles.length; i++) {
                     Oat.DexFile df = oat.mDexFiles[i];
                     dexFiles.add(readDex(df, df.mHeader.file_size_, opc, buf));
-                    String opath = new String(oat.mOatDexFiles[i].dex_file_location_data_);
-                    opath = MiscUtil.getFilenamePrefix(getOuputNameForSubDex(opath));
-                    outSubFolders.add(MiscUtil.path(outputBaseFolder, opath));
+                    String outFile = new String(oat.mOatDexFiles[i].dex_file_location_data_);
+                    outFile = MiscUtil.getFilenamePrefix(getOuputNameForSubDex(outFile));
+                    outSubFolders.add(MiscUtil.path(outputBaseFolder, outFile));
                 }
             } catch (IOException ex) {
                 throw handleIOE(ex);
@@ -121,13 +121,8 @@ public class OatUtil {
             return;
         }
         String outputJarFolder = MiscUtil.path(workingDir, "result-jar");
-        try {
-            bootOat2Jar(bootOat.getAbsolutePath(),
-                    MiscUtil.path(systemFolder, "framework"),
-                    outputJarFolder);
-        } catch (IOException ex) {
-            throw handleIOE(ex);
-        }
+        bootOat2Jar(bootOat.getAbsolutePath(),
+                MiscUtil.path(systemFolder, "framework"), outputJarFolder);
     }
 
     // Output de-optimized jar and also pack with other files in original jar
@@ -167,7 +162,8 @@ public class OatUtil {
 
     public static Oat getOat(Elf e) throws IOException {
         DataReader r = e.getReader();
-        Elf.Elf_Shdr sec = e.getSectionByName(Oat.SECTION_RODATA);
+        // Currently the same as e.getSymbolTable("oatdata").getOffset(e)
+        Elf.Elf_Shdr sec = e.getSection(Oat.SECTION_RODATA);
         if (sec != null) {
             r.seek(sec.getOffset());
             return new Oat(r, true);
@@ -213,9 +209,9 @@ public class OatUtil {
             for (int i = 0; i < oat.mDexFiles.length; i++) {
                 Oat.OatDexFile odf = oat.mOatDexFiles[i];
                 Oat.DexFile df = oat.mDexFiles[i];
-                String opath = new String(odf.dex_file_location_data_);
-                opath = getOuputNameForSubDex(opath);
-                File out = MiscUtil.changeExt(new File(outputFolder, opath), "dex");
+                String outFile = new String(odf.dex_file_location_data_);
+                outFile = getOuputNameForSubDex(outFile);
+                File out = MiscUtil.changeExt(new File(outputFolder, outFile), "dex");
                 df.saveTo(out);
                 LLog.i("Output raw dex: " + out.getAbsolutePath());
             }
@@ -267,8 +263,7 @@ public class OatUtil {
     }
 
     public static DexFile[] getOdexFromOat(Oat oat, Opcodes opcodes) throws IOException {
-        final int BSIZE = 8192;
-        final byte[] buf = new byte[BSIZE];
+        final byte[] buf = new byte[8192];
         if (opcodes == null) {
             opcodes = new Opcodes(oat.guessApiLevel());
         }
@@ -484,7 +479,7 @@ public class OatUtil {
                             if (!ma.analysisInfo.isEmpty()) {
                                 StringBuilder sb = new StringBuilder(256);
                                 sb.append("Analysis info of ").append(mCurrentMethod.getDefiningClass())
-                                        .append(" : ").append(mCurrentMethod.getName()).append(":\n");
+                                        .append("->").append(mCurrentMethod.getName()).append(":\n");
                                 for (String info : ma.analysisInfo) {
                                     sb.append(info).append("\n");
                                 }

@@ -287,7 +287,7 @@ public enum Opcode
     // art/runtime/dex_instruction_list.h art/compiler/dex/dex_to_dex_compiler.cc
     // Override dalvik/opcode-gen/bytecode.txt
     // Also see org.jf.dexlib2.analysis.MethodAnalyzer, OdexedFieldInstructionMapper
-    RETURN_VOID_BARRIER_ART((short) 0x73, "return-void-barrier", minApi(Opcode.LOLLIPOP), ReferenceType.NONE,
+    RETURN_VOID_NO_BARRIER_ART((short) 0x73, "return-void-no-barrier", minApi(Opcode.LOLLIPOP), ReferenceType.NONE,
             Format.Format10x, Opcode.ODEX_ONLY),
 
     IGET_QUICK_ART((short) 0xe3, "iget-quick", minApi(Opcode.LOLLIPOP), ReferenceType.NONE,
