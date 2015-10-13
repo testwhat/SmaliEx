@@ -37,6 +37,7 @@ public class LLog {
 
     private final static SimpleDateFormat sdf = new SimpleDateFormat("MM-dd kk:mm:ss:SSS");
     private final static Date date = new Date();
+    public static boolean VERBOSE = false;
 
     private synchronized static String time() {
         date.setTime(System.currentTimeMillis());
@@ -70,13 +71,14 @@ public class LLog {
         sOut.println(s);
     }
 
-    public static void i(String msg) {
-        sOut.println(msg);
+    public static void v(String msg) {
+        if (VERBOSE) {
+            sOut.println(msg);
+        }
     }
 
-    public static void i(Object o) {
-        String s = o == null ? "null" : o.toString();
-        sOut.println(s);
+    public static void i(String msg) {
+        sOut.println(msg);
     }
 
     public static String exception(Throwable t) {

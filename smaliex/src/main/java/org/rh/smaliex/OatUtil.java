@@ -483,7 +483,7 @@ public class OatUtil {
                                 for (String info : ma.analysisInfo) {
                                     sb.append(info).append("\n");
                                 }
-                                LLog.i(sb.toString());
+                                LLog.v(sb.toString());
                             }
                             AnalysisException ae = ma.getAnalysisException();
                             if (ae != null) {

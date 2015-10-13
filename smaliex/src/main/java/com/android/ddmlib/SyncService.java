@@ -34,7 +34,7 @@ import com.android.ddmlib.SyncService.SyncException.SyncError;
  * <p/>
  * To get a {@link SyncService} object, use {@link Device#getSyncService()}.
  */
-public class SyncService {
+public class SyncService implements java.io.Closeable {
 
     private static final byte[] ID_OKAY = { 'O', 'K', 'A', 'Y' };
     private static final byte[] ID_FAIL = { 'F', 'A', 'I', 'L' };
@@ -169,6 +169,7 @@ public class SyncService {
     /**
      * Closes the connection.
      */
+    @Override
     public void close() {
         if (mChannel != null) {
             try {

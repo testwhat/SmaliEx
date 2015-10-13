@@ -285,9 +285,8 @@ public class MethodAnalyzer {
                     default:
                         continue;
                 }
-                addAnalysisInfo("UnresolvedOdexInstruction " + instruction.getOpcode()
-                            + " " + instruction.getOpcode().format
-                            + " i=" + i);
+                //addAnalysisInfo("UnresolvedOdexInstruction " + instruction.getOpcode()
+                //            + " " + instruction.getOpcode().format + " i=" + i);
                 analyzedInstruction.setDeodexedInstruction(
                         new UnresolvedOdexInstruction(instruction, objectRegisterNumber));
             }
@@ -596,7 +595,8 @@ public class MethodAnalyzer {
                 + " for " + nextInstruction.getInstruction().getOpcode()
                 + " at line " + getNearsetLineByAddress(getInstructionAddress(nextInstruction)));
         newInstr.addSuccessor(nextInstruction);
-        setDestinationRegisterTypeAndPropagateChanges(newInstr, castRegisterType);
+        setPostRegisterTypeAndPropagateChanges(
+                newInstr, newInstr.getDestinationRegister(), castRegisterType);
         return;
     }
 
@@ -609,7 +609,8 @@ public class MethodAnalyzer {
 
         switch (instruction.getOpcode()) {
             case NOP:
-                analyzeOptimizedCheckCast(analyzedInstruction);
+                // TODO need to force RegisterType.merge
+                //analyzeOptimizedCheckCast(analyzedInstruction);
                 return true;
             case MOVE:
             case MOVE_FROM16:
@@ -1691,7 +1692,8 @@ public class MethodAnalyzer {
                             + "." + resolvedField.getName()
                             + " instr=" + instruction.getOpcode() + " at line " + line);
                 }
-            } else {
+            }
+            if (resolvedField == null) {
                 classTypeProto = guessTypeByNearestInstanceOf(
                         analyzedInstruction.getInstructionIndex(), srcReg);
                 if (classTypeProto != null) {
@@ -1841,7 +1843,8 @@ public class MethodAnalyzer {
                             + " def-class=" + resolvedMethod.getDefiningClass()
                             + " at line " + getNearsetLineByAddress(instrAddress));
                 }
-            } else {
+            }
+            if (resolvedMethod == null) {
                 TypeProto type = guessTypeByNearestInstanceOf(
                         analyzedInstruction.getInstructionIndex(), objectRegister);
                 if (type != null) {

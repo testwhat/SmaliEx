@@ -43,14 +43,15 @@ public class Elf implements Closeable {
     // Elf32 [Addr, Off, Word, Sword]=(int), [Half]=(short)
     // Elf64 [Addr, Off, Xword, Sxword]=(long), [Word]=(int), [Half]=(short)
 
-    final static char ELF_MAGIC[] = {0x7f, 'E', 'L', 'F', '\0'};
+    final static char ELF_MAGIC[] = {0x7f, 'E', 'L', 'F'};
     final static int EI_CLASS = 4; // File class
     final static int EI_DATA = 5; // Data encoding
     final static int EI_NIDENT = 16;
     final char[] e_ident = new char[EI_NIDENT]; // ELF Identification bytes
 
     final boolean checkMagic() {
-        return java.util.Arrays.equals(e_ident, ELF_MAGIC);
+        return e_ident[0] == ELF_MAGIC[0] && e_ident[1] == ELF_MAGIC[1]
+                && e_ident[2] == ELF_MAGIC[2] && e_ident[3] == ELF_MAGIC[3];
     }
 
     final char getFileClass() {

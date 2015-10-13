@@ -30,7 +30,6 @@ package org.rh.smaliex;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -70,11 +69,8 @@ public class DexUtil {
     }
 
     public static DexBackedDexFile loadSingleDex(File file, Opcodes opc) throws IOException {
-        byte[] bytes = new byte[(int) file.length()];
-        try (FileInputStream fis = new FileInputStream(file)) {
-            fis.read(bytes);
-        }
-        return new DexBackedDexFile(getDefaultOpCodes(opc), bytes);
+        return new DexBackedDexFile(getDefaultOpCodes(opc),
+                java.nio.file.Files.readAllBytes(file.toPath()));
     }
 
     public static List<DexBackedDexFile> loadMultiDex(File file) {

@@ -34,11 +34,12 @@ import java.io.IOException;
 public class Main {
 
     static void printUsage() {
-        System.out.println("Easy oat2dex 0.84");
+        System.out.println("Easy oat2dex 0.85");
         System.out.println("Usage:");
         System.out.println(" java -jar oat2dex.jar [options] <action>");
         System.out.println("[options]");
         System.out.println(" Output folder: -o <folder path>");
+        System.out.println(" Print detail : -v");
         System.out.println("<action>");
         System.out.println(" Get dex from boot.oat: boot <boot.oat>");
         System.out.println(" Get dex from  app oat: <oat-file> <boot-class-folder>");
@@ -61,15 +62,20 @@ public class Main {
         if (args.length > 2) {
             String opt = args[0];
             while (opt.length() > 1 && opt.charAt(0) == '-') {
+                int shift = 1;
                 switch (opt.charAt(1)) {
                     case 'o':
                         outputFolder = args[1];
+                        shift = 2;
+                        break;
+                    case 'v':
+                        LLog.VERBOSE = true;
                         break;
                     default:
                         System.out.println("Unrecognized option: " + opt);
                 }
-                String[] newArgs = shiftArgs(args, 2);
-                if (newArgs == args || newArgs.length < 2) {
+                String[] newArgs = shiftArgs(args, shift);
+                if (newArgs == args || newArgs.length < shift) {
                     break;
                 }
                 args = newArgs;

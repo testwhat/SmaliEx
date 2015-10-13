@@ -628,12 +628,24 @@ public class ClassProto implements TypeProto {
 
             @Override
             public int compareTo(FieldGap rhs) {
+                // kOatVersion 064+
+                // Ensure order of field gaps
                 // https://android-review.googlesource.com/#/c/133351/
-                if (size != rhs.size) {
-                    return rhs.size - size;
+                // Sort by gap size, largest first. Secondary sort by starting offset.
+                // lhs.size > rhs.size || (lhs.size == rhs.size && lhs.start_offset < rhs.start_offset)
+                int c = size - rhs.size;
+                if (c != 0) {
+                    return c;
                 } else {
-                    return startOffset - rhs.startOffset;
+                    return rhs.startOffset - startOffset;
                 }
+
+                // TODO kOatVersion 067+
+                // Fix FieldGap priority queue ordering bug
+                // https://android-review.googlesource.com/#/c/159386/
+                // Note that the priority queue returns the largest element, so operator()
+                // should return true if lhs is less than rhs.
+                // return lhs.size < rhs.size || (lhs.size == rhs.size && lhs.start_offset > rhs.start_offset);
             }
 
             static void add(int gapStart, int gapEnd, TreeSet<FieldGap> gaps) {
