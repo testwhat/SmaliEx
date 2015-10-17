@@ -63,7 +63,13 @@ public class SyntheticAccessorFSM {
     public static final int NEGATIVE_ONE = -1;
     public static final int OTHER = 0;
 
-    public static int test(List<? extends Instruction> instructions) {
+    @Nonnull private final Opcodes opcodes;
+
+    public SyntheticAccessorFSM(@Nonnull Opcodes opcodes) {
+        this.opcodes = opcodes;
+    }
+
+    public int test(List<? extends Instruction> instructions) {
         int accessorType = -1;
         int cs, p = 0;
         int pe = instructions.size();

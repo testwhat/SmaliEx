@@ -33,6 +33,7 @@ package org.jf.dexlib2;
 
 import com.google.common.collect.Maps;
 
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.HashMap;
 
@@ -80,6 +81,10 @@ public class Opcodes {
         }
     }
 
+    public static Opcodes forApi(int api) {
+        return new Opcodes(api);
+    }
+
     public Opcodes(int api) {
         this(api, false);
     }
@@ -103,7 +108,7 @@ public class Opcodes {
     }
 
     @Nullable
-    public Opcode getOpcodeByName(String opcodeName) {
+    public Opcode getOpcodeByName(@Nonnull String opcodeName) {
         return opcodesByName.get(opcodeName.toLowerCase());
     }
 
@@ -122,5 +127,11 @@ public class Opcodes {
                 }
                 return null;
         }
+    }
+
+    @Nullable
+    public Integer getOpcodeValue(@Nonnull Opcode opcode) {
+        Opcode c = getOpcodeByValue(opcode.value);
+        return c == null ? null : c.value;
     }
 }

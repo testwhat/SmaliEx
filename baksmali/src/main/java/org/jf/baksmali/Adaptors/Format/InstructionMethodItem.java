@@ -28,11 +28,6 @@
 
 package org.jf.baksmali.Adaptors.Format;
 
-import java.io.IOException;
-import java.util.Map;
-
-import javax.annotation.Nonnull;
-
 import org.jf.baksmali.Adaptors.MethodDefinition;
 import org.jf.baksmali.Adaptors.MethodDefinition.InvalidSwitchPayload;
 import org.jf.baksmali.Adaptors.MethodItem;
@@ -42,6 +37,7 @@ import org.jf.dexlib2.Opcode;
 import org.jf.dexlib2.ReferenceType;
 import org.jf.dexlib2.VerificationError;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile.InvalidItemIndex;
+import org.jf.dexlib2.iface.instruction.DualReferenceInstruction;
 import org.jf.dexlib2.iface.instruction.FieldOffsetInstruction;
 import org.jf.dexlib2.iface.instruction.FiveRegisterInstruction;
 import org.jf.dexlib2.iface.instruction.InlineIndexInstruction;
@@ -63,6 +59,10 @@ import org.jf.dexlib2.util.ReferenceUtil;
 import org.jf.util.ExceptionWithContext;
 import org.jf.util.IndentingWriter;
 import org.jf.util.NumberUtils;
+
+import javax.annotation.Nonnull;
+import java.io.IOException;
+import java.util.Map;
 
 public class InstructionMethodItem<T extends Instruction> extends MethodItem {
     @Nonnull protected final MethodDefinition methodDef;

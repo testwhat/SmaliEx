@@ -31,15 +31,13 @@
 
 package org.jf.dexlib2.analysis;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import javax.annotation.Nonnull;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 import org.jf.dexlib2.DexFileFactory;
 import org.jf.dexlib2.Opcodes;
@@ -49,13 +47,14 @@ import org.jf.dexlib2.iface.DexFile;
 import org.jf.dexlib2.immutable.ImmutableDexFile;
 import org.jf.util.ExceptionWithContext;
 
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import javax.annotation.Nonnull;
+import java.io.File;
+import java.io.IOException;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ClassPath {
     @Nonnull private final TypeProto unknownClass;
@@ -147,13 +146,14 @@ public class ClassPath {
 
     private static DexFile getBasicClasses() {
         // fallbacks for some special classes that we assume are present
-        return new ImmutableDexFile(ImmutableSet.of(
-                new ReflectionClassDef(Class.class),
-                new ReflectionClassDef(Cloneable.class),
-                new ReflectionClassDef(Object.class),
-                new ReflectionClassDef(Serializable.class),
-                new ReflectionClassDef(String.class),
-                new ReflectionClassDef(Throwable.class)));
+        return new ImmutableDexFile(Opcodes.forApi(19),
+                ImmutableSet.of(
+                        new ReflectionClassDef(Class.class),
+                        new ReflectionClassDef(Cloneable.class),
+                        new ReflectionClassDef(Object.class),
+                        new ReflectionClassDef(Serializable.class),
+                        new ReflectionClassDef(String.class),
+                        new ReflectionClassDef(Throwable.class)));
     }
 
     @Nonnull

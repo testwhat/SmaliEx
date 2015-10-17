@@ -37,6 +37,7 @@ import org.antlr.runtime.TokenSource;
 import org.antlr.runtime.tree.CommonTree;
 import org.antlr.runtime.tree.CommonTreeNodeStream;
 import org.apache.commons.cli.*;
+import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.writer.builder.BuilderClassDef;
 import org.jf.dexlib2.writer.builder.DexBuilder;
 import org.jf.dexlib2.writer.io.FileDataStore;
@@ -229,14 +230,14 @@ public class main {
             final boolean finalVerboseErrors = verboseErrors;
             final boolean finalPrintTokens = printTokens;
             final boolean finalAllowOdex = allowOdex;
-            final int finalApiLevel = apiLevel;
+            final Opcodes opcodes = Opcodes.forApi(apiLevel);
             final boolean finalExperimental = experimental;
             for (final File file : filesToProcess) {
                 tasks.add(executor.submit(new Callable<Boolean>() {
                     @Override
                     public Boolean call() throws Exception {
                         return assembleSmaliFile(file, classes, finalVerboseErrors, finalPrintTokens,
-                                finalAllowOdex, finalApiLevel, finalExperimental);
+                                finalAllowOdex, opcodes, finalExperimental);
                     }
                 }));
             }
@@ -264,8 +265,8 @@ public class main {
             final int MAX_FIELD_ADDED_DURING_DEX_CREATION = 9;
             final int MAX_DEX_ID = 65536;
             int dexNum = 0;
-            ArrayList<DexPool> pools = new ArrayList<>();
-            DexPool dexPool = DexPool.makeDexPool(apiLevel);
+            final ArrayList<DexPool> pools = new ArrayList<>();
+            DexPool dexPool = DexPool.makeDexPool(opcodes);
             ClassPool clsPool = (ClassPool) dexPool.classSection;
             pools.add(dexPool);
 
@@ -292,7 +293,7 @@ public class main {
                     System.out.println("output:" + outName);
                     dexPool.writeTo(new FileDataStore(new File(outName)));
                     dexNum++;
-                    dexPool = DexPool.makeDexPool(apiLevel);
+                    dexPool = DexPool.makeDexPool(opcodes);
                     pools.add(dexPool);
                     clsPool = (ClassPool) dexPool.classSection;
                 }
@@ -387,7 +388,7 @@ public class main {
 
     private static boolean assembleSmaliFile(
             File smaliFile, List<BuilderClassDef> classes, boolean verboseErrors,
-            boolean printTokens, boolean allowOdex, int apiLevel,
+            boolean printTokens, boolean allowOdex, Opcodes opcodes,
             boolean experimental) throws Exception {
 
         FileInputStream fis = new FileInputStream(smaliFile);
@@ -414,7 +415,7 @@ public class main {
         smaliParser parser = new smaliParser(tokens);
         parser.setVerboseErrors(verboseErrors);
         parser.setAllowOdex(allowOdex);
-        parser.setApiLevel(apiLevel, experimental);
+        parser.setApiLevel(opcodes.version.api, experimental);
 
         smaliParser.smali_file_return result = parser.smali_file();
 
@@ -432,10 +433,10 @@ public class main {
         }
 
         smaliTreeWalker dexGen = new smaliTreeWalker(treeStream);
-        dexGen.setApiLevel(apiLevel, experimental);
+        dexGen.setApiLevel(opcodes.version.api, experimental);
 
         dexGen.setVerboseErrors(verboseErrors);
-        dexGen.setDexBuilder(DexBuilder.makeDexBuilder(apiLevel));
+        dexGen.setDexBuilder(DexBuilder.makeDexBuilder(opcodes));
         classes.add((BuilderClassDef) dexGen.smali_file());
 
         return dexGen.getNumberOfSyntaxErrors() == 0;
