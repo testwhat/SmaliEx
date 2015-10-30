@@ -458,7 +458,7 @@ public class OatUtil {
         }
 
         public OatDexRewriterModule(String bootClassPath, Opcodes opcodes) {
-            this(bootClassPath, opcodes, ".dex");
+            this(bootClassPath, opcodes, ".dex;.jar");
         }
 
         public DexRewriter getRewriter() {
