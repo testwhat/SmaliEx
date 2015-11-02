@@ -45,7 +45,7 @@ public class Main {
         System.out.println(" Get dex from  app oat: <oat-file> <boot-class-folder>");
         System.out.println(" Get raw odex from oat: odex <oat-file>");
         System.out.println(" Get raw odex smali   : smali <oat/odex file>");
-        System.out.println(" Deodex framework     : devfw");
+        System.out.println(" Deodex framework     : devfw [empty or path of /system/framework/]");
     }
 
     public static void main(String[] args) {
@@ -128,7 +128,7 @@ public class Main {
         File input = new File(path);
         if (!input.exists()) {
             System.out.println("Input file not found: " + input);
-            System.exit(0);
+            System.exit(1);
         }
         return input;
     }
