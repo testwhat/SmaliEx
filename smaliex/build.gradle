@@ -1,0 +1,57 @@
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath depends.proguard_gradle
+    }
+}
+
+assert JavaVersion.current().isJava7Compatible()
+
+dependencies {
+    compile project(':smali')
+    compile project(':baksmali')
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
+// Build a separate jar that contains all dependencies
+task fatJar(type: Jar, dependsOn: jar) {
+    from sourceSets.main.output
+    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+
+    manifest {
+        attributes("Main-Class": "org.rh.smaliex.Main")
+    }
+}
+tasks.getByPath('build').dependsOn(fatJar)
+
+task proguard(type: proguard.gradle.ProGuardTask, dependsOn: fatJar) {
+    def outFile = fatJar.destinationDir.getPath() + '/' + fatJar.baseName + '-' + fatJar.version + '-small' + '.' + fatJar.extension
+    project.ext.set("outFile", outFile)
+
+    injars fatJar.archivePath
+    outjars outFile
+
+    libraryjars "${System.properties['java.home']}/lib/rt.jar"
+
+    dontobfuscate
+    dontoptimize
+    keepattributes '*Annotation*'
+    keepattributes 'Signature'
+    keep 'public class org.rh.smaliex.Main { public static void main(java.lang.String[]); }'
+    keepclassmembers 'enum * { public static **[] values(); public static ** valueOf(java.lang.String); }'
+    dontwarn 'com.google.common.**'
+    dontnote 'com.google.common.**'
+}
+
+task dist(dependsOn: proguard) {
+    doLast {
+        def dist = file("../smaliex-bin/oat2dex.jar")
+        dist.delete()
+        file(project.outFile).renameTo(dist)
+    }
+}

@@ -4,6 +4,7 @@
 /dexlib2/build
 /dexlib2/accessorTestGenerator/build
 /smali/build
+/smaliex/build
 /util/build
 *.iml
 *.ipr
