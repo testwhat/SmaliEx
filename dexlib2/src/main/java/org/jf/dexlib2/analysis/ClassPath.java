@@ -125,11 +125,15 @@ public class ClassPath {
         loadPrimitiveType("L");
 
         for (DexFile dexFile: dexFiles) {
-            for (ClassDef classDef: dexFile.getClasses()) {
-                ClassDef prev = availableClasses.get(classDef.getType());
-                if (prev == null) {
-                    availableClasses.put(classDef.getType(), classDef);
-                }
+            addDex(dexFile);
+        }
+    }
+
+    public final void addDex(DexFile dexFile) {
+        for (ClassDef classDef : dexFile.getClasses()) {
+            ClassDef prev = availableClasses.get(classDef.getType());
+            if (prev == null) {
+                availableClasses.put(classDef.getType(), classDef);
             }
         }
     }

@@ -237,9 +237,11 @@ public class OdexedFieldInstructionMapper {
                 [isStatic(odexedOpcode)?STATIC:INSTANCE]
                 [getTypeIndex(fieldType.charAt(0))];
 
-        if (!isCompatible(odexedOpcode, fieldOpcode.type)) {
-            throw new AnalysisException(String.format("Incorrect field type \"%s\" for %s", fieldType,
-                    odexedOpcode.name));
+        if (!isCompatible(odexedOpcode, fieldOpcode.type)
+                && fieldType.charAt(0) != fieldOpcode.type) {
+            throw new AnalysisException(String.format(
+                    "Incorrect field type \"%s\" fopt=\"%c\" for %s",
+                    fieldType, fieldOpcode.type, odexedOpcode.name));
         }
 
         return fieldOpcode.normalOpcode;

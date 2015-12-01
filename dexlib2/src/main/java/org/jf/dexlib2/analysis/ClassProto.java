@@ -635,6 +635,7 @@ public class ClassProto implements TypeProto {
                             fieldOffset += fieldSize;
                         }
                     }
+                    //debugOffset(ClassProto.this, "Lcom/android/server/DropBoxManagerService;", linkedFields);
 
                     return linkedFields;
                 }
@@ -714,7 +715,48 @@ public class ClassProto implements TypeProto {
                 private int getFieldSize(@Nonnull FieldReference field) {
                     return getTypeSize(field.getType().charAt(0));
                 }
+
             });
+
+    static void debugOffset(ClassProto classProto, String className, SparseArray<FieldReference> fields) {
+        if (classProto.type.equals(className)) {
+            System.out.println("## Field offset of " + className);
+            ArrayList<ClassProto> classHierarchy = new ArrayList<>();
+            ClassProto cp = classProto;
+            for (String superclassType = cp.getSuperclass(); superclassType != null;
+                 superclassType = cp.getSuperclass()) {
+                cp = (ClassProto) classProto.classPath.getClass(superclassType);
+                classHierarchy.add(0, cp);
+            }
+
+            for (int i = 0; i < fields.size(); i++) {
+                int offset = fields.keyAt(i);
+                FieldReference f = fields.valueAt(i);
+                if (!classHierarchy.isEmpty()) {
+                    cp = classHierarchy.get(0);
+                    int countInstanceField = cp.getInstanceFields().size();
+                    if (countInstanceField <= i) {
+                        System.out.println(" --- " + cp.type + " " + countInstanceField);
+                        classHierarchy.remove(0);
+                    }
+                }
+                System.out.println(" #" + i + "# " + offset + " (0x"
+                        + Integer.toHexString(offset) + ") "
+                        + ":" + f.getType() + " " + f.getName());
+            }
+            System.exit(0);
+        }
+    }
+
+    static void debugFieldsOrder(ClassProto classProto, String className, List<Field> fields) {
+        if (classProto.type.equals(className)) {
+            System.out.println(" ===== " + className + " " + fields.size() + " =====");
+            for (int i = 0; i < fields.size(); i++) {
+                Field f = fields.get(i);
+                System.out.println(" #" + i + "# " + f.getType() + " " + f.getName());
+            }
+        }
+    }
 
     private int getNextFieldOffset() {
         SparseArray<FieldReference> instanceFields = getInstanceFields();
