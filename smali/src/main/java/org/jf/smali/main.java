@@ -390,7 +390,7 @@ public class main {
             boolean printTokens, boolean allowOdex, int apiLevel,
             boolean experimental) throws Exception {
 
-        FileInputStream fis = new FileInputStream(smaliFile.getAbsolutePath());
+        FileInputStream fis = new FileInputStream(smaliFile);
         InputStreamReader reader = new InputStreamReader(fis, "UTF-8");
         LexerErrorInterface lexer = new smaliFlexLexer(reader);
         ((smaliFlexLexer) lexer).setSourceFile(smaliFile);
