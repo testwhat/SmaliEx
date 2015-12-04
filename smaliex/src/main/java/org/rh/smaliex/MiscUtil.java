@@ -58,16 +58,16 @@ public class MiscUtil {
         return new File(getFileDirPath(f.getAbsolutePath()), name);
     }
 
-    static File[] getFiles(String path, String _exts) {
+    static File[] getFiles(String path, String extensionsStr) {
         File dir = new File(path);
-        final String[] exts = _exts.split(";");
-        for (int i = 0; i < exts.length; i++) {
-            exts[i] = exts[i].toLowerCase();
+        final String[] extensions = extensionsStr.split(";");
+        for (int i = 0; i < extensions.length; i++) {
+            extensions[i] = extensions[i].toLowerCase();
         }
         return dir.listFiles(new FilenameFilter() {
             @Override
             public boolean accept(File dir, String name) {
-                for (String ext : exts) {
+                for (String ext : extensions) {
                     if (name.toLowerCase().endsWith(ext)) {
                         return true;
                     }
@@ -117,5 +117,11 @@ public class MiscUtil {
         }
         sb.append(path[last]);
         return sb.toString();
+    }
+
+    public static void mkdirs(File dir) {
+        if (!dir.exists() && !dir.mkdirs()) {
+            LLog.e("Failed to create directory " + dir);
+        }
     }
 }

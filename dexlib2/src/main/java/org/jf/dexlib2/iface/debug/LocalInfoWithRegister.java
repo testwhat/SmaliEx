@@ -31,15 +31,6 @@
 
 package org.jf.dexlib2.iface.debug;
 
-import org.jf.dexlib2.iface.reference.StringReference;
-import org.jf.dexlib2.iface.reference.TypeReference;
-
-import javax.annotation.Nullable;
-
-public interface StartLocal extends LocalInfoWithRegister {
+public interface LocalInfoWithRegister extends DebugItem, LocalInfo {
     int getRegister();
-
-    @Nullable StringReference getNameReference();
-    @Nullable TypeReference getTypeReference();
-    @Nullable StringReference getSignatureReference();
 }

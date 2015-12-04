@@ -31,6 +31,6 @@
 
 package org.jf.dexlib2.iface.debug;
 
-public interface EndLocal extends DebugItem, LocalInfo {
+public interface EndLocal extends LocalInfoWithRegister {
     int getRegister();
 }

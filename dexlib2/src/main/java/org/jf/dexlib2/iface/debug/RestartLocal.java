@@ -31,6 +31,6 @@
 
 package org.jf.dexlib2.iface.debug;
 
-public interface RestartLocal extends DebugItem, LocalInfo {
+public interface RestartLocal extends LocalInfoWithRegister {
     int getRegister();
 }

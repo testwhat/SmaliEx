@@ -5,6 +5,7 @@
 /dexlib2/accessorTestGenerator/build
 /smali/build
 /smaliex/build
+/smaliex/src/main/java/localtest
 /util/build
 *.iml
 *.ipr

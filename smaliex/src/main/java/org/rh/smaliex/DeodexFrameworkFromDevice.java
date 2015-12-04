@@ -18,6 +18,7 @@ package org.rh.smaliex;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.HashMap;
 
 import org.rh.smaliex.reader.Elf;
 
@@ -49,8 +50,6 @@ public class DeodexFrameworkFromDevice {
 
     public final static String BOOT_OAT = "boot.oat";
     public final static String SYS_FRAMEWORK = "/system/framework/";
-    public final static String FRAMEWORK_ARM = SYS_FRAMEWORK + "arm/";
-    public final static String FRAMEWORK_ARM64 = SYS_FRAMEWORK + "arm64/";
 
     public static void deOptimizeAuto() {
         AdbUtil.runOneTimeAction(new AdbUtil.OneTimeAction() {
@@ -76,12 +75,23 @@ public class DeodexFrameworkFromDevice {
         }
     }
 
-    interface FwProvider {
-        void pullFileToFolder(String remote, String localFolder);
-        String[] getFileList(String path);
-        boolean isFileExist(String path);
-        String[] getBootClassPath();
-        String getName();
+    abstract static class FwProvider {
+        static String[] ABIS = {"arm64", "arm", "x64", "x86"};
+        String mAbiFolder = "arm/";
+
+        abstract void pullFileToFolder(String remote, String localFolder);
+        abstract String[] getFileList(String path);
+        abstract boolean isFileExist(String path);
+        abstract String[] getBootClassPath();
+        abstract String getName();
+
+        public String getBootOatLocation() {
+            return SYS_FRAMEWORK + mAbiFolder;
+        }
+
+        public String getOatLocation() {
+            return SYS_FRAMEWORK + "oat/"  + mAbiFolder;
+        }
     }
 
     static FwProvider createFwProvider(Device device) {
@@ -92,11 +102,20 @@ public class DeodexFrameworkFromDevice {
         return new FileFwProvider(folder);
     }
 
-    static class DeviceFwProvider implements FwProvider {
+    static class DeviceFwProvider extends FwProvider {
         final Device mDevice;
 
         DeviceFwProvider(Device device) {
             mDevice = device;
+            String deviceAbi = device.getProperty(Device.PROP_DEVICE_CPU_ABI);
+            if (deviceAbi != null) {
+                for (String abi : ABIS) {
+                    if (deviceAbi.contains("abi")) {
+                        mAbiFolder = abi + "/";
+                        break;
+                    }
+                }
+            }
         }
 
         @Override
@@ -125,12 +144,19 @@ public class DeodexFrameworkFromDevice {
         }
     }
 
-    static class FileFwProvider implements FwProvider {
+    static class FileFwProvider extends FwProvider {
         final File mFolder;
         final boolean mContainsSysFw;
+
         FileFwProvider(File folder) {
             mFolder = folder;
             mContainsSysFw = new File(folder, SYS_FRAMEWORK).isDirectory();
+            for (String abi : ABIS) {
+                if (new File(mFolder, autoPath(SYS_FRAMEWORK + abi)).isDirectory()) {
+                    mAbiFolder = abi + "/";
+                    break;
+                }
+            }
         }
 
         String autoPath(String path) {
@@ -165,6 +191,7 @@ public class DeodexFrameworkFromDevice {
 
         @Override
         public String[] getBootClassPath() {
+            // TODO get from boot.oat
             String[] bootJars = {
                     "core-libart.jar",
                     "conscrypt.jar",
@@ -200,45 +227,53 @@ public class DeodexFrameworkFromDevice {
         generateNonBootFrameworkJar(device, workingDir, outBootJarFolder);
         String outFwJarFolder = MiscUtil.path(workingDir, FOLDER_FRAMEWORK_JAR_DEX);
         LLog.i("Done\n The rest steps:\n"
-            + " 1. Push all files under " + outBootJarFolder + " to /system/framework/\n"
-            + " 2. Push all files under " + outFwJarFolder + " to /system/framework/\n"
-            + " 3. Delete all files under /system/framework/arm and arm64\n"
-            + " 4. Reboot then the device will run with non-pre-optimized framework");
+                + " 1. Push all files under " + outBootJarFolder + " to /system/framework/\n"
+                + " 2. Push all files under " + outFwJarFolder + " to /system/framework/\n"
+                + " 3. Delete all files under /system/framework/arm and arm64\n"
+                + " 4. Reboot then the device will run with non-pre-optimized framework");
     }
 
     static void generateNonBootFrameworkJar(FwProvider device,
             String workingDir, String bootDir) throws IOException {
-        final String OAT_DIR = FRAMEWORK_ARM;
         final String PULL_ODEX_DIR = MiscUtil.path(workingDir, FOLDER_FRAMEWORK_ODEX);
         final String PULL_JAR_DIR = MiscUtil.path(workingDir, FOLDER_FRAMEWORK_JAR);
 
-        new File(PULL_ODEX_DIR).mkdirs();
-        new File(PULL_JAR_DIR).mkdirs();
+        MiscUtil.mkdirs(new File(PULL_ODEX_DIR));
+        MiscUtil.mkdirs(new File(PULL_JAR_DIR));
         final File RESULT_JAR_DIR = new File(MiscUtil.path(workingDir, FOLDER_FRAMEWORK_JAR_DEX));
-        RESULT_JAR_DIR.mkdirs();
+        MiscUtil.mkdirs(RESULT_JAR_DIR);
 
-        String[] files = device.getFileList(OAT_DIR);
-        if (files == null) {
-            LLog.e("Cannot list " + OAT_DIR + " from " + device.getName());
-            return;
+        HashMap<String, String[]> fileLists = new HashMap<>();
+        String[] paths = {device.getBootOatLocation(), device.getOatLocation()};
+        for (String path : paths) {
+            fileLists.put(path, device.getFileList(path));
         }
-        for (String f : files) {
-            if (f.startsWith("boot.")) {
+
+        for (java.util.Map.Entry<String, String[]> entry : fileLists.entrySet()) {
+            final String path = entry.getKey();
+            final String[] files = entry.getValue();
+            if (files == null) {
+                LLog.e("Cannot list " + path + " from " + device.getName());
                 continue;
             }
+            for (String f : files) {
+                if (f.startsWith("boot.")) {
+                    continue;
+                }
 
-            String oat = OAT_DIR + f;
-            LLog.i("Pulling " + oat);
-            device.pullFileToFolder(oat, PULL_ODEX_DIR);
+                String oat = "" + f;
+                LLog.i("Pulling " + oat);
+                device.pullFileToFolder(oat, PULL_ODEX_DIR);
 
-            String jar = SYS_FRAMEWORK + MiscUtil.getFilenamePrefix(f) + ".jar";
-            LLog.i("Pulling " + jar);
-            device.pullFileToFolder(jar, PULL_JAR_DIR);
+                String jar = SYS_FRAMEWORK + MiscUtil.getFilenamePrefix(f) + ".jar";
+                LLog.i("Pulling " + jar);
+                device.pullFileToFolder(jar, PULL_JAR_DIR);
 
-            try (Elf e = new Elf(MiscUtil.path(PULL_ODEX_DIR, f))) {
-                OatUtil.convertToDexJar(
-                        OatUtil.getOat(e), RESULT_JAR_DIR,
-                        bootDir, PULL_JAR_DIR, false);
+                try (Elf e = new Elf(MiscUtil.path(PULL_ODEX_DIR, f))) {
+                    OatUtil.convertToDexJar(
+                            OatUtil.getOat(e), RESULT_JAR_DIR,
+                            bootDir, PULL_JAR_DIR, false);
+                }
             }
         }
     }
@@ -250,22 +285,14 @@ public class DeodexFrameworkFromDevice {
         if (new File(bootOatHere).exists()) {
             LLog.i("Found " + bootOatHere + ", skip pull " + BOOT_OAT);
         } else {
-            String bootOat = FRAMEWORK_ARM + oatName;
+            String bootOat = device.getBootOatLocation() + oatName;
             if (TEST_MODE) {
                 oatName = "system@framework@boot.oat";
-                bootOat = "/data/dalvik-cache/arm/" + oatName;
+                bootOat = "/data/dalvik-cache/" + device.mAbiFolder + "/" + oatName;
             }
-            boolean isPreOptRom = device.isFileExist(bootOat);
-            if (!isPreOptRom) {
-                String bootOat64 = FRAMEWORK_ARM64 + oatName;
-                isPreOptRom = device.isFileExist(bootOat64);
-                if (isPreOptRom) {
-                    LLog.i("Using 64-bit boot oat " + bootOat64);
-                    bootOat = bootOat64;
-                } else {
-                    LLog.i("The rom does not have pre-compiled " + bootOat);
-                    return false;
-                }
+            if (!device.isFileExist(bootOat)) {
+                LLog.i("The rom does not have pre-compiled " + bootOat);
+                return false;
             }
             LLog.i("Preparing de-optimizing for device " + device.getName());
 
@@ -279,7 +306,7 @@ public class DeodexFrameworkFromDevice {
         }
 
         String originalJarFolder = MiscUtil.path(workingDir, FOLDER_BOOT_JAR_ORIGINAL);
-        new File(originalJarFolder).mkdirs();
+        MiscUtil.mkdirs(new File(originalJarFolder));
         for (String jar : device.getBootClassPath()) {
             LLog.i("Pulling " + jar);
             device.pullFileToFolder(jar, originalJarFolder);
