@@ -33,30 +33,36 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.RandomAccessFile;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
+import javax.annotation.Nonnull;
+
+import org.jf.dexlib2.Opcode;
 import org.jf.dexlib2.Opcodes;
+import org.jf.dexlib2.analysis.AnalysisException;
+import org.jf.dexlib2.analysis.ClassPath;
+import org.jf.dexlib2.analysis.MethodAnalyzer;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile;
+import org.jf.dexlib2.iface.DexFile;
+import org.jf.dexlib2.iface.Method;
+import org.jf.dexlib2.iface.MethodImplementation;
+import org.jf.dexlib2.iface.instruction.Instruction;
+import org.jf.dexlib2.rewriter.DexRewriter;
+import org.jf.dexlib2.rewriter.MethodImplementationRewriter;
+import org.jf.dexlib2.rewriter.MethodRewriter;
+import org.jf.dexlib2.rewriter.Rewriter;
+import org.jf.dexlib2.rewriter.RewriterModule;
+import org.jf.dexlib2.rewriter.Rewriters;
 import org.jf.dexlib2.writer.io.DexDataStore;
+import org.jf.dexlib2.writer.pool.DexPool;
 
 public class DexUtil {
     public static final int API_LEVEL = 19;
     public static Opcodes DEFAULT_OPCODES;
-
-    public static boolean isZip(File f) {
-        long n = 0;
-        try (RandomAccessFile raf = new RandomAccessFile(f, "r")) {
-            n = raf.readInt();
-        } catch (IOException ex) {
-            LLog.ex(ex);
-        }
-        return n == 0x504B0304;
-    }
 
     public static Opcodes getDefaultOpCodes(Opcodes opc) {
         if (opc == null) {
@@ -81,7 +87,7 @@ public class DexUtil {
         List<DexBackedDexFile> dexFiles = new ArrayList<>();
         opc = getDefaultOpCodes(opc);
         try {
-            if (isZip(file)) {
+            if (MiscUtil.isZip(file)) {
                 List<byte[]> dexBytes = readMultipleDexFromJar(file);
                 for (byte[] data : dexBytes) {
                     dexFiles.add(new DexBackedDexFile(opc, data));
@@ -122,6 +128,33 @@ public class DexUtil {
             }
             return dexBytes;
         }
+    }
+
+    public static void odex2dex(String odex, String bootClassPath, String outFolder,
+            int apiLevel) throws IOException {
+        File outputFolder = new File(outFolder == null ? MiscUtil.workingDir() : outFolder);
+        MiscUtil.mkdirs(outputFolder);
+
+        Opcodes opcodes = new Opcodes(apiLevel > 7 ? apiLevel : Opcode.LOLLIPOP_MR1);
+        File input = new File(odex);
+        DexFile odexFile = DexUtil.loadSingleDex(input, opcodes);
+        DexUtil.ODexRewriterModule odr = new DexUtil.ODexRewriterModule(bootClassPath, opcodes);
+        DexFile dex = odr.getRewriter().rewriteDexFile(odexFile);
+
+        File outputFile = MiscUtil.changeExt(new File(outputFolder, input.getName()), "dex");
+        if (outputFile.exists()) {
+            outputFile = MiscUtil.appendTail(outputFile, "-deodex");
+        }
+        DexPool.writeTo(outputFile.getAbsolutePath(), dex);
+        LLog.i("Output to " + outputFile);
+    }
+
+    public static ClassPath getClassPath(String path, Opcodes opcodes, String ext) {
+        ArrayList<DexFile> dexFiles = new ArrayList<>();
+        for (File f : MiscUtil.getFiles(path, ext)) {
+            dexFiles.addAll(DexUtil.loadMultiDex(f, opcodes));
+        }
+        return new ClassPath(dexFiles, opcodes.apiLevel);
     }
 
     public static class ByteData {
@@ -185,6 +218,7 @@ public class DexUtil {
             mBuffer = new ByteData(size);
         }
 
+        @Nonnull
         @Override
         public OutputStream outputAt(final int offset) {
             return new OutputStream() {
@@ -197,7 +231,7 @@ public class DexUtil {
                 }
 
                 @Override
-                public void write(byte[] bytes, int off, int len) throws IOException {
+                public void write(@Nonnull byte[] bytes, int off, int len) throws IOException {
                     mBuffer.position(mPos);
                     mPos += len;
                     mBuffer.put(bytes, off, len);
@@ -205,6 +239,7 @@ public class DexUtil {
             };
         }
 
+        @Nonnull
         @Override
         public InputStream readAt(final int offset) {
             mBuffer.position(offset);
@@ -222,7 +257,7 @@ public class DexUtil {
                 }
 
                 @Override
-                public int read(byte[] bytes, int off, int len) throws IOException {
+                public int read(@Nonnull byte[] bytes, int off, int len) throws IOException {
                     mBuffer.position(mPos);
                     if (mBuffer.remaining() == 0 || !mBuffer.isPositionHasData()) {
                         return -1;
@@ -241,6 +276,114 @@ public class DexUtil {
 
         @Override
         public void close() throws IOException {
+        }
+    }
+
+    public static class ODexRewriter extends DexRewriter {
+        public ODexRewriter(ODexRewriterModule module) {
+            super(module);
+        }
+
+        @Nonnull
+        @Override
+        public DexFile rewriteDexFile(@Nonnull DexFile dexFile) {
+            try {
+                return org.jf.dexlib2.immutable.ImmutableDexFile.of(super.rewriteDexFile(dexFile));
+            } catch (Exception e) {
+                LLog.i("Failed to re-construct dex " + e);
+                //LLog.ex(e);
+            }
+            return new FailedDexFile();
+        }
+
+        public static boolean isValid(DexFile dexFile) {
+            return !(dexFile instanceof FailedDexFile);
+        }
+
+        static final class FailedDexFile implements DexFile {
+            @Nonnull
+            @Override
+            public java.util.Set<? extends org.jf.dexlib2.iface.ClassDef> getClasses() {
+                return new java.util.HashSet<>(0);
+            }
+        }
+    }
+
+    // Covert optimized dex in oat to normal dex
+    public static class ODexRewriterModule extends RewriterModule {
+        private final ClassPath mBootClassPath;
+        private Method mCurrentMethod;
+
+        public ODexRewriterModule(String bootClassPath, Opcodes opcodes, String ext) {
+            mBootClassPath = getClassPath(bootClassPath, opcodes, ext);
+        }
+
+        public ODexRewriterModule(String bootClassPath, Opcodes opcodes) {
+            this(bootClassPath, opcodes, ".dex;.jar");
+        }
+
+        public void addToBootClassPath(DexFile dexFile) {
+            mBootClassPath.addDex(dexFile);
+        }
+
+        public DexRewriter getRewriter() {
+            return new ODexRewriter(this);
+        }
+
+        @Nonnull
+        @Override
+        public Rewriter<MethodImplementation> getMethodImplementationRewriter(
+                @Nonnull Rewriters rewriters) {
+            return new MethodImplementationRewriter(rewriters) {
+                @Nonnull
+                @Override
+                public MethodImplementation rewrite(@Nonnull MethodImplementation methodImpl) {
+                    return new MethodImplementationRewriter.RewrittenMethodImplementation(
+                            methodImpl) {
+                        @Nonnull
+                        @Override
+                        public Iterable<? extends Instruction> getInstructions() {
+                            MethodAnalyzer ma = new MethodAnalyzer(
+                                    mBootClassPath, mCurrentMethod, null);
+                            if (!ma.analysisInfo.isEmpty()) {
+                                StringBuilder sb = new StringBuilder(256);
+                                sb.append("Analysis info of ").append(mCurrentMethod.getDefiningClass())
+                                        .append("->").append(mCurrentMethod.getName()).append(":\n");
+                                for (String info : ma.analysisInfo) {
+                                    sb.append(info).append("\n");
+                                }
+                                LLog.v(sb.toString());
+                            }
+                            AnalysisException ae = ma.getAnalysisException();
+                            if (ae != null) {
+                                LLog.e("Analysis error in class=" + mCurrentMethod.getDefiningClass()
+                                        + " method=" + mCurrentMethod.getName() + "\n" + ae.getContext());
+                                LLog.ex(ae);
+                            }
+                            return ma.getInstructions();
+                        }
+                    };
+                }
+            };
+        }
+
+        @Nonnull
+        @Override
+        public Rewriter<Method> getMethodRewriter(@Nonnull Rewriters rewriters) {
+            return new MethodRewriter(rewriters) {
+                @Nonnull
+                @Override
+                public Method rewrite(@Nonnull Method method) {
+                    return new MethodRewriter.RewrittenMethod(method) {
+                        @Override
+                        public MethodImplementation getImplementation() {
+                            //System.out.println("" + method.getName());
+                            mCurrentMethod = method;
+                            return super.getImplementation();
+                        }
+                    };
+                }
+            };
         }
     }
 }

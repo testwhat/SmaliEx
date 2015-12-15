@@ -28,6 +28,18 @@
 
 package org.rh.smaliex;
 
+import org.jf.baksmali.baksmaliOptions;
+import org.jf.dexlib2.Opcodes;
+import org.jf.dexlib2.dexbacked.DexBackedDexFile;
+import org.jf.dexlib2.iface.DexFile;
+import org.jf.dexlib2.rewriter.DexRewriter;
+import org.jf.dexlib2.writer.pool.DexPool;
+import org.rh.smaliex.DexUtil.ODexRewriter;
+import org.rh.smaliex.DexUtil.ODexRewriterModule;
+import org.rh.smaliex.reader.DataReader;
+import org.rh.smaliex.reader.Elf;
+import org.rh.smaliex.reader.Oat;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -40,27 +52,6 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
 import java.util.zip.ZipEntry;
-
-import org.jf.baksmali.baksmaliOptions;
-import org.jf.dexlib2.Opcodes;
-import org.jf.dexlib2.analysis.AnalysisException;
-import org.jf.dexlib2.analysis.ClassPath;
-import org.jf.dexlib2.analysis.MethodAnalyzer;
-import org.jf.dexlib2.dexbacked.DexBackedDexFile;
-import org.jf.dexlib2.iface.DexFile;
-import org.jf.dexlib2.iface.Method;
-import org.jf.dexlib2.iface.MethodImplementation;
-import org.jf.dexlib2.iface.instruction.Instruction;
-import org.jf.dexlib2.rewriter.DexRewriter;
-import org.jf.dexlib2.rewriter.MethodImplementationRewriter;
-import org.jf.dexlib2.rewriter.MethodRewriter;
-import org.jf.dexlib2.rewriter.Rewriter;
-import org.jf.dexlib2.rewriter.RewriterModule;
-import org.jf.dexlib2.rewriter.Rewriters;
-import org.jf.dexlib2.writer.pool.DexPool;
-import org.rh.smaliex.reader.DataReader;
-import org.rh.smaliex.reader.Elf;
-import org.rh.smaliex.reader.Oat;
 
 public class OatUtil {
 
@@ -144,7 +135,7 @@ public class OatUtil {
     private static File prepareOdex(String bootOat) throws IOException {
         File oatFile = new File(bootOat);
         File odexFolder = new File(oatFile.getParentFile(), "odex");
-        odexFolder.mkdirs();
+        MiscUtil.mkdirs(odexFolder);
         extractOdexFromOat(oatFile, odexFolder);
         return odexFolder;
     }
@@ -155,7 +146,7 @@ public class OatUtil {
             Oat oat = getOat(e);
             File outputFolder = outFolder != null ? new File(outFolder) :
                     new File(oatFile).getAbsoluteFile().getParentFile();
-            outputFolder.mkdirs();
+            MiscUtil.mkdirs(outputFolder);
             convertToDex(oat, outputFolder, bootClassPath, true);
         }
     }
@@ -202,7 +193,7 @@ public class OatUtil {
     public static void extractOdexFromOat(File oatFile, File outputFolder) throws IOException {
         if (outputFolder == null) {
             outputFolder = new File(MiscUtil.workingDir());
-            outputFolder.mkdirs();
+            MiscUtil.mkdirs(outputFolder);
         }
         try (Elf e = new Elf(oatFile)) {
             Oat oat = getOat(e);
@@ -226,7 +217,7 @@ public class OatUtil {
             Oat oat = getOat(e);
             File outFolder = new File(outputFolder);
             if (!outFolder.exists()) {
-                outFolder.mkdirs();
+                MiscUtil.mkdirs(outFolder);
             }
             if (noClassJarFolder == null) {
                 convertToDex(oat, outFolder, bootClassPath, false);
@@ -282,13 +273,13 @@ public class OatUtil {
         if (bootClassPath == null || !new File(bootClassPath).exists()) {
             throw new IOException("Invalid bootclasspath: " + bootClassPath);
         }
-        final OatDexRewriterModule odr = new OatDexRewriterModule(bootClassPath, opcodes);
+        final ODexRewriterModule odr = new ODexRewriterModule(bootClassPath, opcodes);
         final DexRewriter deOpt = odr.getRewriter();
 
         DexFile[] dexFiles = getOdexFromOat(oat, opcodes);
         if (addSelfToBcp) {
             for (DexFile d : dexFiles) {
-                odr.mBootClassPath.addDex(d);
+                odr.addToBootClassPath(d);
             }
         }
         for (int i = 0; i < oat.mOatDexFiles.length; i++) {
@@ -301,7 +292,7 @@ public class OatUtil {
             File outputFile = MiscUtil.changeExt(new File(outputFolder, opath), "dex");
             LLog.i("De-optimizing " + dexLoc);
             DexFile d = deOpt.rewriteDexFile(dexFiles[i]);
-            if (!OatDexRewriter.isValid(d)) {
+            if (!ODexRewriter.isValid(d)) {
                 LLog.i("convertToDex: skip " + dexLoc);
                 continue;
             }
@@ -321,7 +312,7 @@ public class OatUtil {
             String bootClassPath, String noClassJarFolder, boolean isBoot) throws IOException {
         final Opcodes opcodes = new Opcodes(oat.guessApiLevel());
         LLog.i("Preparing bootclasspath from " + bootClassPath);
-        final OatDexRewriterModule odr = new OatDexRewriterModule(bootClassPath, opcodes);
+        final ODexRewriterModule odr = new ODexRewriterModule(bootClassPath, opcodes);
         HashMap<String, ArrayList<Oat.DexFile>> dexFileGroup = new HashMap<>();
         for (int i = 0; i < oat.mOatDexFiles.length; i++) {
             Oat.OatDexFile odf = oat.mOatDexFiles[i];
@@ -340,7 +331,7 @@ public class OatUtil {
             dfiles.add(oat.mDexFiles[i]);
             if (!isBoot) {
                 Oat.DexFile dex = oat.mDexFiles[i];
-                odr.mBootClassPath.addDex(
+                odr.addToBootClassPath(
                         readDex(dex, dex.mHeader.file_size_, opcodes, null));
             }
         }
@@ -377,7 +368,7 @@ public class OatUtil {
                     dexBytes.get(data);
                     DexFile d = new DexBackedDexFile(opcodes, data);
                     d = deOpt.rewriteDexFile(d);
-                    if (!OatDexRewriter.isValid(d)) {
+                    if (!ODexRewriter.isValid(d)) {
                         LLog.i("convertToDexJar: skip " + jarName);
                         continue;
                     }
@@ -418,101 +409,5 @@ public class OatUtil {
     static IOException handleIOE(IOException ex) {
         LLog.ex(ex);
         return ex;
-    }
-
-    public static class OatDexRewriter extends DexRewriter {
-        public OatDexRewriter(OatDexRewriterModule module) {
-            super(module);
-        }
-
-        @Override
-        public DexFile rewriteDexFile(DexFile dexFile) {
-            try {
-                return org.jf.dexlib2.immutable.ImmutableDexFile.of(super.rewriteDexFile(dexFile));
-            } catch (Exception e) {
-                LLog.i("Failed to re-construct dex " + e);
-                //LLog.ex(e);
-            }
-            return new FailedDexFile();
-        }
-
-        public static boolean isValid(DexFile dexFile) {
-            return !(dexFile instanceof FailedDexFile);
-        }
-
-        static final class FailedDexFile implements DexFile {
-            @Override
-            public java.util.Set<? extends org.jf.dexlib2.iface.ClassDef> getClasses() {
-                return new java.util.HashSet<>(0);
-            }
-        }
-    }
-
-    // Covert optimized dex in oat to normal dex
-    public static class OatDexRewriterModule extends RewriterModule {
-        private final ClassPath mBootClassPath;
-        private Method mCurrentMethod;
-        
-        public OatDexRewriterModule(String bootClassPath, Opcodes opcodes, String ext) {
-            mBootClassPath = MiscUtil.getClassPath(bootClassPath, opcodes, ext);
-        }
-
-        public OatDexRewriterModule(String bootClassPath, Opcodes opcodes) {
-            this(bootClassPath, opcodes, ".dex;.jar");
-        }
-
-        public DexRewriter getRewriter() {
-            return new OatDexRewriter(this);
-        }
-
-        @Override
-        public Rewriter<MethodImplementation> getMethodImplementationRewriter(Rewriters rewriters) {
-            return new MethodImplementationRewriter(rewriters) {
-                @Override
-                public MethodImplementation rewrite(MethodImplementation methodImplementation) {
-                    return new MethodImplementationRewriter.RewrittenMethodImplementation(
-                            methodImplementation) {
-                        @Override
-                        public Iterable<? extends Instruction> getInstructions() {
-                            MethodAnalyzer ma = new MethodAnalyzer(
-                                    mBootClassPath, mCurrentMethod, null);
-                            if (!ma.analysisInfo.isEmpty()) {
-                                StringBuilder sb = new StringBuilder(256);
-                                sb.append("Analysis info of ").append(mCurrentMethod.getDefiningClass())
-                                        .append("->").append(mCurrentMethod.getName()).append(":\n");
-                                for (String info : ma.analysisInfo) {
-                                    sb.append(info).append("\n");
-                                }
-                                LLog.v(sb.toString());
-                            }
-                            AnalysisException ae = ma.getAnalysisException();
-                            if (ae != null) {
-                                LLog.e("Analysis error in class=" + mCurrentMethod.getDefiningClass()
-                                    + " method=" + mCurrentMethod.getName() + "\n" + ae.getContext());
-                                LLog.ex(ae);
-                            }
-                            return ma.getInstructions();
-                        }
-                    };
-                }
-            };
-        }
-
-        @Override
-        public Rewriter<Method> getMethodRewriter(Rewriters rewriters) {
-            return new MethodRewriter(rewriters) {
-                @Override
-                public Method rewrite(Method method) {
-                    return new MethodRewriter.RewrittenMethod(method) {
-                        @Override
-                        public MethodImplementation getImplementation() {
-                            //System.out.println("" + method.getName());
-                            mCurrentMethod = method;
-                            return super.getImplementation();
-                        }
-                    };
-                }
-            };
-        }
     }
 }

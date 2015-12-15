@@ -432,30 +432,27 @@ public class MethodAnalyzer {
                     LocalInfoWithRegister local = (LocalInfoWithRegister) di;
                     String type = local.getType();
                     if (type == null) {
-                        continue;
+                        break;
                     }
 
                     int objectRegister = local.getRegister();
                     if (objectRegister >= localCount) {
-                        continue; // this p0 or parameter p1, p2, ...
+                        break; // this p0 or parameter p1, p2, ...
                     }
 
                     RegisterType registerType = RegisterType.getRegisterType(classPath, type);
                     if (registerType.category != RegisterType.REFERENCE) {
-                        continue; // only care about reference type
+                        break; // only care about reference type
                     }
 
                     if (di.getDebugItemType() == DebugItemType.END_LOCAL) {
-                        int reg = local.getRegister();
-                        if (reg < localCount) {
-                            ArrayList<TypeScope> scopes = localTypes.get(reg);
-                            if (scopes != null) {
-                                TypeScope scope = scopes.get(scopes.size() - 1);
-                                if (local.getCodeAddress() > scope.begin) {
-                                    scope.end = local.getCodeAddress();
-                                } else {
-                                    scope.end = scope.begin;
-                                }
+                        ArrayList<TypeScope> scopes = localTypes.get(objectRegister);
+                        if (scopes != null) {
+                            TypeScope scope = scopes.get(scopes.size() - 1);
+                            if (local.getCodeAddress() > scope.begin) {
+                                scope.end = local.getCodeAddress();
+                            } else {
+                                scope.end = scope.begin;
                             }
                         }
                         break;
@@ -1771,6 +1768,15 @@ public class MethodAnalyzer {
     }
 
     @Nonnull
+    private RegisterType getLastRegisterType(int reg) {
+        ArrayList<TypeScope> scopes = localTypes.get(reg);
+        if (scopes != null) {
+            return scopes.get(scopes.size() - 1).type;
+        }
+        return RegisterType.NULL_TYPE;
+    }
+
+    @Nonnull
     private RegisterType findRegisterTypeInner(AnalyzedInstruction analyzedInstruction, int reg) {
         ArrayList<TypeScope> scopes = localTypes.get(reg);
         if (scopes != null) {
@@ -1837,6 +1843,19 @@ public class MethodAnalyzer {
                         case ARRAY_LENGTH:
                             type = RegisterType.INTEGER_TYPE;
                             break;
+                        case AGET_OBJECT:
+                            RegisterType arrayRegisterType = aInstr.getPostInstructionRegisterType(
+                                    twoRegInstr.getRegisterB());
+                            if (arrayRegisterType == RegisterType.NULL_TYPE) {
+                                arrayRegisterType = getLastRegisterType(twoRegInstr.getRegisterB());
+                            }
+                            ArrayProto arrayProto = (ArrayProto) arrayRegisterType.type;
+                            if (arrayProto != null) {
+                                String elementType = arrayProto.getImmediateElementType();
+                                type = RegisterType.getRegisterType(
+                                        RegisterType.REFERENCE, classPath.getClass(elementType));
+                            }
+                            break;
                         case INSTANCE_OF:
                             TypeReference ref = (TypeReference)
                                     ((Instruction22c) twoRegInstr).getReference();
@@ -1845,6 +1864,7 @@ public class MethodAnalyzer {
                             instanceOfMode = false;
                             break;
                         default:
+                            boolean propagateRegister = false;;
                             int regB = twoRegInstr.getRegisterB();
                             type = aInstr.getPostInstructionRegisterType(regB);
                             if (type == RegisterType.NULL_TYPE) {
@@ -1853,12 +1873,17 @@ public class MethodAnalyzer {
                             if (type != RegisterType.NULL_TYPE) {
                                 if (fieldOffset > -1
                                         && type.type.getFieldByOffset(fieldOffset) == null) {
-                                    reg = regB;
+                                    propagateRegister = true;
                                     instanceOfMode = true;
                                 } else if (methodOffset > -1
                                         && type.type.getMethodByVtableIndex(methodOffset) == null) {
                                     instanceOfMode = true;
                                 }
+                            } else {
+                                propagateRegister = true;
+                            }
+                            if (propagateRegister) {
+                                reg = regB;
                             }
                     }
                 } else if (instanceOfMode && reg == twoRegInstr.getRegisterB()) {
@@ -1876,7 +1901,7 @@ public class MethodAnalyzer {
                     int line = getNearestLineByAddress(instrAddress);
                     System.out.println("@@1 " + line + " regA="
                             + twoRegInstr.getRegisterA() + " regB=" + twoRegInstr.getRegisterB()
-                            + " instr=" + instr.getOpcode() + " type=" + type);
+                            + " nextReg=" + reg + " instr=" + instr.getOpcode() + " type=" + type);
                 }
             } else if (instr instanceof OneRegisterInstruction) {
                 OneRegisterInstruction oneRegInstr = (OneRegisterInstruction) instr;
