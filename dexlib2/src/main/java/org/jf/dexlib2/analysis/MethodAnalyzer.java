@@ -1942,6 +1942,20 @@ public class MethodAnalyzer {
                 }
             }
         }
+
+        if (type.category != RegisterType.REFERENCE) {
+            Instruction instr = analyzedInstruction.instruction;
+            if (instr instanceof FiveRegisterInstruction) {
+                // Workaround for try-with-resource Throwable.addSuppressed
+                FiveRegisterInstruction fiveRegInstr = (FiveRegisterInstruction) instr;
+                int regD = fiveRegInstr.getRegisterD();
+                RegisterType paramType = analyzedInstruction.getPostInstructionRegisterType(regD);
+                if (paramType.category == RegisterType.REFERENCE
+                        && "Ljava/lang/Throwable;".equals(paramType.type.getType())) {
+                    type = paramType;
+                }
+            }
+        }
         if (debug) {
             System.out.println("Find type=" + type);
         }

@@ -102,7 +102,10 @@ public class MiscUtil {
         StringBuilder sb = new StringBuilder(64);
         int last = path.length - 1;
         for (int i = 0; i < last; i++) {
-            sb.append(path[i]).append(File.separator);
+            sb.append(path[i]);
+            if (!path[i].endsWith(File.separator)) {
+                sb.append(File.separator);
+            }
         }
         sb.append(path[last]);
         return sb.toString();

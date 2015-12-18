@@ -84,10 +84,15 @@ public class Main {
                         System.out.println("Unrecognized option: " + opt);
                 }
                 String[] newArgs = shiftArgs(args, shift);
-                if (newArgs == args || newArgs.length < shift) {
+                if (newArgs != args) {
+                    args = newArgs;
+                    if (newArgs.length < shift) {
+                        break;
+                    }
+                } else {
                     break;
                 }
-                args = newArgs;
+
                 opt = args[0];
             }
         }
@@ -98,7 +103,8 @@ public class Main {
 
         String cmd = args[0];
         if ("devfw".equals(cmd)) {
-            DeodexFrameworkFromDevice.main(shiftArgs(args, 1));
+            DeodexFrameworkFromDevice.deOptimizeAuto(
+                    args.length > 1 ? args[1] : null, outputFolder);
             return;
         }
         if (args.length == 2) {

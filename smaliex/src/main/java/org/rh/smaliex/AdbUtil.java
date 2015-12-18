@@ -131,7 +131,7 @@ public class AdbUtil {
     public static boolean isFileExist(Device device, String filePath) {
         String result = shellSync(device, "ls " + filePath,
                 new String[] { "" });
-        return result.equals(filePath);
+        return !result.contains("No such file or directory") || result.equals(filePath);
     }
 
     public static String[] getFileList(Device device, String dir) {

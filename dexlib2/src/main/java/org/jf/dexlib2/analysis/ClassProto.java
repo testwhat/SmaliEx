@@ -368,6 +368,19 @@ public class ClassProto implements TypeProto {
         return instanceFieldsSupplier.get();
     }
 
+    void debugVtable(String className, List<Method> vtable) {
+        final String type = getClassDef().getType();
+        if (!type.equals(className)) {
+            return;
+        }
+        System.out.println("## Vtable of " + className);
+
+        for (int i = 0; i < vtable.size(); i++) {
+            Method m = vtable.get(i);
+            System.out.println("#" + i + " " + m.getName() + " " + m.getReturnType());
+        }
+    }
+
     final static char PRIM_VOID = 'V';
     final static char PRIM_BOOLEAN = 'Z';
     final static char PRIM_BYTE = 'B';
@@ -410,33 +423,34 @@ public class ClassProto implements TypeProto {
         }
 
         void debugOffset(String className, SparseArray<FieldReference> fields) {
-            if (classProto.type.equals(className)) {
-                System.out.println("## Field offset of " + className);
-                ArrayList<ClassProto> classHierarchy = new ArrayList<>();
-                ClassProto cp = classProto;
-                for (String superclassType = cp.getSuperclass(); superclassType != null;
-                        superclassType = cp.getSuperclass()) {
-                    cp = (ClassProto) classProto.classPath.getClass(superclassType);
-                    classHierarchy.add(0, cp);
-                }
-
-                for (int i = 0; i < fields.size(); i++) {
-                    int offset = fields.keyAt(i);
-                    FieldReference f = fields.valueAt(i);
-                    if (!classHierarchy.isEmpty()) {
-                        cp = classHierarchy.get(0);
-                        int countInstanceField = cp.getInstanceFields().size();
-                        if (countInstanceField <= i) {
-                            System.out.println(" --- " + cp.type + " " + countInstanceField);
-                            classHierarchy.remove(0);
-                        }
-                    }
-                    System.out.println(" #" + i + "# " + offset + " (0x"
-                            + Integer.toHexString(offset) + ") "
-                            + ":" + f.getType() + " " + f.getName());
-                }
-                System.exit(0);
+            if (!classProto.type.equals(className)) {
+                return;
             }
+            System.out.println("## Field offset of " + className);
+            ArrayList<ClassProto> classHierarchy = new ArrayList<>();
+            ClassProto cp = classProto;
+            for (String superclassType = cp.getSuperclass(); superclassType != null;
+                    superclassType = cp.getSuperclass()) {
+                cp = (ClassProto) classProto.classPath.getClass(superclassType);
+                classHierarchy.add(0, cp);
+            }
+
+            for (int i = 0; i < fields.size(); i++) {
+                int offset = fields.keyAt(i);
+                FieldReference f = fields.valueAt(i);
+                if (!classHierarchy.isEmpty()) {
+                    cp = classHierarchy.get(0);
+                    int countInstanceField = cp.getInstanceFields().size();
+                    if (countInstanceField <= i) {
+                        System.out.println(" --- " + cp.type + " " + countInstanceField);
+                        classHierarchy.remove(0);
+                    }
+                }
+                System.out.println(" #" + i + "# " + offset + " (0x"
+                        + Integer.toHexString(offset) + ") "
+                        + ":" + f.getType() + " " + f.getName());
+            }
+            System.exit(0);
         }
 
         void debugFieldsOrder(String className, List<Field> fields) {
