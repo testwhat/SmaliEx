@@ -169,7 +169,7 @@ class PropertyFetcher {
 
     private synchronized void handleException(Exception e) {
         mCacheState = CacheState.UNPOPULATED;
-        Log.w("PropertyFetcher",
+        if (mDevice.logError) Log.w("PropertyFetcher",
                 String.format("%s getting properties for device %s: %s",
                         e.getClass().getSimpleName(), mDevice.getSerialNumber(),
                         e.getMessage()));

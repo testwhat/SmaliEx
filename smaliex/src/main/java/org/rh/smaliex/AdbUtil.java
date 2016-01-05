@@ -94,7 +94,7 @@ public class AdbUtil {
             device.executeShellCommand(cmd, outputReceiver, 60, TimeUnit.SECONDS);
         } catch (TimeoutException | AdbCommandRejectedException
                 | ShellCommandUnresponsiveException | IOException ex) {
-            LLog.ex(ex);
+            if (device.logError) LLog.ex(ex);
         }
     }
 
@@ -135,12 +135,13 @@ public class AdbUtil {
     }
 
     public static String[] getFileList(Device device, String dir) {
-        String[] result = new String[] { "" };
+        String[] result = { "" };
         shellSync(device, "ls " + dir, result);
-        if (result[0] != null && result[0].contains("No such file or directory")) {
+        String resultStr = result[0];
+        if (resultStr == null || resultStr.contains("No such file or directory")) {
             return new String[0];
         }
-        return result[0].split("[\r\n]+");
+        return resultStr.split("[\r\n]+");
     }
 
     public static String[] getBootClassPath(Device device) {

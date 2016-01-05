@@ -192,8 +192,7 @@ public class SyncService implements java.io.Closeable {
 
     /**
      * Pulls a single file.
-     * <p/>Because this method just deals with a String for the remote file instead of a
-     * {@link FileEntry}, the size of the file being pulled is unknown and the
+     * <p/>The size of the file being pulled is unknown and the
      * {@link ISyncProgressMonitor} will not properly show the progress
      * @param remoteFilepath the full path to the remote file
      * @param localFilename The local destination.

@@ -25,8 +25,6 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Helper class to handle requests and connections to adb.
- * <p/>{@link DebugBridgeServer} is the public API to connection to adb, while {@link AdbHelper}
- * does the low level stuff.
  * <p/>This currently uses spin-wait non-blocking I/O. A Selector would be more efficient,
  * but seems like overkill for what we're doing here.
  */
@@ -143,7 +141,7 @@ public final class AdbHelper {
      *
      * @param adbSockAddr the {@link InetSocketAddress} to adb.
      * @param command the shell command to execute
-     * @param device the {@link IDevice} on which to execute the command.
+     * @param device the {@link Device} on which to execute the command.
      * @param rcvr the {@link IShellOutputReceiver} that will receives the output of the shell
      *            command
      * @param maxTimeToOutputResponse max time between command output. If more time passes
@@ -178,8 +176,7 @@ public final class AdbHelper {
             adbChan.configureBlocking(false);
 
             // if the device is not -1, then we first tell adb we're looking to
-            // talk
-            // to a specific device
+            // talk to a specific device
             setDevice(adbChan, device);
 
             byte[] request = formAdbRequest("shell:" + command); //$NON-NLS-1$
@@ -187,7 +184,8 @@ public final class AdbHelper {
 
             AdbResponse resp = readAdbResponse(adbChan, false /* readDiagString */);
             if (!resp.okay) {
-                Log.e("ddms", "ADB rejected shell command (" + command + "): " + resp.message);
+                if (device.logError) Log.e("ddms",
+                        "ADB rejected shell command (" + command + "): " + resp.message);
                 throw new AdbCommandRejectedException(resp.message);
             }
 
