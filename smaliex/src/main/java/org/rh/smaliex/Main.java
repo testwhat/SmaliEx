@@ -59,7 +59,7 @@ public class Main {
 
     public static void mainImpl(String[] args) throws IOException {
         String outputFolder = null;
-        int apiLevel = 0;
+        int apiLevel = org.jf.dexlib2.Opcode.LOLLIPOP_MR1;
         if (args.length > 2) {
             String opt = args[0];
             while (opt.length() > 1 && opt.charAt(0) == '-') {
@@ -119,7 +119,7 @@ public class Main {
                 return;
             }
             if ("smali".equals(cmd)) {
-                OatUtil.smaliRaw(checkExist(args[1]));
+                OatUtil.smaliRaw(checkExist(args[1]), apiLevel);
                 return;
             }
             File input = checkExist(args[0]);
