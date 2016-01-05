@@ -30,18 +30,22 @@ package org.rh.smaliex;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.ref.SoftReference;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 import javax.annotation.Nonnull;
 
-import org.jf.dexlib2.Opcode;
+import org.jf.baksmali.Adaptors.ClassDefinition;
 import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.analysis.AnalysisException;
 import org.jf.dexlib2.analysis.ClassPath;
@@ -57,8 +61,7 @@ import org.jf.dexlib2.rewriter.MethodRewriter;
 import org.jf.dexlib2.rewriter.Rewriter;
 import org.jf.dexlib2.rewriter.RewriterModule;
 import org.jf.dexlib2.rewriter.Rewriters;
-import org.jf.dexlib2.writer.io.DexDataStore;
-import org.jf.dexlib2.writer.pool.DexPool;
+import org.jf.util.IndentingWriter;
 
 public class DexUtil {
     public static final int API_LEVEL = 19;
@@ -124,7 +127,7 @@ public class DexUtil {
                 }
             }
             if (dexBytes.isEmpty()) {
-                throw new IOException( "Cannot find classes.dex in zip file");
+                throw new IOException("Cannot find classes.dex in zip file");
             }
             return dexBytes;
         }
@@ -135,17 +138,16 @@ public class DexUtil {
         File outputFolder = new File(outFolder == null ? MiscUtil.workingDir() : outFolder);
         MiscUtil.mkdirs(outputFolder);
 
-        Opcodes opcodes = new Opcodes(apiLevel > 7 ? apiLevel : Opcode.LOLLIPOP_MR1);
+        Opcodes opcodes = new Opcodes(apiLevel);
         File input = new File(odex);
         DexFile odexFile = DexUtil.loadSingleDex(input, opcodes);
-        DexUtil.ODexRewriterModule odr = new DexUtil.ODexRewriterModule(bootClassPath, opcodes);
-        DexFile dex = odr.getRewriter().rewriteDexFile(odexFile);
+        DexFile dex = getODexRewriter(bootClassPath, opcodes).rewriteDexFile(odexFile);
 
         File outputFile = MiscUtil.changeExt(new File(outputFolder, input.getName()), "dex");
         if (outputFile.exists()) {
             outputFile = MiscUtil.appendTail(outputFile, "-deodex");
         }
-        DexPool.writeTo(outputFile.getAbsolutePath(), dex);
+        org.jf.dexlib2.writer.pool.DexPool.writeTo(outputFile.getAbsolutePath(), dex);
         LLog.i("Output to " + outputFile);
     }
 
@@ -211,7 +213,7 @@ public class DexUtil {
         }
     }
 
-    public static class MemoryDataStore implements DexDataStore {
+    public static class MemoryDataStore implements org.jf.dexlib2.writer.io.DexDataStore {
         final ByteData mBuffer;
 
         public MemoryDataStore(int size) {
@@ -279,9 +281,54 @@ public class DexUtil {
         }
     }
 
+    public static void writeSmaliContent(String type, ClassPath classPath,
+            java.io.Writer outWriter) {
+        org.jf.baksmali.baksmaliOptions options = new org.jf.baksmali.baksmaliOptions();
+        org.jf.dexlib2.iface.ClassDef classDef = classPath.getClassDef(type);
+        options.apiLevel = classPath.apiLevel;
+        options.allowOdex = true;
+        options.classPath = classPath;
+
+        ClassDefinition cd = new ClassDefinition(options, classDef);
+        try {
+            IndentingWriter writer = new IndentingWriter(outWriter);
+            cd.writeTo(writer);
+        } catch (IOException ex) {
+            LLog.ex(ex);
+        }
+    }
+
+    private static final ConcurrentHashMap<String, SoftReference<ODexRewriter>> rewriterCache =
+            new ConcurrentHashMap<>();
+
+    private static <T> T getCache(Map<String, SoftReference<T>> pool, String key) {
+        SoftReference<T> ref = pool.get(key);
+        if (ref != null) {
+            return ref.get();
+        }
+        return null;
+    }
+
+    private static <T> void putCache(Map<String, SoftReference<T>> pool, String key, T val) {
+        pool.put(key, new SoftReference<>(val));
+    }
+
+    public static ODexRewriter getODexRewriter(String bootClassPath, Opcodes opcodes) {
+        String key = bootClassPath + " " + opcodes.apiLevel;
+        ODexRewriter rewriter = getCache(rewriterCache, key);
+        if (rewriter == null) {
+            rewriter = new ODexRewriter(new ODexRewriterModule(bootClassPath, opcodes));
+            putCache(rewriterCache, key, rewriter);
+        }
+        return rewriter;
+    }
+
     public static class ODexRewriter extends DexRewriter {
-        public ODexRewriter(ODexRewriterModule module) {
+        final ODexRewriterModule mRewriterModule;
+
+        ODexRewriter(ODexRewriterModule module) {
             super(module);
+            mRewriterModule = module;
         }
 
         @Nonnull
@@ -294,6 +341,18 @@ public class DexUtil {
                 //LLog.ex(e);
             }
             return new FailedDexFile();
+        }
+
+        public void addDexToClassPath(DexFile dexFile) {
+            mRewriterModule.mClassPath.addDex(dexFile, true);
+        }
+
+        public void recycle() {
+            mRewriterModule.mClassPath.cleanupAdditionalDex();
+        }
+
+        public void setFailInfoLocation(String folder) {
+            mRewriterModule.mFailInfoLocation = folder;
         }
 
         public static boolean isValid(DexFile dexFile) {
@@ -310,24 +369,17 @@ public class DexUtil {
     }
 
     // Covert optimized dex in oat to normal dex
-    public static class ODexRewriterModule extends RewriterModule {
-        private final ClassPath mBootClassPath;
+    static class ODexRewriterModule extends RewriterModule {
+        private final ClassPath mClassPath;
         private Method mCurrentMethod;
+        private String mFailInfoLocation;
 
         public ODexRewriterModule(String bootClassPath, Opcodes opcodes, String ext) {
-            mBootClassPath = getClassPath(bootClassPath, opcodes, ext);
+            mClassPath = getClassPath(bootClassPath, opcodes, ext);
         }
 
         public ODexRewriterModule(String bootClassPath, Opcodes opcodes) {
             this(bootClassPath, opcodes, ".dex;.jar");
-        }
-
-        public void addToBootClassPath(DexFile dexFile) {
-            mBootClassPath.addDex(dexFile);
-        }
-
-        public DexRewriter getRewriter() {
-            return new ODexRewriter(this);
         }
 
         @Nonnull
@@ -344,7 +396,7 @@ public class DexUtil {
                         @Override
                         public Iterable<? extends Instruction> getInstructions() {
                             MethodAnalyzer ma = new MethodAnalyzer(
-                                    mBootClassPath, mCurrentMethod, null);
+                                    mClassPath, mCurrentMethod, null);
                             if (!ma.analysisInfo.isEmpty()) {
                                 StringBuilder sb = new StringBuilder(256);
                                 sb.append("Analysis info of ").append(mCurrentMethod.getDefiningClass())
@@ -356,15 +408,48 @@ public class DexUtil {
                             }
                             AnalysisException ae = ma.getAnalysisException();
                             if (ae != null) {
-                                LLog.e("Analysis error in class=" + mCurrentMethod.getDefiningClass()
-                                        + " method=" + mCurrentMethod.getName() + "\n" + ae.getContext());
-                                LLog.ex(ae);
+                                handleAnalysisException(ae);
                             }
                             return ma.getInstructions();
                         }
                     };
                 }
             };
+        }
+
+        void handleAnalysisException(AnalysisException ae) {
+            LLog.e("Analysis error in class=" + mCurrentMethod.getDefiningClass()
+                    + " method=" + mCurrentMethod.getName() + "\n" + ae.getContext());
+            StackTraceElement[] stacks = ae.getStackTrace();
+            if (LLog.VERBOSE || stacks.length < 10) {
+                LLog.ex(ae);
+            } else {
+                final int printLine = 5;
+                StringBuilder sb = new StringBuilder(1024);
+                sb.append(ae.toString()).append("\n");
+                int i = 0;
+                int s = Math.min(printLine, stacks.length);
+                for (; i < s; i++) {
+                    sb.append("\tat ").append(stacks[i]).append("\n");
+                }
+                i = Math.max(i, stacks.length - printLine);
+                if (i > s) {
+                    sb.append("\t...(Skip ").append(i - s - 1).append(" traces)\n");
+                }
+                for (; i < stacks.length; i++) {
+                    sb.append("\tat ").append(stacks[i]).append("\n");
+                }
+                LLog.i(sb.toString());
+            }
+            if (mFailInfoLocation != null) {
+                String fileName = mCurrentMethod.getDefiningClass().replace(
+                        "/", "-").replace(";", "") + ".smali";
+                try (FileWriter writer = new FileWriter(MiscUtil.path(mFailInfoLocation, fileName))) {
+                    writeSmaliContent(mCurrentMethod.getDefiningClass(), mClassPath, writer);
+                } catch (IOException e) {
+                    LLog.ex(e);
+                }
+            }
         }
 
         @Nonnull

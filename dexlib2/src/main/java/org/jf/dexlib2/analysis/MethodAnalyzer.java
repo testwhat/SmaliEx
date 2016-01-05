@@ -421,8 +421,13 @@ public class MethodAnalyzer {
     private void buildDebugInfo() {
         if (debug) System.out.println("@ " + method.getDefiningClass()
                 + " " + method.getName());
-        final int localCount = totalRegisters - paramRegisterCount;
-        localTypes = new SparseArray<>(localCount);
+        // e.g. this(p0) 1, parameter 3, local 6, v0 and p1 are long
+        // totalRegisters=1+3+6=10 parameterCount=2 (p1,p2) parameterRegisterCount=4 (p0~p3)
+        // parameterStart = totalRegisters - paramRegisterCount + (isStatic ? 0 : 1)
+        //  0  1  2  3  4  5  6  7  8  9
+        // v0    v2 v3 v4 v5 p0 p1    p3
+        final int localRegCount = totalRegisters - paramRegisterCount;
+        localTypes = new SparseArray<>(localRegCount);
 
         for (DebugItem di : methodImpl.getDebugItems()) {
             switch (di.getDebugItemType()) {
@@ -436,7 +441,7 @@ public class MethodAnalyzer {
                     }
 
                     int objectRegister = local.getRegister();
-                    if (objectRegister >= localCount) {
+                    if (objectRegister >= localRegCount) {
                         break; // this p0 or parameter p1, p2, ...
                     }
 
@@ -1739,7 +1744,7 @@ public class MethodAnalyzer {
     private TypeProto guessTypeByNearestInstanceOf(int instrIndex, int reg) {
         Instruction22c instrInsOf = findTypeNearestInstanceOf(instrIndex);
         // Result in getRegisterA, target to check in getRegisterB
-        if (instrInsOf != null && instrInsOf.getRegisterB() == reg) {
+        if (instrInsOf != null && (instrInsOf.getRegisterB() == reg || reg < 0)) {
             TypeReference ref = (TypeReference) instrInsOf.getReference();
             TypeProto insOfType = RegisterType.getRegisterType(
                     classPath, ref.getType()).type;
@@ -1795,17 +1800,6 @@ public class MethodAnalyzer {
             int fieldOffset, int methodOffset) {
         if (debug) System.out.println(">findRegisterType " + method.getDefiningClass()
                 + "->" + method.getName());
-        final int parameterStart = totalRegisters - paramRegisterCount
-                - (isStatic ? 1 : 0);
-        if (reg > parameterStart) {
-            // e.g. total 12 = parameter 6 (this, p1~p5) + local 6 (v0~v5)
-            String type = method.getParameters().get(
-                    reg - paramRegisterCount - (isStatic ? 0 : 1)).getType();
-            if (type.charAt(0) == 'L') {
-                return RegisterType.getRegisterType(RegisterType.REFERENCE,
-                        classPath.getClass(type));
-            }
-        }
         boolean instanceOfMode = false;
         RegisterType type = findRegisterTypeInner(analyzedInstruction, reg);
         if (type != RegisterType.NULL_TYPE) {
@@ -2004,6 +1998,7 @@ public class MethodAnalyzer {
                     instruction.getRegisterB(), fieldOffset, -1);
             resolvedField = resolveField(objectRegisterType, fieldOffset);
         }
+        TypeProto objectRegisterTypeProto = objectRegisterType.type;
 
         if (resolvedField == null) {
             int instrAddress = getInstructionAddress(analyzedInstruction);
@@ -2013,6 +2008,7 @@ public class MethodAnalyzer {
                     analyzedInstruction.getInstructionIndex(), srcReg);
 
             if (classTypeProto != null) {
+                objectRegisterTypeProto = classTypeProto;
                 resolvedField = classTypeProto.getFieldByOffset(fieldOffset);
             }
             if (resolvedField != null) {
@@ -2023,6 +2019,7 @@ public class MethodAnalyzer {
             } else {
                 classTypeProto = findTypeProtoByAddress(instrAddress, srcReg);
                 if (classTypeProto != null) {
+                    objectRegisterTypeProto = classTypeProto;
                     resolvedField = classTypeProto.getFieldByOffset(fieldOffset);
                     if (resolvedField != null) {
                         addAnalysisInfo("Resolve field from debug info."
@@ -2041,7 +2038,6 @@ public class MethodAnalyzer {
             }
         }
 
-        TypeProto objectRegisterTypeProto = objectRegisterType.type;
         if (resolvedField == null || objectRegisterTypeProto == null) {
             throw new AnalysisException(
                     "Could not resolve the field in class %s at offset %d in %s",
@@ -2116,7 +2112,7 @@ public class MethodAnalyzer {
         TypeProto objectRegisterTypeProto = objectRegisterType.type;
 
         if (objectRegisterType.category == RegisterType.NULL) {
-            // TODO This should not happen
+            // For register is used after ".end local"
             int instrAddress = getInstructionAddress(analyzedInstruction);
             int line = getNearestLineByAddress(instrAddress);
             objectRegisterTypeProto = findTypeProtoByAddress(instrAddress, objectRegister);
@@ -2127,7 +2123,6 @@ public class MethodAnalyzer {
                         + " mIdx=" + methodIndex + " objReg=" + objectRegister
                         + " at line " + line);
             } else {
-                // Maybe try to search the nearest new-instance for the register.
                 addAnalysisInfo("Unresolved " + analyzedInstruction.instruction.getOpcode()
                         + " mIdx=" + methodIndex + " objReg=" + objectRegister
                         + " at line " + line);
@@ -2168,19 +2163,22 @@ public class MethodAnalyzer {
                 resolvedMethod = objectRegisterTypeProto.getMethodByVtableIndex(methodIndex);
             }
             if (resolvedMethod != null) {
-                addAnalysisInfo("Resolve method from the nearest instance-of."
+                addAnalysisInfo("Resolve method from instance-of."
                         + " method=" + resolvedMethod.getDefiningClass()
                         + "->" + resolvedMethod.getName()
+                        + " reg=" + objectRegister
                         + " instr=" + analyzedInstruction.instruction.getOpcode()
                         + " at line " + getNearestLineByAddress(instrAddress));
             } else {
-                // TODO This should not happen
-                objectRegisterTypeProto = findTypeProtoByAddress(instrAddress, objectRegister);
+                objectRegisterTypeProto = guessTypeByNearestInstanceOf(
+                        analyzedInstruction.getInstructionIndex(), -1);
                 if (objectRegisterTypeProto != null) {
                     resolvedMethod = objectRegisterTypeProto.getMethodByVtableIndex(methodIndex);
                     if (resolvedMethod != null) {
-                        addAnalysisInfo("Resolve method from debug info."
-                                + " def-class=" + resolvedMethod.getDefiningClass()
+                        addAnalysisInfo("Resolve method from the nearest instance-of."
+                                + " method=" + resolvedMethod.getDefiningClass()
+                                + "->" + resolvedMethod.getName()
+                                + " instr=" + analyzedInstruction.instruction.getOpcode()
                                 + " at line " + getNearestLineByAddress(instrAddress));
                     }
                 }

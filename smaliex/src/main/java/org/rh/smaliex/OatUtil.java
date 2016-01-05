@@ -28,18 +28,6 @@
 
 package org.rh.smaliex;
 
-import org.jf.baksmali.baksmaliOptions;
-import org.jf.dexlib2.Opcodes;
-import org.jf.dexlib2.dexbacked.DexBackedDexFile;
-import org.jf.dexlib2.iface.DexFile;
-import org.jf.dexlib2.rewriter.DexRewriter;
-import org.jf.dexlib2.writer.pool.DexPool;
-import org.rh.smaliex.DexUtil.ODexRewriter;
-import org.rh.smaliex.DexUtil.ODexRewriterModule;
-import org.rh.smaliex.reader.DataReader;
-import org.rh.smaliex.reader.Elf;
-import org.rh.smaliex.reader.Oat;
-
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -51,6 +39,16 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
 import java.util.zip.ZipEntry;
+
+import org.jf.baksmali.baksmaliOptions;
+import org.jf.dexlib2.Opcodes;
+import org.jf.dexlib2.dexbacked.DexBackedDexFile;
+import org.jf.dexlib2.iface.DexFile;
+import org.jf.dexlib2.writer.pool.DexPool;
+import org.rh.smaliex.DexUtil.ODexRewriter;
+import org.rh.smaliex.reader.DataReader;
+import org.rh.smaliex.reader.Elf;
+import org.rh.smaliex.reader.Oat;
 
 public class OatUtil {
 
@@ -218,10 +216,10 @@ public class OatUtil {
     static DexBackedDexFile readDex(Oat.DexFile od, int dexSize, Opcodes opcodes)
             throws IOException {
         byte[] dexBytes = new byte[dexSize];
-        od.mReader.seek(od.mDexPosition);
         int remain = dexSize;
         int read = 0;
         int readSize;
+        od.mReader.seek(od.mDexPosition);
         while (remain > 0 && (readSize = od.mReader.readRaw(dexBytes, read, remain)) != -1) {
             remain -= readSize;
             read += readSize;
@@ -248,13 +246,15 @@ public class OatUtil {
         if (bootClassPath == null || !new File(bootClassPath).exists()) {
             throw new IOException("Invalid bootclasspath: " + bootClassPath);
         }
-        final ODexRewriterModule odr = new ODexRewriterModule(bootClassPath, opcodes);
-        final DexRewriter deOpt = odr.getRewriter();
+        final ODexRewriter deOpt = DexUtil.getODexRewriter(bootClassPath, opcodes);
+        if (LLog.VERBOSE) {
+            deOpt.setFailInfoLocation(outputFolder.getAbsolutePath());
+        }
 
         DexFile[] dexFiles = getOdexFromOat(oat, opcodes);
         if (addSelfToBcp) {
             for (DexFile d : dexFiles) {
-                odr.addToBootClassPath(d);
+                deOpt.addDexToClassPath(d);
             }
         }
         for (int i = 0; i < oat.mOatDexFiles.length; i++) {
@@ -286,8 +286,8 @@ public class OatUtil {
     public static void convertToDexJar(Oat oat, File outputFolder,
             String bootClassPath, String noClassJarFolder, boolean isBoot) throws IOException {
         final Opcodes opcodes = new Opcodes(oat.guessApiLevel());
-        LLog.i("Preparing bootclasspath from " + bootClassPath);
-        final ODexRewriterModule odr = new ODexRewriterModule(bootClassPath, opcodes);
+        LLog.v("Use bootclasspath " + bootClassPath);
+        final ODexRewriter deOpt = DexUtil.getODexRewriter(bootClassPath, opcodes);
         HashMap<String, ArrayList<Oat.DexFile>> dexFileGroup = new HashMap<>();
         for (int i = 0; i < oat.mOatDexFiles.length; i++) {
             Oat.OatDexFile odf = oat.mOatDexFiles[i];
@@ -306,13 +306,11 @@ public class OatUtil {
             dfiles.add(oat.mDexFiles[i]);
             if (!isBoot) {
                 Oat.DexFile dex = oat.mDexFiles[i];
-                odr.addToBootClassPath(readDex(dex, dex.mHeader.file_size_, opcodes));
+                deOpt.addDexToClassPath(readDex(dex, dex.mHeader.file_size_, opcodes));
             }
         }
 
         final byte[] buf = new byte[8192];
-        final DexRewriter deOpt = odr.getRewriter();
-
         for (String jarName : dexFileGroup.keySet()) {
             File outputFile = MiscUtil.changeExt(new File(outputFolder, jarName), "jar");
             String classesIdx = "";
@@ -360,6 +358,7 @@ public class OatUtil {
                 throw handleIOE(ex);
             }
         }
+        deOpt.recycle();
     }
 
     static IOException handleIOE(IOException ex) {
