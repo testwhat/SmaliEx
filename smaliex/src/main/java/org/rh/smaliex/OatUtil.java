@@ -309,6 +309,9 @@ public class OatUtil {
                 deOpt.addDexToClassPath(readDex(dex, dex.mHeader.file_size_, opcodes));
             }
         }
+        if (LLog.VERBOSE) {
+            deOpt.setFailInfoLocation(outputFolder.getAbsolutePath());
+        }
 
         final byte[] buf = new byte[8192];
         for (String jarName : dexFileGroup.keySet()) {

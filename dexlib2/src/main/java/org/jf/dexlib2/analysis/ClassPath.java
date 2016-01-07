@@ -38,6 +38,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+
 import org.jf.dexlib2.DexFileFactory;
 import org.jf.dexlib2.analysis.reflection.ReflectionClassDef;
 import org.jf.dexlib2.iface.ClassDef;
@@ -125,7 +126,7 @@ public class ClassPath {
         }
     }
 
-    public void cleanupAdditionalDex() {
+    public void reset() {
         if (additionalDexFiles != null) {
             for (DexFile dexFile : additionalDexFiles) {
                 for (ClassDef classDef : dexFile.getClasses()) {
@@ -134,6 +135,7 @@ public class ClassPath {
             }
             additionalDexFiles.clear();
         }
+        loadedClasses = CacheBuilder.newBuilder().build(classLoader);
     }
 
     private void loadPrimitiveType(String type) {

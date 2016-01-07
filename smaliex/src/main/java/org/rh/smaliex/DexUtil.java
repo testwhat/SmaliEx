@@ -141,7 +141,11 @@ public class DexUtil {
         Opcodes opcodes = new Opcodes(apiLevel);
         File input = new File(odex);
         DexFile odexFile = DexUtil.loadSingleDex(input, opcodes);
-        DexFile dex = getODexRewriter(bootClassPath, opcodes).rewriteDexFile(odexFile);
+        ODexRewriter rewriter = getODexRewriter(bootClassPath, opcodes);
+        if (LLog.VERBOSE) {
+            rewriter.setFailInfoLocation(outputFolder.getAbsolutePath());
+        }
+        DexFile dex = rewriter.rewriteDexFile(odexFile);
 
         File outputFile = MiscUtil.changeExt(new File(outputFolder, input.getName()), "dex");
         if (outputFile.exists()) {
@@ -313,11 +317,11 @@ public class DexUtil {
         pool.put(key, new SoftReference<>(val));
     }
 
-    public static ODexRewriter getODexRewriter(String bootClassPath, Opcodes opcodes) {
-        String key = bootClassPath + " " + opcodes.apiLevel;
+    public static ODexRewriter getODexRewriter(String bootClassPathFolder, Opcodes opcodes) {
+        String key = bootClassPathFolder + " " + opcodes.apiLevel;
         ODexRewriter rewriter = getCache(rewriterCache, key);
         if (rewriter == null) {
-            rewriter = new ODexRewriter(new ODexRewriterModule(bootClassPath, opcodes));
+            rewriter = new ODexRewriter(new ODexRewriterModule(bootClassPathFolder, opcodes));
             putCache(rewriterCache, key, rewriter);
         }
         return rewriter;
@@ -348,7 +352,7 @@ public class DexUtil {
         }
 
         public void recycle() {
-            mRewriterModule.mClassPath.cleanupAdditionalDex();
+            mRewriterModule.mClassPath.reset();
         }
 
         public void setFailInfoLocation(String folder) {
@@ -444,8 +448,10 @@ public class DexUtil {
             if (mFailInfoLocation != null) {
                 String fileName = mCurrentMethod.getDefiningClass().replace(
                         "/", "-").replace(";", "") + ".smali";
-                try (FileWriter writer = new FileWriter(MiscUtil.path(mFailInfoLocation, fileName))) {
+                String failedCase = MiscUtil.path(mFailInfoLocation, fileName);
+                try (FileWriter writer = new FileWriter(failedCase)) {
                     writeSmaliContent(mCurrentMethod.getDefiningClass(), mClassPath, writer);
+                    LLog.i("Output failed class content to " + failedCase);
                 } catch (IOException e) {
                     LLog.ex(e);
                 }
