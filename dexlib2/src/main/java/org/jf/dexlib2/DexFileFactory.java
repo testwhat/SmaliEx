@@ -31,8 +31,19 @@
 
 package org.jf.dexlib2;
 
-import com.google.common.base.MoreObjects;
-import com.google.common.io.ByteStreams;
+import java.io.BufferedInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
 import org.jf.dexlib2.dexbacked.DexBackedDexFile;
 import org.jf.dexlib2.dexbacked.DexBackedOdexFile;
 import org.jf.dexlib2.dexbacked.OatFile;
@@ -42,12 +53,8 @@ import org.jf.dexlib2.iface.DexFile;
 import org.jf.dexlib2.writer.pool.DexPool;
 import org.jf.util.ExceptionWithContext;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.io.*;
-import java.util.List;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
+import com.google.common.base.MoreObjects;
+import com.google.common.io.ByteStreams;
 
 public final class DexFileFactory {
     @Nonnull
@@ -79,8 +86,105 @@ public final class DexFileFactory {
     }
 
     @Nonnull
-    public static DexBackedDexFile loadDexFile(@Nonnull File dexFile, @Nullable String dexEntry,
-                                               @Nonnull Opcodes opcodes) throws IOException {
+    public static List<DexBackedDexFile> loadDexFiles(
+            @Nonnull File dexFile, @Nullable String dexEntry, int api, boolean experimental) throws IOException {
+        return loadDexFiles(dexFile, dexEntry, Opcodes.forApi(api, experimental));
+    }
+
+    @Nonnull
+    public static List<DexBackedDexFile> loadDexFiles(
+            File dexFile, @Nullable String dexEntry, @Nonnull Opcodes opcodes) throws IOException {
+        int dotPos = dexEntry == null ? -1 : dexEntry.lastIndexOf('.');
+        String prefix = dotPos > 0 ? dexEntry.substring(0, dotPos) : "classes";
+        List<DexBackedDexFile> dexFiles = com.google.common.collect.Lists.newArrayList();
+        boolean isZipFile = false;
+        ZipFile zipFile = null;
+        try {
+            zipFile = new ZipFile(dexFile);
+            isZipFile = true;
+            Enumeration<? extends ZipEntry> zs = zipFile.entries();
+            while (zs.hasMoreElements()) {
+                ZipEntry zipEntry = zs.nextElement();
+                String name = zipEntry.getName();
+                if (name.startsWith(prefix) && name.endsWith(".dex")) {
+                    int fileLength = (int) zipEntry.getSize();
+                    if (fileLength < 40) {
+                        continue;
+                    }
+                    byte[] dexBytes = new byte[fileLength];
+                    ByteStreams.readFully(zipFile.getInputStream(zipEntry), dexBytes);
+                    dexFiles.add(new DexBackedDexFile(opcodes, dexBytes));
+                }
+            }
+        } catch (IOException ex) {
+            if (isZipFile) {
+                throw ex;
+            }
+        } finally {
+            if (zipFile != null) {
+                try {
+                    zipFile.close();
+                } catch (IOException ex) {
+                }
+            }
+        }
+        if (!isZipFile) {
+            boolean done = false;
+            InputStream inputStream = new BufferedInputStream(new FileInputStream(dexFile));
+            try {
+                try {
+                    dexFiles.add(DexBackedDexFile.fromInputStream(opcodes, inputStream));
+                    done = true;
+                } catch (DexBackedDexFile.NotADexFile ex) {
+                }
+                if (!done) {
+                    try {
+                        dexFiles.add(DexBackedOdexFile.fromInputStream(opcodes, inputStream));
+                        done = true;
+                    } catch (DexBackedOdexFile.NotAnOdexFile ex) {
+                    }
+                }
+                if (!done) {
+                    try {
+                        OatFile oatFile = OatFile.fromInputStream(inputStream);
+                        if (oatFile.isSupportedVersion() == OatFile.UNSUPPORTED) {
+                            throw new UnsupportedOatVersionException(oatFile);
+                        }
+
+                        List<OatDexFile> oatDexFiles = oatFile.getDexFiles();
+                        if (dexEntry != null) {
+                            boolean noPath = !dexEntry.contains("/");
+                            for (OatDexFile oatDexFile : oatDexFiles) {
+                                if (noPath) {
+                                    File oatEntryFile = new File(oatDexFile.filename);
+                                    if (oatEntryFile.getName().equals(dexEntry)) {
+                                        dexFiles.add(oatDexFile);
+                                        return dexFiles;
+                                    }
+                                } else if (oatDexFile.filename.equals(dexEntry)) {
+                                    dexFiles.add(oatDexFile);
+                                    return dexFiles;
+                                }
+                            }
+                        } else {
+                            dexFiles.addAll(oatDexFiles);
+                        }
+                    } catch (NotAnOatFileException ex) {
+                    }
+                }
+            } finally {
+                inputStream.close();
+            }
+        }
+        if (dexFiles.isEmpty()) {
+            throw new ExceptionWithContext("%s is not an apk, dex file or odex file.", dexFile.getPath());
+        }
+        return dexFiles;
+    }
+
+    @Nonnull
+    public static DexBackedDexFile loadDexFile(File dexFile, String dexEntry,
+            @Nonnull Opcodes opcodes) throws IOException {
         ZipFile zipFile = null;
         boolean isZipFile = false;
         try {

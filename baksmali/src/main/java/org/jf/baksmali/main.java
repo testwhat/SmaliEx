@@ -28,24 +28,30 @@
 
 package org.jf.baksmali;
 
-import com.google.common.collect.Lists;
-import org.apache.commons.cli.*;
-import org.jf.dexlib2.DexFileFactory;
-import org.jf.dexlib2.DexFileFactory.MultipleDexFilesException;
-import org.jf.dexlib2.analysis.InlineMethodResolver;
-import org.jf.dexlib2.dexbacked.DexBackedDexFile;
-import org.jf.dexlib2.dexbacked.DexBackedOdexFile;
-import org.jf.dexlib2.dexbacked.OatFile.OatDexFile;
-import org.jf.util.ConsoleUtil;
-import org.jf.util.SmaliHelpFormatter;
-
-import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
+
+import javax.annotation.Nonnull;
+
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.OptionBuilder;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
+import org.apache.commons.cli.PosixParser;
+import org.jf.dexlib2.DexFileFactory;
+import org.jf.dexlib2.analysis.InlineMethodResolver;
+import org.jf.dexlib2.dexbacked.DexBackedDexFile;
+import org.jf.dexlib2.dexbacked.DexBackedOdexFile;
+import org.jf.util.ConsoleUtil;
+import org.jf.util.SmaliHelpFormatter;
+
+import com.google.common.collect.Lists;
 
 public class main {
 
@@ -260,60 +266,55 @@ public class main {
             System.exit(1);
         }
 
-        //Read in and parse the dex file
-        DexBackedDexFile dexFile = null;
-        try {
-            dexFile = DexFileFactory.loadDexFile(dexFileFile, options.dexEntry, options.apiLevel, options.experimental);
-        } catch (MultipleDexFilesException ex) {
-            System.err.println(String.format("%s contains multiple dex files. You must specify which one to " +
-                    "disassemble with the -e option", dexFileFile.getName()));
-            System.err.println("Valid entries include:");
-            for (OatDexFile oatDexFile: ex.oatFile.getDexFiles()) {
-                System.err.println(oatDexFile.filename);
-            }
-            System.exit(1);
-        }
+        // Read in and parse the dex file
+        List<DexBackedDexFile> dexFiles = DexFileFactory.loadDexFiles(dexFileFile, options.dexEntry,
+                options.apiLevel, options.experimental);
 
-        if (dexFile.hasOdexOpcodes()) {
-            if (!options.deodex) {
-                System.err.println("Warning: You are disassembling an odex file without deodexing it. You");
-                System.err.println("won't be able to re-assemble the results unless you deodex it with the -x");
-                System.err.println("option");
-                options.allowOdex = true;
-            }
-        } else {
-            options.deodex = false;
-        }
-
-        if (!setBootClassPath && (options.deodex || options.registerInfo != 0 || options.normalizeVirtualMethods)) {
-            if (dexFile instanceof DexBackedOdexFile) {
-                options.bootClassPathEntries = ((DexBackedOdexFile)dexFile).getDependencies();
+        for (int i = 0; i < dexFiles.size(); i++) {
+            DexBackedDexFile dexFile = dexFiles.get(i);
+            if (dexFile.isOdexFile()) {
+                if (!options.deodex) {
+                    System.err.println("Warning: You are disassembling an odex file without deodexing it. You");
+                    System.err.println("won't be able to re-assemble the results unless you deodex it with the -x");
+                    System.err.println("option");
+                    options.allowOdex = true;
+                }
             } else {
-                options.bootClassPathEntries = getDefaultBootClassPathForApi(options.apiLevel,
-                        options.experimental);
+                options.deodex = false;
             }
-        }
 
-        if (options.customInlineDefinitions == null && dexFile instanceof DexBackedOdexFile) {
-            options.inlineResolver =
-                    InlineMethodResolver.createInlineMethodResolver(
-                            ((DexBackedOdexFile)dexFile).getOdexVersion());
-        }
-
-        boolean errorOccurred = false;
-        if (disassemble) {
-            errorOccurred = !baksmali.disassembleDexFile(dexFile, options);
-        }
-
-        if (doDump) {
-            if (dumpFileName == null) {
-                dumpFileName = commandLine.getOptionValue(inputDexFileName + ".dump");
+            if (!setBootClassPath && (options.deodex || options.registerInfo != 0
+                    || options.normalizeVirtualMethods)) {
+                if (dexFile instanceof DexBackedOdexFile) {
+                    options.bootClassPathEntries = ((DexBackedOdexFile) dexFile).getDependencies();
+                } else {
+                    options.bootClassPathEntries = getDefaultBootClassPathForApi(options.apiLevel,
+                            options.experimental);
+                }
             }
-            dump.dump(dexFile, dumpFileName, options.apiLevel, options.experimental);
-        }
 
-        if (errorOccurred) {
-            System.exit(1);
+            if (options.customInlineDefinitions == null && dexFile instanceof DexBackedOdexFile) {
+                options.inlineResolver =
+                        InlineMethodResolver.createInlineMethodResolver(
+                                ((DexBackedOdexFile) dexFile).getOdexVersion());
+            }
+
+            boolean errorOccurred = false;
+            if (disassemble) {
+                errorOccurred = !baksmali.disassembleDexFile(dexFile, options);
+            }
+
+            if (doDump) {
+                if (dumpFileName == null) {
+                    dumpFileName = commandLine.getOptionValue(inputDexFileName
+                            + (i > 0 ? (i + 1) : "") + ".dump");
+                }
+                dump.dump(dexFile, dumpFileName, options.apiLevel, options.experimental);
+            }
+
+            if (errorOccurred) {
+                System.exit(1);
+            }
         }
     }
 

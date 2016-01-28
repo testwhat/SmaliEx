@@ -28,28 +28,53 @@
 
 package org.jf.smali;
 
-import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Ordering;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import javax.annotation.Nonnull;
+
 import org.antlr.runtime.CommonTokenStream;
 import org.antlr.runtime.Token;
 import org.antlr.runtime.TokenSource;
 import org.antlr.runtime.tree.CommonTree;
 import org.antlr.runtime.tree.CommonTreeNodeStream;
-import org.apache.commons.cli.*;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.OptionBuilder;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
+import org.apache.commons.cli.PosixParser;
 import org.jf.dexlib2.Opcodes;
+import org.jf.dexlib2.writer.builder.BuilderClassDef;
 import org.jf.dexlib2.writer.builder.DexBuilder;
 import org.jf.dexlib2.writer.io.FileDataStore;
+import org.jf.dexlib2.writer.pool.ClassPool;
+import org.jf.dexlib2.writer.pool.DexPool;
 import org.jf.util.ConsoleUtil;
 import org.jf.util.SmaliHelpFormatter;
 
-import javax.annotation.Nonnull;
-import java.io.*;
-import java.util.*;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Ordering;
 
 /**
  * Main class for smali. It recognizes enough options to be able to dispatch
@@ -132,7 +157,7 @@ public class main {
 
         Option[] options = commandLine.getOptions();
 
-        for (int i=0; i<options.length; i++) {
+        for (int i = 0; i < options.length; i++) {
             Option option = options[i];
             String opt = option.getOpt();
 
@@ -195,18 +220,18 @@ public class main {
         try {
             LinkedHashSet<File> filesToProcess = new LinkedHashSet<File>();
 
-            for (String arg: remainingArgs) {
-                    File argFile = new File(arg);
+            for (String arg : remainingArgs) {
+                File argFile = new File(arg);
 
-                    if (!argFile.exists()) {
-                        throw new RuntimeException("Cannot find file or directory \"" + arg + "\"");
-                    }
+                if (!argFile.exists()) {
+                    throw new RuntimeException("Cannot find file or directory \"" + arg + "\"");
+                }
 
-                    if (argFile.isDirectory()) {
-                        getSmaliFilesInDir(argFile, filesToProcess);
-                    } else if (argFile.isFile()) {
-                        filesToProcess.add(argFile);
-                    }
+                if (argFile.isDirectory()) {
+                    getSmaliFilesInDir(argFile, filesToProcess);
+                } else if (argFile.isFile()) {
+                    filesToProcess.add(argFile);
+                }
             }
 
             if (jobs <= 0) {
@@ -217,28 +242,29 @@ public class main {
             }
 
             boolean errors = false;
-
-            final DexBuilder dexBuilder = DexBuilder.makeDexBuilder(Opcodes.forApi(apiLevel, experimental));
-
             ExecutorService executor = Executors.newFixedThreadPool(jobs);
-            List<Future<Boolean>> tasks = Lists.newArrayList();
+            final List<Future<Boolean>> tasks =
+                    Lists.newArrayListWithCapacity(filesToProcess.size());
+            final List<BuilderClassDef> classes = Collections.synchronizedList(
+                    new ArrayList<BuilderClassDef>(filesToProcess.size()));
 
+            final Opcodes opcodes = Opcodes.forApi(apiLevel, experimental);
             final boolean finalVerboseErrors = verboseErrors;
             final boolean finalPrintTokens = printTokens;
             final boolean finalAllowOdex = allowOdex;
-            final int finalApiLevel = apiLevel;
             final boolean finalExperimental = experimental;
-            for (final File file: filesToProcess) {
+            for (final File file : filesToProcess) {
                 tasks.add(executor.submit(new Callable<Boolean>() {
-                    @Override public Boolean call() throws Exception {
-                        return assembleSmaliFile(file, dexBuilder, finalVerboseErrors, finalPrintTokens,
-                                finalAllowOdex, finalApiLevel, finalExperimental);
+                    @Override
+                    public Boolean call() throws Exception {
+                        return assembleSmaliFile(file, classes, finalVerboseErrors, finalPrintTokens,
+                                finalAllowOdex, opcodes, finalExperimental);
                     }
                 }));
             }
 
-            for (Future<Boolean> task: tasks) {
-                while(true) {
+            for (Future<Boolean> task : tasks) {
+                while (true) {
                     try {
                         if (!task.get()) {
                             errors = true;
@@ -256,28 +282,77 @@ public class main {
                 System.exit(1);
             }
 
+            final int MAX_METHOD_ADDED_DURING_DEX_CREATION = 2;
+            final int MAX_FIELD_ADDED_DURING_DEX_CREATION = 9;
+            final int MAX_DEX_ID = 65536;
+            int dexNum = 0;
+            ArrayList<DexPool> pools = new ArrayList<DexPool>();
+            DexPool dexPool = DexPool.makeDexPool(opcodes);
+            ClassPool clsPool = (ClassPool) dexPool.classSection;
+            pools.add(dexPool);
+
+            Collections.sort(classes, new Comparator<BuilderClassDef>() {
+                @Override
+                public int compare(BuilderClassDef c1, BuilderClassDef c2) {
+                    return c1.getType().compareTo(c2.getType());
+                }
+            });
+            for (BuilderClassDef classDef : classes) {
+                int numMethodIds = dexPool.methodSection.getItems().size();
+                int numFieldIds = dexPool.fieldSection.getItems().size();
+                int constantPoolSize = classDef.getDirectMethods().size()
+                        + classDef.getVirtualMethods().size()
+                        + classDef.getStaticFields().size()
+                        + classDef.getInstanceFields().size();
+                int maxMethodIdsInDex = numMethodIds + constantPoolSize
+                        + MAX_METHOD_ADDED_DURING_DEX_CREATION;
+                int maxFieldIdsInDex = numFieldIds + constantPoolSize
+                        + MAX_FIELD_ADDED_DURING_DEX_CREATION;
+                if (maxMethodIdsInDex > MAX_DEX_ID
+                        || maxFieldIdsInDex > MAX_DEX_ID) {
+                    String outName = getOutputFileName(outputDexFile, dexNum);
+                    System.out.println("output:" + outName);
+                    dexPool.writeTo(new FileDataStore(new File(outName)));
+                    dexNum++;
+                    dexPool = DexPool.makeDexPool(opcodes);
+                    pools.add(dexPool);
+                    clsPool = (ClassPool) dexPool.classSection;
+                }
+                clsPool.intern(classDef);
+            }
+            String outName = getOutputFileName(outputDexFile, dexNum);
+            System.out.println("output:" + outName);
+            dexPool.writeTo(new FileDataStore(new File(outName)));
+
             if (listMethods) {
                 if (Strings.isNullOrEmpty(methodListFilename)) {
                     methodListFilename = outputDexFile + ".methods";
                 }
-                writeReferences(dexBuilder.getMethodReferences(), methodListFilename);
+                for (int i = 0; i < pools.size(); i++) {
+                    writeReferences(pools.get(i).getMethodReferences(),
+                            getOutputFileName(methodListFilename, i));
+                }
             }
 
             if (listFields) {
                 if (Strings.isNullOrEmpty(fieldListFilename)) {
                     fieldListFilename = outputDexFile + ".fields";
                 }
-                writeReferences(dexBuilder.getFieldReferences(), fieldListFilename);
+                for (int i = 0; i < pools.size(); i++) {
+                    writeReferences(pools.get(i).getFieldReferences(),
+                            getOutputFileName(fieldListFilename, i));
+                }
             }
 
             if (listTypes) {
                 if (Strings.isNullOrEmpty(typeListFilename)) {
                     typeListFilename = outputDexFile + ".types";
                 }
-                writeReferences(dexBuilder.getTypeReferences(), typeListFilename);
+                for (int i = 0; i < pools.size(); i++) {
+                    writeReferences(pools.get(i).getTypeReferences(),
+                            getOutputFileName(typeListFilename, i));
+                }
             }
-
-            dexBuilder.writeTo(new FileDataStore(new File(outputDexFile)));
         } catch (RuntimeException ex) {
             System.err.println("\nUNEXPECTED TOP-LEVEL EXCEPTION:");
             ex.printStackTrace();
@@ -289,12 +364,25 @@ public class main {
         }
     }
 
+    static String getOutputFileName(String outputName, int i) {
+        if (i == 0) {
+            return outputName;
+        }
+        i++;
+        int dotPos = outputName.lastIndexOf(".");
+        if (dotPos > 0) {
+            return outputName.substring(0, dotPos) + i
+                    + outputName.substring(dotPos, outputName.length());
+        }
+        return outputName + i;
+    }
+
     private static void writeReferences(List<String> references, String filename) {
         PrintWriter writer = null;
         try {
             writer = new PrintWriter(new BufferedWriter(new FileWriter(filename)));
 
-            for (String reference: Ordering.natural().sortedCopy(references)) {
+            for (String reference : Ordering.natural().sortedCopy(references)) {
                 writer.println(reference);
             }
         } catch (IOException ex) {
@@ -309,7 +397,7 @@ public class main {
     private static void getSmaliFilesInDir(@Nonnull File dir, @Nonnull Set<File> smaliFiles) {
         File[] files = dir.listFiles();
         if (files != null) {
-            for(File file: files) {
+            for (File file : files) {
                 if (file.isDirectory()) {
                     getSmaliFilesInDir(file, smaliFiles);
                 } else if (file.getName().endsWith(".smali")) {
@@ -319,25 +407,21 @@ public class main {
         }
     }
 
-    private static boolean assembleSmaliFile(File smaliFile, DexBuilder dexBuilder, boolean verboseErrors,
-                                             boolean printTokens, boolean allowOdex, int apiLevel,
-                                             boolean experimental)
-            throws Exception {
-        CommonTokenStream tokens;
-
-        LexerErrorInterface lexer;
+    private static boolean assembleSmaliFile(
+            File smaliFile, List<BuilderClassDef> classes, boolean verboseErrors,
+            boolean printTokens, boolean allowOdex, Opcodes opcodes,
+            boolean experimental) throws Exception {
 
         FileInputStream fis = new FileInputStream(smaliFile);
         InputStreamReader reader = new InputStreamReader(fis, "UTF-8");
-
-        lexer = new smaliFlexLexer(reader);
-        ((smaliFlexLexer)lexer).setSourceFile(smaliFile);
-        tokens = new CommonTokenStream((TokenSource)lexer);
+        LexerErrorInterface lexer = new smaliFlexLexer(reader);
+        ((smaliFlexLexer) lexer).setSourceFile(smaliFile);
+        CommonTokenStream tokens = new CommonTokenStream((TokenSource) lexer);
 
         if (printTokens) {
             tokens.getTokens();
 
-            for (int i=0; i<tokens.size(); i++) {
+            for (int i = 0; i < tokens.size(); i++) {
                 Token token = tokens.get(i);
                 if (token.getChannel() == smaliParser.HIDDEN) {
                     continue;
@@ -352,7 +436,7 @@ public class main {
         smaliParser parser = new smaliParser(tokens);
         parser.setVerboseErrors(verboseErrors);
         parser.setAllowOdex(allowOdex);
-        parser.setApiLevel(apiLevel, experimental);
+        parser.setApiLevel(opcodes.api, experimental);
 
         smaliParser.smali_file_return result = parser.smali_file();
 
@@ -370,11 +454,11 @@ public class main {
         }
 
         smaliTreeWalker dexGen = new smaliTreeWalker(treeStream);
-        dexGen.setApiLevel(apiLevel, experimental);
+        dexGen.setApiLevel(opcodes.api, experimental);
 
         dexGen.setVerboseErrors(verboseErrors);
-        dexGen.setDexBuilder(dexBuilder);
-        dexGen.smali_file();
+        dexGen.setDexBuilder(DexBuilder.makeDexBuilder(opcodes));
+        classes.add((BuilderClassDef) dexGen.smali_file());
 
         return dexGen.getNumberOfSyntaxErrors() == 0;
     }
@@ -394,7 +478,8 @@ public class main {
         formatter.setWidth(consoleWidth);
 
         formatter.printHelp("java -jar smali.jar [options] [--] [<smali-file>|folder]*",
-                "assembles a set of smali files into a dex file", basicOptions, printDebugOptions?debugOptions:null);
+                "assembles a set of smali files into a dex file",
+                basicOptions, printDebugOptions ? debugOptions : null);
     }
 
     private static void usage() {
@@ -467,8 +552,8 @@ public class main {
                 .create("X");
 
         Option jobsOption = OptionBuilder.withLongOpt("jobs")
-                .withDescription("The number of threads to use. Defaults to the number of cores available, up to a " +
-                        "maximum of 6")
+                .withDescription("The number of threads to use." +
+                        " Defaults to the number of cores available, up to a maximum of 6")
                 .hasArg()
                 .withArgName("NUM_THREADS")
                 .create("j");
@@ -495,12 +580,12 @@ public class main {
         debugOptions.addOption(verboseErrorsOption);
         debugOptions.addOption(printTokensOption);
 
-        for (Object option: basicOptions.getOptions()) {
-            options.addOption((Option)option);
+        for (Object option : basicOptions.getOptions()) {
+            options.addOption((Option) option);
         }
 
-        for (Object option: debugOptions.getOptions()) {
-            options.addOption((Option)option);
+        for (Object option : debugOptions.getOptions()) {
+            options.addOption((Option) option);
         }
     }
 }
