@@ -126,9 +126,9 @@ public abstract class DexWriter<
     protected final StringSection<StringKey, StringRef> stringSection;
     protected final TypeSection<StringKey, TypeKey, TypeRef> typeSection;
     protected final ProtoSection<StringKey, TypeKey, ProtoKey, TypeListKey> protoSection;
-    protected final FieldSection<StringKey, TypeKey, FieldRefKey, FieldKey> fieldSection;
-    protected final MethodSection<StringKey, TypeKey, ProtoKey, MethodRefKey, MethodKey> methodSection;
-    protected final ClassSection<StringKey, TypeKey, TypeListKey, ClassKey, FieldKey, MethodKey, AnnotationSetKey,
+    public final FieldSection<StringKey, TypeKey, FieldRefKey, FieldKey> fieldSection;
+    public final MethodSection<StringKey, TypeKey, ProtoKey, MethodRefKey, MethodKey> methodSection;
+    public final ClassSection<StringKey, TypeKey, TypeListKey, ClassKey, FieldKey, MethodKey, AnnotationSetKey,
             EncodedValue> classSection;
     
     protected final TypeListSection<TypeKey, TypeListKey> typeListSection;
@@ -1042,8 +1042,8 @@ public abstract class DexWriter<
                         instructionWriter.write((SparseSwitchPayload)instruction);
                         break;
                     default:
-                        throw new ExceptionWithContext("Unsupported instruction format: %s",
-                                instruction.getOpcode().format);
+                        throw new ExceptionWithContext("Unsupported instruction format: %s (%s)",
+                                instruction.getOpcode().format, instruction.getOpcode());
                 }
             }
 

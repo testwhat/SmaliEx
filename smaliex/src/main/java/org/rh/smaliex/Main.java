@@ -34,16 +34,17 @@ import java.io.IOException;
 public class Main {
 
     static void printUsage() {
-        System.out.println("Easy oat2dex 0.85");
+        System.out.println("Easy oat2dex 0.86");
         System.out.println("Usage:");
         System.out.println(" java -jar oat2dex.jar [options] <action>");
         System.out.println("[options]");
+        System.out.println(" Api level (for raw odex): -a <integer>");
         System.out.println(" Output folder: -o <folder path>");
         System.out.println(" Print detail : -v");
         System.out.println("<action>");
         System.out.println(" Get dex from boot.oat: boot <boot.oat>");
-        System.out.println(" Get dex from  app oat: <oat-file> <boot-class-folder>");
-        System.out.println(" Get raw odex from oat: odex <oat-file>");
+        System.out.println(" Get dex from oat/odex: <oat/odex file> <boot-class-folder>");
+        System.out.println(" Get raw odex from oat: odex <oat file>");
         System.out.println(" Get raw odex smali   : smali <oat/odex file>");
         System.out.println(" Deodex framework     : devfw [empty or path of /system/framework/]");
     }
@@ -52,18 +53,26 @@ public class Main {
         try {
             mainImpl(args);
         } catch (IOException ex) {
-            System.out.println("Unhandled IOException: " + ex.getMessage());
-            System.exit(1);
+            exit("Unhandled IOException: " + ex.getMessage());
         }
     }
 
     public static void mainImpl(String[] args) throws IOException {
         String outputFolder = null;
+        int apiLevel = org.jf.dexlib2.VersionMap.LOLLIPOP_MR1;
         if (args.length > 2) {
             String opt = args[0];
             while (opt.length() > 1 && opt.charAt(0) == '-') {
                 int shift = 1;
                 switch (opt.charAt(1)) {
+                    case 'a':
+                        try {
+                            apiLevel = Integer.parseInt(args[1]);
+                        } catch (NumberFormatException e) {
+                            System.out.println("Invalid api level: " + args[1]);
+                        }
+                        shift = 2;
+                        break;
                     case 'o':
                         outputFolder = args[1];
                         shift = 2;
@@ -75,10 +84,15 @@ public class Main {
                         System.out.println("Unrecognized option: " + opt);
                 }
                 String[] newArgs = shiftArgs(args, shift);
-                if (newArgs == args || newArgs.length < shift) {
+                if (newArgs != args) {
+                    args = newArgs;
+                    if (newArgs.length < shift) {
+                        break;
+                    }
+                } else {
                     break;
                 }
-                args = newArgs;
+
                 opt = args[0];
             }
         }
@@ -89,7 +103,8 @@ public class Main {
 
         String cmd = args[0];
         if ("devfw".equals(cmd)) {
-            DeodexFrameworkFromDevice.main(shiftArgs(args, 1));
+            DeodexFrameworkFromDevice.deOptimizeAuto(
+                    args.length > 1 ? args[1] : null, outputFolder);
             return;
         }
         if (args.length == 2) {
@@ -104,12 +119,18 @@ public class Main {
                 return;
             }
             if ("smali".equals(cmd)) {
-                OatUtil.smaliRaw(checkExist(args[1]));
+                OatUtil.smaliRaw(checkExist(args[1]), apiLevel);
                 return;
             }
-            checkExist(args[0]);
+            File input = checkExist(args[0]);
             checkExist(args[1]);
-            OatUtil.oat2dex(args[0], args[1], outputFolder);
+            if (MiscUtil.isElf(input)) {
+                OatUtil.oat2dex(args[0], args[1], outputFolder);
+            } else if (MiscUtil.isDex(input)) {
+                DexUtil.odex2dex(args[0], args[1], outputFolder, apiLevel);
+            } else {
+                exit("Unknown input file type: " + input);
+            }
         } else {
             printUsage();
         }
@@ -127,9 +148,13 @@ public class Main {
     static File checkExist(String path) {
         File input = new File(path);
         if (!input.exists()) {
-            System.out.println("Input file not found: " + input);
-            System.exit(1);
+            exit("Input file not found: " + input);
         }
         return input;
+    }
+
+    static void exit(String msg) {
+        System.out.println(msg);
+        System.exit(1);
     }
 }

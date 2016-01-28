@@ -18,7 +18,6 @@ package org.rh.smaliex;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.HashMap;
 
 import org.rh.smaliex.reader.Elf;
 
@@ -28,18 +27,28 @@ public class DeodexFrameworkFromDevice {
     static boolean TEST_MODE = false;
 
     public static void main(String[] args) {
+        String outFolder = MiscUtil.workingDir();
+        String sysFolder = null;
         if (args.length > 0) {
-            String a0 = args[0];
-            if (new File(a0).isDirectory()) {
-                deOptimizeFromFrameworkFolder(a0);
-                return;
+            for (int i = 0; i < args.length; i++) {
+                if ("-o".equals(args[i]) && i + 1 < args.length) {
+                    outFolder = args[i + 1];
+                    break;
+                }
             }
-            if ("t".equals(a0)) {
+            if (args.length > 2) {
+                String byFilePath = args[args.length - 1];
+                if (new File(byFilePath).isDirectory()) {
+                    sysFolder = byFilePath;
+                    return;
+                }
+            }
+            if ("t".equals(args[0])) {
                 TEST_MODE = true;
                 LLog.i("Force test mode, using dalvik-cache");
             }
         }
-        deOptimizeAuto();
+        deOptimizeAuto(sysFolder, outFolder);
     }
 
     public final static String FOLDER_BOOT_JAR_ORIGINAL = "boot-jar-original";
@@ -51,12 +60,25 @@ public class DeodexFrameworkFromDevice {
     public final static String BOOT_OAT = "boot.oat";
     public final static String SYS_FRAMEWORK = "/system/framework/";
 
-    public static void deOptimizeAuto() {
+    public static void deOptimizeAuto(String sysFolder, String outFolder) {
+        if (outFolder == null) {
+            outFolder = MiscUtil.workingDir();
+        } else {
+            MiscUtil.mkdirs(new File(outFolder));
+        }
+        if (sysFolder != null) {
+            deOptimizeFromFrameworkFolder(sysFolder, outFolder);
+        } else {
+            deOptimizeFromDevice(outFolder);
+        }
+    }
+
+    public static void deOptimizeFromDevice(final String outFolder) {
         AdbUtil.runOneTimeAction(new AdbUtil.OneTimeAction() {
 
             @Override
             public void run(Device device) throws Exception {
-                deOptimizeFramework(createFwProvider(device), MiscUtil.workingDir());
+                deOptimizeFramework(createFwProvider(device), outFolder);
             }
 
             @Override
@@ -66,10 +88,10 @@ public class DeodexFrameworkFromDevice {
         });
     }
 
-    public static void deOptimizeFromFrameworkFolder(String sysFwFolder) {
+    public static void deOptimizeFromFrameworkFolder(String sysFwFolder, String outFolder) {
         LLog.i("From " + sysFwFolder);
         try {
-            deOptimizeFramework(createFwProvider(new File(sysFwFolder)), MiscUtil.workingDir());
+            deOptimizeFramework(createFwProvider(new File(sysFwFolder)), outFolder);
         } catch (IOException e) {
             LLog.ex(e);
         }
@@ -147,6 +169,7 @@ public class DeodexFrameworkFromDevice {
     static class FileFwProvider extends FwProvider {
         final File mFolder;
         final boolean mContainsSysFw;
+        final String[] booJars;
 
         FileFwProvider(File folder) {
             mFolder = folder;
@@ -157,6 +180,13 @@ public class DeodexFrameworkFromDevice {
                     break;
                 }
             }
+            File bootLocation = new File(mFolder, autoPath(SYS_FRAMEWORK + "oat/" + mAbiFolder));
+            if (!bootLocation.isDirectory()) {
+                bootLocation = new File(mFolder, autoPath(SYS_FRAMEWORK + mAbiFolder));
+            }
+            java.util.ArrayList<String> jars = OatUtil.getBootJarNames(
+                    MiscUtil.path(bootLocation.getAbsolutePath(), BOOT_OAT), mContainsSysFw);
+            booJars = jars.toArray(new String[jars.size()]);
         }
 
         String autoPath(String path) {
@@ -191,7 +221,9 @@ public class DeodexFrameworkFromDevice {
 
         @Override
         public String[] getBootClassPath() {
-            // TODO get from boot.oat
+            if (booJars.length > 0) {
+                return booJars;
+            }
             String[] bootJars = {
                     "core-libart.jar",
                     "conscrypt.jar",
@@ -243,8 +275,12 @@ public class DeodexFrameworkFromDevice {
         final File RESULT_JAR_DIR = new File(MiscUtil.path(workingDir, FOLDER_FRAMEWORK_JAR_DEX));
         MiscUtil.mkdirs(RESULT_JAR_DIR);
 
-        HashMap<String, String[]> fileLists = new HashMap<>();
-        String[] paths = {device.getBootOatLocation(), device.getOatLocation()};
+        java.util.HashMap<String, String[]> fileLists = new java.util.HashMap<>();
+        String oatLocation = device.getOatLocation();
+        if (!device.isFileExist(oatLocation)) {
+            oatLocation = SYS_FRAMEWORK + device.mAbiFolder;
+        }
+        String[] paths = {device.getBootOatLocation(), oatLocation};
         for (String path : paths) {
             fileLists.put(path, device.getFileList(path));
         }
@@ -261,7 +297,7 @@ public class DeodexFrameworkFromDevice {
                     continue;
                 }
 
-                String oat = "" + f;
+                String oat = oatLocation + f;
                 LLog.i("Pulling " + oat);
                 device.pullFileToFolder(oat, PULL_ODEX_DIR);
 

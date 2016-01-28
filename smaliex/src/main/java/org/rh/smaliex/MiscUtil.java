@@ -30,11 +30,8 @@ package org.rh.smaliex;
 
 import java.io.File;
 import java.io.FilenameFilter;
-import java.util.ArrayList;
-
-import org.jf.dexlib2.Opcodes;
-import org.jf.dexlib2.analysis.ClassPath;
-import org.jf.dexlib2.iface.DexFile;
+import java.io.IOException;
+import java.io.RandomAccessFile;
 
 public class MiscUtil {
 
@@ -110,14 +107,6 @@ public class MiscUtil {
         return path.substring(0, path.lastIndexOf(java.io.File.separatorChar) + 1);
     }
 
-    public static ClassPath getClassPath(String path, Opcodes opcodes, String ext) {
-        ArrayList<DexFile> dexFiles = new ArrayList<>();
-        for (File f : MiscUtil.getFiles(path, ext)) {
-            dexFiles.addAll(DexUtil.loadMultiDex(f, opcodes));
-        }
-        return new ClassPath(dexFiles, false, opcodes.artVersion);
-    }
-
     public static String workingDir() {
         return System.getProperty("user.dir");
     }
@@ -126,7 +115,10 @@ public class MiscUtil {
         StringBuilder sb = new StringBuilder(64);
         int last = path.length - 1;
         for (int i = 0; i < last; i++) {
-            sb.append(path[i]).append(File.separator);
+            sb.append(path[i]);
+            if (!path[i].endsWith(File.separator)) {
+                sb.append(File.separator);
+            }
         }
         sb.append(path[last]);
         return sb.toString();
@@ -136,5 +128,27 @@ public class MiscUtil {
         if (!dir.exists() && !dir.mkdirs()) {
             LLog.e("Failed to create directory " + dir);
         }
+    }
+
+    static boolean checkFourBytes(File file, long fourBytes) {
+        long n = 0;
+        try (RandomAccessFile raf = new RandomAccessFile(file, "r")) {
+            n = raf.readInt();
+        } catch (IOException ex) {
+            LLog.ex(ex);
+        }
+        return n == fourBytes;
+    }
+
+    public static boolean isZip(File file) {
+        return checkFourBytes(file, 0x504B0304);
+    }
+
+    public static boolean isDex(File file) {
+        return checkFourBytes(file, 0x6465780A);
+    }
+
+    public static boolean isElf(File file) {
+        return checkFourBytes(file, 0x7F454C46);
     }
 }

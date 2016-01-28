@@ -72,6 +72,8 @@ public final class Device {
 
     private String mName;
 
+    public boolean logError = true;
+
     /** Returns the serial number of the device. */
     @Nonnull
     public String getSerialNumber() {
@@ -201,13 +203,13 @@ public final class Device {
         Future<String> future = mPropFetcher.getProperty(name);
         try {
             return future.get(1000, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException | ExecutionException | java.util.concurrent.TimeoutException e) {
-            e.printStackTrace();
-            // ignore
+        } catch (InterruptedException e) {
+            if (logError) e.printStackTrace();
+        } catch (ExecutionException e) {
+            if (logError) Log.d(LOG_TAG, "Get prop " + name + " failed " + e);
+        } catch (java.util.concurrent.TimeoutException e) {
+            if (logError) Log.d(LOG_TAG, "Get prop " + name + " timeout " + e);
         }
-        // ignore
-        // ignore
-
         return null;
     }
 
@@ -297,7 +299,7 @@ public final class Device {
      * Returns a {@link SyncService} object to push / pull files to and from the device.
      *
      * @return <code>null</code> if the SyncService couldn't be created. This can happen if adb
-     *            refuse to open the connection because the {@link IDevice} is invalid
+     *            refuse to open the connection because the {@link Device} is invalid
      *            (or got disconnected).
      * @throws TimeoutException in case of timeout on the connection.
      * @throws AdbCommandRejectedException if adb rejects the command
@@ -308,7 +310,7 @@ public final class Device {
         SyncService syncService = new SyncService(AndroidDebugBridge.getSocketAddress(), this);
         if (syncService.openSync()) {
             return syncService;
-         }
+        }
 
         return null;
     }

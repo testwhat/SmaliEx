@@ -33,9 +33,23 @@ package org.jf.dexlib2;
 
 public class VersionMap {
     public static final int NO_VERSION = -1;
+    public static final int KITKAT = 19;
+    public static final int LOLLIPOP = 21; // Android 5.0
+    public static final int LOLLIPOP_MR1 = 22; // Android 5.1
+    public static final int M = 23; // Android 6.0
+
+    public static final int DEFAULT = KITKAT;
 
     public static int mapArtVersionToApi(int artVersion) {
-        // TODO: implement this
+        if (artVersion >= 64) { // { '0', '6', '4', '\0' };
+            return M;
+        }
+        if (artVersion >= 45) { // { '0', '4', '5', '\0' };
+            return LOLLIPOP_MR1;
+        }
+        if (artVersion >= 39) { // { '0', '3', '9', '\0' };
+            return LOLLIPOP;
+        }
         return 20;
     }
 

@@ -40,7 +40,6 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 
 import org.rh.smaliex.LLog;
-import org.rh.smaliex.MiscUtil;
 
 public class Oat {
     public final static String SECTION_RODATA = ".rodata";
@@ -99,7 +98,7 @@ public class Oat {
                 LLog.e(String.format("Invalid art magic %c%c%c", magic_[0], magic_[1], magic_[2]));
             }
             r.readBytes(version_);
-            artVersion = MiscUtil.toInt(new String(version_));
+            artVersion = org.rh.smaliex.MiscUtil.toInt(new String(version_));
 
             adler32_checksum_ = r.readInt();
             instruction_set_ = r.readInt();
@@ -296,17 +295,6 @@ public class Oat {
                 reader.readIntArray(odf.methods_offsets_);
             }
         }
-    }
-
-    public int guessApiLevel() {
-        // See runtime/oat kOatVersion
-        // Android 5.0 { '0', '3', '9', '\0' };
-        // Android 5.1 { '0', '4', '5', '\0' };
-        // Android M   { '0', '6', '4', '\0' };
-        if (mHeader.version_[1] >= '6') {
-            return 23;
-        }
-        return mHeader.version_[1] < '4' ? 21 : 22;
     }
 
     public int getArtVersion() {

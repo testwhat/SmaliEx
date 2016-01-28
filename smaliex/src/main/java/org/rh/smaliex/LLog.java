@@ -59,9 +59,9 @@ public class LLog {
             System.out.println(time() + " " + str);
         }
     };
-
+    
     static P sOut = sStdOut;
-
+        
     public static void e(String msg) {
         sOut.println(msg);
     }

@@ -62,6 +62,7 @@ public class ClassPath {
     @Nonnull private final TypeProto unknownClass;
     @Nonnull private HashMap<String, ClassDef> availableClasses = Maps.newHashMap();
     private final boolean checkPackagePrivateAccess;
+    ArrayList<DexFile> additionalDexFiles;
     public final int oatVersion;
 
     public static final int NOT_ART = -1;
@@ -125,17 +126,35 @@ public class ClassPath {
         loadPrimitiveType("L");
 
         for (DexFile dexFile: dexFiles) {
-            addDex(dexFile);
+            addDex(dexFile, false);
         }
     }
 
-    public final void addDex(DexFile dexFile) {
+    public void addDex(DexFile dexFile, boolean additional) {
         for (ClassDef classDef : dexFile.getClasses()) {
             ClassDef prev = availableClasses.get(classDef.getType());
             if (prev == null) {
                 availableClasses.put(classDef.getType(), classDef);
             }
         }
+        if (additional) {
+            if (additionalDexFiles == null) {
+                additionalDexFiles = Lists.newArrayList();
+            }
+            additionalDexFiles.add(dexFile);
+        }
+    }
+
+    public void reset() {
+        if (additionalDexFiles != null) {
+            for (DexFile dexFile : additionalDexFiles) {
+                for (ClassDef classDef : dexFile.getClasses()) {
+                    availableClasses.remove(classDef.getType());
+                }
+            }
+            additionalDexFiles.clear();
+        }
+        loadedClasses = CacheBuilder.newBuilder().build(classLoader);
     }
 
     private void loadPrimitiveType(String type) {
