@@ -273,7 +273,7 @@ public class OatUtil {
             }
 
             if (outputFile.exists()) {
-                outputFile.delete();
+                MiscUtil.delete(outputFile);
                 //File old = outputFile;
                 //outputFile = MiscUtil.appendTail(outputFile, "-deodex");
                 //LLog.i(old + " already existed, use name " + outputFile.getName());

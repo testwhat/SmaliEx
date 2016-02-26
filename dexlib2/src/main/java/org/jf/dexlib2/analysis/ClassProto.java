@@ -31,15 +31,20 @@
 
 package org.jf.dexlib2.analysis;
 
-import com.google.common.base.Predicates;
-import com.google.common.base.Supplier;
-import com.google.common.base.Suppliers;
-import com.google.common.collect.FluentIterable;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.TreeSet;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
 import org.jf.dexlib2.AccessFlags;
+import org.jf.dexlib2.Opcode;
 import org.jf.dexlib2.analysis.util.TypeProtoUtils;
+import org.jf.dexlib2.dexbacked.DexBackedField;
 import org.jf.dexlib2.iface.ClassDef;
 import org.jf.dexlib2.iface.Field;
 import org.jf.dexlib2.iface.Method;
@@ -49,16 +54,13 @@ import org.jf.dexlib2.immutable.ImmutableMethod;
 import org.jf.util.ExceptionWithContext;
 import org.jf.util.SparseArray;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.TreeSet;
-import org.jf.dexlib2.Opcode;
-import org.jf.dexlib2.dexbacked.DexBackedField;
+import com.google.common.base.Predicates;
+import com.google.common.base.Supplier;
+import com.google.common.base.Suppliers;
+import com.google.common.collect.FluentIterable;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 /**
  * A class "prototype". This contains things like the interfaces, the superclass, the vtable and the instance fields
@@ -68,6 +70,7 @@ public class ClassProto implements TypeProto {
     @Nonnull protected final ClassPath classPath;
     @Nonnull protected final String type;
     @Nonnull private final Supplier<SparseArray<FieldReference>> instanceFieldsSupplier;
+    @Nonnull private final FieldOffsetCalculator fieldOffsetCalculator;
 
     protected boolean vtableFullyResolved = true;
     protected boolean interfacesFullyResolved = true;
@@ -79,9 +82,9 @@ public class ClassProto implements TypeProto {
         }
         this.classPath = classPath;
         this.type = type;
-        instanceFieldsSupplier
-                = Suppliers.memoize(classPath.apiLevel < Opcode.LOLLIPOP
-                                ? new DalvikIFieldSupplier(this) : new ArtIFieldSupplier(this));
+        fieldOffsetCalculator = classPath.apiLevel < Opcode.LOLLIPOP
+                ? new DalvikIFieldSupplier(this) : new ArtIFieldSupplier(this);
+        instanceFieldsSupplier = Suppliers.memoize(fieldOffsetCalculator);
     }
 
     @Override public String toString() { return type; }
@@ -368,12 +371,23 @@ public class ClassProto implements TypeProto {
         return instanceFieldsSupplier.get();
     }
 
+    public static void dump(TypeProto type) {
+        if (type instanceof ClassProto) {
+            ((ClassProto) type).dump();
+        }
+    }
+
+    public void dump() {
+        fieldOffsetCalculator.debugOffset(null, getInstanceFields());
+        debugVtable(null, getVtable());
+    }
+
     void debugVtable(String className, List<Method> vtable) {
         final String type = getClassDef().getType();
-        if (!type.equals(className)) {
+        if (className != null && !type.equals(className)) {
             return;
         }
-        System.out.println("## Vtable of " + className);
+        System.out.println("## Vtable of " + type);
 
         for (int i = 0; i < vtable.size(); i++) {
             Method m = vtable.get(i);
@@ -414,19 +428,19 @@ public class ClassProto implements TypeProto {
         }
     }
 
-    abstract static class FieldOffsetCalulator implements Supplier<SparseArray<FieldReference>> {
+    abstract static class FieldOffsetCalculator implements Supplier<SparseArray<FieldReference>> {
         final ClassProto classProto;
         int initialFieldOffset;
 
-        FieldOffsetCalulator(ClassProto cProto) {
+        FieldOffsetCalculator(ClassProto cProto) {
             classProto = cProto;
         }
 
         void debugOffset(String className, SparseArray<FieldReference> fields) {
-            if (!classProto.type.equals(className)) {
+            if (className != null && !classProto.type.equals(className)) {
                 return;
             }
-            System.out.println("## Field offset of " + className);
+            System.out.println("## Field offset of " + classProto.type);
             ArrayList<ClassProto> classHierarchy = new ArrayList<>();
             ClassProto cp = classProto;
             for (String superclassType = cp.getSuperclass(); superclassType != null;
@@ -450,12 +464,11 @@ public class ClassProto implements TypeProto {
                         + Integer.toHexString(offset) + ") "
                         + ":" + f.getType() + " " + f.getName());
             }
-            System.exit(0);
         }
 
         void debugFieldsOrder(String className, List<Field> fields) {
-            if (classProto.type.equals(className)) {
-                System.out.println(" ===== " + className + " " + fields.size() + " =====");
+            if (className != null && classProto.type.equals(className)) {
+                System.out.println(" ===== " + classProto.type + " " + fields.size() + " =====");
                 for (int i = 0; i < fields.size(); i++) {
                     Field f = fields.get(i);
                     System.out.println(" #" + i + "# " + f.getType() + " " + f.getName());
@@ -464,7 +477,7 @@ public class ClassProto implements TypeProto {
         }
     }
 
-    static class ArtIFieldSupplier extends FieldOffsetCalulator {
+    static class ArtIFieldSupplier extends FieldOffsetCalculator {
         final Comparator<Field> fieldComparator;
 
         ArtIFieldSupplier(ClassProto clsProto) {
@@ -584,6 +597,7 @@ public class ClassProto implements TypeProto {
             shuffleForward(2, data);
             shuffleForward(1, data);
             assert fields.isEmpty();
+            //debugFieldsOrder(null, fields);
             // See runtime/mirror/class.h
             classProto.objectSize = data.fieldOffset; // not for IsVariableSize (String and Array)
             return instanceFields;
@@ -641,7 +655,7 @@ public class ClassProto implements TypeProto {
             }
 
             @Override
-            public int compareTo(FieldGap rhs) {
+            public int compareTo(@Nonnull FieldGap rhs) {
                 // kOatVersion 064+
                 // Ensure order of field gaps
                 // https://android-review.googlesource.com/#/c/133351/
@@ -856,9 +870,9 @@ public class ClassProto implements TypeProto {
                 return 0;
             }
         }
-    };
+    }
 
-    static class DalvikIFieldSupplier extends FieldOffsetCalulator {
+    static class DalvikIFieldSupplier extends FieldOffsetCalculator {
 
         public DalvikIFieldSupplier(ClassProto clsProto) {
             super(clsProto);
@@ -990,13 +1004,11 @@ public class ClassProto implements TypeProto {
 
                 // Add padding to align the wide fields, if needed
                 if (fieldTypes[i] == WIDE && !gotDouble) {
-                    if (!gotDouble) {
-                        if (fieldOffset % 8 != 0) {
-                            assert fieldOffset % 8 == 4;
-                            fieldOffset += 4;
-                        }
-                        gotDouble = true;
+                    if (fieldOffset % 8 != 0) {
+                        assert fieldOffset % 8 == 4;
+                        fieldOffset += 4;
                     }
+                    gotDouble = true;
                 }
 
                 instanceFields.append(fieldOffset, field);

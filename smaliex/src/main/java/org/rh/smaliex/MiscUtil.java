@@ -117,6 +117,12 @@ public class MiscUtil {
         }
     }
 
+    public static void delete(File file) {
+        if (!file.delete()) {
+            LLog.e("Failed to delete " + file);
+        }
+    }
+
     static boolean checkFourBytes(File file, long fourBytes) {
         long n = 0;
         try (RandomAccessFile raf = new RandomAccessFile(file, "r")) {

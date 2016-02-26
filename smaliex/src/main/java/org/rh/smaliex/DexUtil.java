@@ -140,7 +140,7 @@ public class DexUtil {
 
         Opcodes opcodes = new Opcodes(apiLevel);
         File input = new File(odex);
-        DexFile odexFile = DexUtil.loadSingleDex(input, opcodes);
+        DexFile odexFile = loadSingleDex(input, opcodes);
         ODexRewriter rewriter = getODexRewriter(bootClassPath, opcodes);
         if (LLog.VERBOSE) {
             rewriter.setFailInfoLocation(outputFolder.getAbsolutePath());
@@ -158,7 +158,7 @@ public class DexUtil {
     public static ClassPath getClassPath(String path, Opcodes opcodes, String ext) {
         ArrayList<DexFile> dexFiles = new ArrayList<>();
         for (File f : MiscUtil.getFiles(path, ext)) {
-            dexFiles.addAll(DexUtil.loadMultiDex(f, opcodes));
+            dexFiles.addAll(loadMultiDex(f, opcodes));
         }
         return new ClassPath(dexFiles, opcodes.apiLevel);
     }
