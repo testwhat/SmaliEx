@@ -34,9 +34,11 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.Serializable;
 import java.lang.ref.SoftReference;
 import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -51,11 +53,15 @@ import org.jf.dexlib2.VersionMap;
 import org.jf.dexlib2.analysis.AnalysisException;
 import org.jf.dexlib2.analysis.ClassPath;
 import org.jf.dexlib2.analysis.MethodAnalyzer;
+import org.jf.dexlib2.analysis.UnresolvedClassException;
+import org.jf.dexlib2.analysis.reflection.ReflectionClassDef;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile;
+import org.jf.dexlib2.iface.ClassDef;
 import org.jf.dexlib2.iface.DexFile;
 import org.jf.dexlib2.iface.Method;
 import org.jf.dexlib2.iface.MethodImplementation;
 import org.jf.dexlib2.iface.instruction.Instruction;
+import org.jf.dexlib2.immutable.ImmutableDexFile;
 import org.jf.dexlib2.rewriter.DexRewriter;
 import org.jf.dexlib2.rewriter.MethodImplementationRewriter;
 import org.jf.dexlib2.rewriter.MethodRewriter;
@@ -63,6 +69,11 @@ import org.jf.dexlib2.rewriter.Rewriter;
 import org.jf.dexlib2.rewriter.RewriterModule;
 import org.jf.dexlib2.rewriter.Rewriters;
 import org.jf.util.IndentingWriter;
+
+import com.google.common.cache.CacheBuilder;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 public class DexUtil {
     public static Opcodes DEFAULT_OPCODES;
@@ -80,10 +91,6 @@ public class DexUtil {
     public static DexBackedDexFile loadSingleDex(File file, Opcodes opc) throws IOException {
         return new DexBackedDexFile(getDefaultOpCodes(opc),
                 java.nio.file.Files.readAllBytes(file.toPath()));
-    }
-
-    public static List<DexBackedDexFile> loadMultiDex(File file) {
-        return loadMultiDex(file, null);
     }
 
     public static List<DexBackedDexFile> loadMultiDex(File file, Opcodes opc) {
@@ -138,7 +145,7 @@ public class DexUtil {
         File outputFolder = new File(outFolder == null ? MiscUtil.workingDir() : outFolder);
         MiscUtil.mkdirs(outputFolder);
 
-        Opcodes opcodes = new Opcodes(apiLevel);
+        Opcodes opcodes = Opcodes.forApi(apiLevel);
         File input = new File(odex);
         DexFile odexFile = DexUtil.loadSingleDex(input, opcodes);
         ODexRewriter rewriter = getODexRewriter(bootClassPath, opcodes);
@@ -155,12 +162,12 @@ public class DexUtil {
         LLog.i("Output to " + outputFile);
     }
 
-    public static ClassPath getClassPath(String path, Opcodes opcodes, String ext) {
+    public static ClassPathEx getClassPath(String path, Opcodes opcodes, String ext) {
         ArrayList<DexFile> dexFiles = new ArrayList<>();
         for (File f : MiscUtil.getFiles(path, ext)) {
             dexFiles.addAll(DexUtil.loadMultiDex(f, opcodes));
         }
-        return new ClassPath(dexFiles, opcodes.api);
+        return new ClassPathEx(dexFiles, opcodes.artVersion);
     }
 
     public static class ByteData {
@@ -327,6 +334,65 @@ public class DexUtil {
         return rewriter;
     }
 
+    public static class ClassPathEx extends ClassPath {
+        @Nonnull
+        private HashMap<String, ClassDef> availableClasses = Maps.newHashMap();
+        ArrayList<DexFile> additionalDexFiles;
+
+        public ClassPathEx(@Nonnull Iterable<? extends DexFile> classPath, int oatVersion) {
+            super(false, oatVersion);
+            DexFile basicClasses = new ImmutableDexFile(Opcodes.forApi(VersionMap.DEFAULT),
+                    ImmutableSet.of(
+                            new ReflectionClassDef(Class.class),
+                            new ReflectionClassDef(Cloneable.class),
+                            new ReflectionClassDef(Object.class),
+                            new ReflectionClassDef(Serializable.class),
+                            new ReflectionClassDef(String.class),
+                            new ReflectionClassDef(Throwable.class)));
+            addDex(basicClasses, false);
+            for (DexFile dexFile : classPath) {
+                addDex(dexFile, false);
+            }
+        }
+
+        public void addDex(DexFile dexFile, boolean additional) {
+            for (ClassDef classDef : dexFile.getClasses()) {
+                ClassDef prev = availableClasses.get(classDef.getType());
+                if (prev == null) {
+                    availableClasses.put(classDef.getType(), classDef);
+                }
+            }
+            if (additional) {
+                if (additionalDexFiles == null) {
+                    additionalDexFiles = Lists.newArrayList();
+                }
+                additionalDexFiles.add(dexFile);
+            }
+        }
+
+        public void reset() {
+            if (additionalDexFiles != null) {
+                for (DexFile dexFile : additionalDexFiles) {
+                    for (ClassDef classDef : dexFile.getClasses()) {
+                        availableClasses.remove(classDef.getType());
+                    }
+                }
+                additionalDexFiles.clear();
+            }
+            loadedClasses = CacheBuilder.newBuilder().build(classLoader);
+        }
+
+        @Nonnull
+        @Override
+        public ClassDef getClassDef(String type) {
+            ClassDef ret = availableClasses.get(type);
+            if (ret == null) {
+                throw new UnresolvedClassException("Could not resolve class %s", type);
+            }
+            return ret;
+        }
+    }
+
     public static class ODexRewriter extends DexRewriter {
         final ODexRewriterModule mRewriterModule;
 
@@ -380,7 +446,7 @@ public class DexUtil {
 
     // Covert optimized dex in oat to normal dex
     static class ODexRewriterModule extends RewriterModule {
-        private final ClassPath mClassPath;
+        private final ClassPathEx mClassPath;
         private Method mCurrentMethod;
         private String mFailInfoLocation;
 

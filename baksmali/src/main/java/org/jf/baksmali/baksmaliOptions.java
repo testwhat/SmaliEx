@@ -81,7 +81,10 @@ public class baksmaliOptions {
     public InlineMethodResolver inlineResolver = null;
     public int registerInfo = 0;
     public ClassPath classPath = null;
-    public int jobs = -1;
+    public int jobs = Runtime.getRuntime().availableProcessors();
+    public boolean disassemble = true;
+    public boolean dump = false;
+    public String dumpFileName = null;
 
     public SyntheticAccessorResolver syntheticAccessorResolver = null;
 

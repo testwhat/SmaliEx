@@ -48,6 +48,7 @@ import org.jf.dexlib2.DexFileFactory;
 import org.jf.dexlib2.analysis.InlineMethodResolver;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile;
 import org.jf.dexlib2.dexbacked.DexBackedOdexFile;
+import org.jf.dexlib2.iface.DexFile;
 import org.jf.util.ConsoleUtil;
 import org.jf.util.SmaliHelpFormatter;
 
@@ -90,6 +91,45 @@ public class main {
     }
 
     /**
+     * A more programmatic-friendly entry point for baksmali
+     *
+     * @param options a baksmaliOptions object with the options to run baksmali with
+     * @param inputDexFile The DexFile to disassemble
+     * @return true if disassembly completed with no errors, or false if errors were encountered
+     */
+    public static boolean run(@Nonnull baksmaliOptions options, @Nonnull DexFile inputDexFile) throws IOException {
+        if (options.bootClassPathEntries.isEmpty() &&
+                (options.deodex || options.registerInfo != 0 || options.normalizeVirtualMethods)) {
+            if (inputDexFile instanceof DexBackedOdexFile) {
+                options.bootClassPathEntries = ((DexBackedOdexFile)inputDexFile).getDependencies();
+            } else {
+                options.bootClassPathEntries = getDefaultBootClassPathForApi(options.apiLevel,
+                        options.experimental);
+            }
+        }
+
+        if (options.customInlineDefinitions == null && inputDexFile instanceof DexBackedOdexFile) {
+            options.inlineResolver =
+                    InlineMethodResolver.createInlineMethodResolver(
+                            ((DexBackedOdexFile)inputDexFile).getOdexVersion());
+        }
+
+        boolean errorOccurred = false;
+        if (options.disassemble) {
+            errorOccurred = !baksmali.disassembleDexFile(inputDexFile, options);
+        }
+
+        if (options.dump) {
+            if (!(inputDexFile instanceof DexBackedDexFile)) {
+                throw new IllegalArgumentException("Annotated hex-dumps require a DexBackedDexFile");
+            }
+            dump.dump((DexBackedDexFile)inputDexFile, options.dumpFileName, options.apiLevel);
+        }
+
+        return !errorOccurred;
+    }
+
+    /**
      * Run!
      */
     public static void main(String[] args) throws IOException {
@@ -107,11 +147,6 @@ public class main {
         }
 
         baksmaliOptions options = new baksmaliOptions();
-
-        boolean disassemble = true;
-        boolean doDump = false;
-        String dumpFileName = null;
-        boolean setBootClassPath = false;
 
         String[] remainingArgs = commandLine.getArgs();
         Option[] clOptions = commandLine.getOptions();
@@ -193,7 +228,6 @@ public class main {
                     if (bcp != null && bcp.charAt(0) == ':') {
                         options.addExtraClassPath(bcp);
                     } else {
-                        setBootClassPath = true;
                         options.setBootClassPath(bcp);
                     }
                     break;
@@ -229,11 +263,11 @@ public class main {
                     options.normalizeVirtualMethods = true;
                     break;
                 case 'N':
-                    disassemble = false;
+                    options.disassemble = false;
                     break;
                 case 'D':
-                    doDump = true;
-                    dumpFileName = commandLine.getOptionValue("D");
+                    options.dump = true;
+                    options.dumpFileName = commandLine.getOptionValue("D");
                     break;
                 case 'I':
                     options.ignoreErrors = true;
@@ -251,18 +285,10 @@ public class main {
             return;
         }
 
-        if (options.jobs <= 0) {
-            options.jobs = Runtime.getRuntime().availableProcessors();
-            if (options.jobs > 6) {
-                options.jobs = 6;
-            }
-        }
-
-        String inputDexFileName = remainingArgs[0];
-
-        File dexFileFile = new File(inputDexFileName);
+        String inputDexPath = remainingArgs[0];
+        File dexFileFile = new File(inputDexPath);
         if (!dexFileFile.exists()) {
-            System.err.println("Can't find the file " + inputDexFileName);
+            System.err.println("Can't find the file " + inputDexPath);
             System.exit(1);
         }
 
@@ -272,7 +298,7 @@ public class main {
 
         for (int i = 0; i < dexFiles.size(); i++) {
             DexBackedDexFile dexFile = dexFiles.get(i);
-            if (dexFile.isOdexFile()) {
+            if (dexFile.hasOdexOpcodes()) {
                 if (!options.deodex) {
                     System.err.println("Warning: You are disassembling an odex file without deodexing it. You");
                     System.err.println("won't be able to re-assemble the results unless you deodex it with the -x");
@@ -283,36 +309,19 @@ public class main {
                 options.deodex = false;
             }
 
-            if (!setBootClassPath && (options.deodex || options.registerInfo != 0
-                    || options.normalizeVirtualMethods)) {
-                if (dexFile instanceof DexBackedOdexFile) {
-                    options.bootClassPathEntries = ((DexBackedOdexFile) dexFile).getDependencies();
-                } else {
-                    options.bootClassPathEntries = getDefaultBootClassPathForApi(options.apiLevel,
-                            options.experimental);
-                }
-            }
-
-            if (options.customInlineDefinitions == null && dexFile instanceof DexBackedOdexFile) {
-                options.inlineResolver =
-                        InlineMethodResolver.createInlineMethodResolver(
-                                ((DexBackedOdexFile) dexFile).getOdexVersion());
-            }
-
-            boolean errorOccurred = false;
-            if (disassemble) {
-                errorOccurred = !baksmali.disassembleDexFile(dexFile, options);
-            }
-
-            if (doDump) {
-                if (dumpFileName == null) {
-                    dumpFileName = commandLine.getOptionValue(inputDexFileName
+            if (options.dump) {
+                if (options.dumpFileName == null) {
+                    options.dumpFileName = commandLine.getOptionValue(inputDexPath
                             + (i > 0 ? (i + 1) : "") + ".dump");
                 }
-                dump.dump(dexFile, dumpFileName, options.apiLevel, options.experimental);
             }
 
-            if (errorOccurred) {
+            try {
+                if (!run(options, dexFile)) {
+                    System.exit(1);
+                }
+            } catch (IllegalArgumentException ex) {
+                System.err.println(ex.getMessage());
                 System.exit(1);
             }
         }

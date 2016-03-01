@@ -172,6 +172,20 @@ import static org.jf.smali.smaliParser.*;
     public String getErrorHeader(InvalidToken token) {
         return getSourceName()+"["+ token.getLine()+","+token.getCharPositionInLine()+"]";
     }
+
+    public void reset(CharSequence charSequence, int start, int end, int initialState) {
+        zzReader = BlankReader.INSTANCE;
+        zzBuffer = new char[charSequence.length()];
+        for (int i=0; i<charSequence.length(); i++) {
+            zzBuffer[i] = charSequence.charAt(i);
+        }
+
+        yychar = zzCurrentPos = zzMarkedPos = zzStartRead = start;
+        zzEndRead = end;
+        zzAtBOL = true;
+        zzAtEOF = false;
+        yybegin(initialState);
+    }
 %}
 
 HexPrefix = 0 [xX]
@@ -217,13 +231,14 @@ PrimitiveType = [ZBSCIJFD]
 
 ClassDescriptor = L ({SimpleName} "/")* {SimpleName} ;
 
-ArrayDescriptor = "[" + ({PrimitiveType} | {ClassDescriptor})
+ArrayPrefix = "["+
 
-Type = {PrimitiveType} | {ClassDescriptor} | {ArrayDescriptor}
+Type = {PrimitiveType} | {ClassDescriptor} | {ArrayPrefix} ({ClassDescriptor} | {PrimitiveType})
 
 
 %state PARAM_LIST_OR_ID
 %state PARAM_LIST
+%state ARRAY_DESCRIPTOR
 %state STRING
 %state CHAR
 
@@ -292,17 +307,17 @@ Type = {PrimitiveType} | {ClassDescriptor} | {ArrayDescriptor}
 }
 
 <PARAM_LIST_OR_ID> {
-    {PrimitiveType} { return newToken(PRIMITIVE_TYPE); }
-    [^] { yypushback(1); yybegin(YYINITIAL); return newToken(PARAM_LIST_OR_ID_END); }
-    <<EOF>> { yybegin(YYINITIAL); return newToken(PARAM_LIST_OR_ID_END); }
+    {PrimitiveType} { return newToken(PARAM_LIST_OR_ID_PRIMITIVE_TYPE); }
+    [^] { yypushback(1); yybegin(YYINITIAL); }
+    <<EOF>> { yybegin(YYINITIAL); }
 }
 
 <PARAM_LIST> {
     {PrimitiveType} { return newToken(PRIMITIVE_TYPE); }
     {ClassDescriptor} { return newToken(CLASS_DESCRIPTOR); }
-    {ArrayDescriptor} { return newToken(ARRAY_DESCRIPTOR); }
-    [^] { yypushback(1); yybegin(YYINITIAL); return newToken(PARAM_LIST_END); }
-    <<EOF>> { yybegin(YYINITIAL); return newToken(PARAM_LIST_END); }
+    {ArrayPrefix} { return newToken(ARRAY_TYPE_PREFIX); }
+    [^] { yypushback(1); yybegin(YYINITIAL);}
+    <<EOF>> { yybegin(YYINITIAL);}
 }
 
 <STRING> {
@@ -614,23 +629,36 @@ Type = {PrimitiveType} | {ClassDescriptor} | {ArrayDescriptor}
     }
 }
 
+<ARRAY_DESCRIPTOR> {
+   {PrimitiveType} { yybegin(YYINITIAL); return newToken(PRIMITIVE_TYPE); }
+   {ClassDescriptor} { yybegin(YYINITIAL); return newToken(CLASS_DESCRIPTOR); }
+   [^] { yypushback(1); yybegin(YYINITIAL); }
+   <<EOF>> { yybegin(YYINITIAL); }
+}
+
 /*Types*/
 <YYINITIAL> {
     {PrimitiveType} { return newToken(PRIMITIVE_TYPE); }
     V { return newToken(VOID_TYPE); }
     {ClassDescriptor} { return newToken(CLASS_DESCRIPTOR); }
-    {ArrayDescriptor} { return newToken(ARRAY_DESCRIPTOR); }
+
+    // we have to drop into a separate state so that we don't parse something like
+    // "[I->" as "[" followed by "I-" as a SIMPLE_NAME
+    {ArrayPrefix} {
+      yybegin(ARRAY_DESCRIPTOR);
+      return newToken(ARRAY_TYPE_PREFIX);
+    }
 
     {PrimitiveType} {PrimitiveType}+ {
+        // go back and re-lex it as a PARAM_LIST_OR_ID
         yypushback(yylength());
         yybegin(PARAM_LIST_OR_ID);
-        return newToken(PARAM_LIST_OR_ID_START);
     }
 
     {Type} {Type}+ {
+        // go back and re-lex it as a PARAM_LIST
         yypushback(yylength());
         yybegin(PARAM_LIST);
-        return newToken(PARAM_LIST_START);
     }
 
     {SimpleName} { return newToken(SIMPLE_NAME); }

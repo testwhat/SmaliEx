@@ -39,7 +39,7 @@ tokens {
   ANNOTATION_DIRECTIVE;
   ANNOTATION_VISIBILITY;
   ARRAY_DATA_DIRECTIVE;
-  ARRAY_DESCRIPTOR;
+  ARRAY_TYPE_PREFIX;
   ARROW;
   BOOL_LITERAL;
   BYTE_LITERAL;
@@ -133,10 +133,7 @@ tokens {
   OPEN_BRACE;
   OPEN_PAREN;
   PACKED_SWITCH_DIRECTIVE;
-  PARAM_LIST_END;
-  PARAM_LIST_START;
-  PARAM_LIST_OR_ID_END;
-  PARAM_LIST_OR_ID_START;
+  PARAM_LIST_OR_ID_PRIMITIVE_TYPE;
   PARAMETER_DIRECTIVE;
   POSITIVE_INTEGER_LITERAL;
   PRIMITIVE_TYPE;
@@ -377,16 +374,12 @@ import org.jf.dexlib2.Opcodes;
       case '[':
       {
         int i = typeStartIndex;
-            while (str.charAt(++i) == '[');
+        while (str.charAt(++i) == '[');
 
-            if (str.charAt(i++) == 'L') {
-                while (str.charAt(i++) != ';');
-        }
-
-            token.setType(ARRAY_DESCRIPTOR);
-            token.setText(str.substring(typeStartIndex, i));
-            token.setStopIndex(baseToken.getStartIndex() + i - 1);
-            break;
+        token.setType(ARRAY_TYPE_PREFIX);
+        token.setText(str.substring(typeStartIndex, i));
+        token.setStopIndex(baseToken.getStartIndex() + i - 1);
+        break;
       }
       default:
         throw new RuntimeException(String.format("Invalid character '\%c' in param list \"\%s\" at position \%d", str.charAt(typeStartIndex), str, typeStartIndex));
@@ -541,7 +534,7 @@ registers_directive
     };
 
 param_list_or_id
-  : PARAM_LIST_OR_ID_START PRIMITIVE_TYPE+ PARAM_LIST_OR_ID_END;
+  : PARAM_LIST_OR_ID_PRIMITIVE_TYPE+;
 
 /*identifiers are much more general than most languages. Any of the below can either be
 the indicated type OR an identifier, depending on the context*/
@@ -598,25 +591,30 @@ method_prototype
   : OPEN_PAREN param_list CLOSE_PAREN type_descriptor
     -> ^(I_METHOD_PROTOTYPE[$start, "I_METHOD_PROTOTYPE"] ^(I_METHOD_RETURN_TYPE type_descriptor) param_list?);
 
+param_list_or_id_primitive_type
+  : PARAM_LIST_OR_ID_PRIMITIVE_TYPE -> PRIMITIVE_TYPE[$PARAM_LIST_OR_ID_PRIMITIVE_TYPE];
+
 param_list
-  : PARAM_LIST_START nonvoid_type_descriptor* PARAM_LIST_END -> nonvoid_type_descriptor*
-  | PARAM_LIST_OR_ID_START PRIMITIVE_TYPE* PARAM_LIST_OR_ID_END -> PRIMITIVE_TYPE*
+  : param_list_or_id_primitive_type+
   | nonvoid_type_descriptor*;
+
+array_descriptor
+  : ARRAY_TYPE_PREFIX (PRIMITIVE_TYPE | CLASS_DESCRIPTOR);
 
 type_descriptor
   : VOID_TYPE
   | PRIMITIVE_TYPE
   | CLASS_DESCRIPTOR
-  | ARRAY_DESCRIPTOR;
+  | array_descriptor;
 
 nonvoid_type_descriptor
   : PRIMITIVE_TYPE
   | CLASS_DESCRIPTOR
-  | ARRAY_DESCRIPTOR;
+  | array_descriptor;
 
 reference_type_descriptor
   : CLASS_DESCRIPTOR
-  | ARRAY_DESCRIPTOR;
+  | array_descriptor;
 
 integer_literal
   : POSITIVE_INTEGER_LITERAL -> INTEGER_LITERAL[$POSITIVE_INTEGER_LITERAL]
@@ -692,9 +690,10 @@ subannotation
   : SUBANNOTATION_DIRECTIVE CLASS_DESCRIPTOR annotation_element* END_SUBANNOTATION_DIRECTIVE
     -> ^(I_SUBANNOTATION[$start, "I_SUBANNOTATION"] CLASS_DESCRIPTOR annotation_element*);
 
+// TODO: how does dalvik handle a primitive or array type, or a non-enum type?
 enum_literal
-  : ENUM_DIRECTIVE reference_type_descriptor ARROW simple_name COLON reference_type_descriptor
-  -> ^(I_ENCODED_ENUM reference_type_descriptor simple_name reference_type_descriptor);
+  : ENUM_DIRECTIVE field_reference
+  -> ^(I_ENCODED_ENUM field_reference);
 
 type_field_method_literal
   : reference_type_descriptor

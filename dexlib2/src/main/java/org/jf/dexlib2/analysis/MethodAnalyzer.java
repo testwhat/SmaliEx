@@ -87,6 +87,7 @@ import org.jf.dexlib2.immutable.reference.ImmutableMethodReference;
 import org.jf.dexlib2.util.MethodUtil;
 import org.jf.dexlib2.util.ReferenceUtil;
 import org.jf.dexlib2.util.TypeUtils;
+import org.jf.dexlib2.writer.util.TryListBuilder;
 import org.jf.util.BitSetUtils;
 import org.jf.util.ExceptionWithContext;
 import org.jf.util.SparseArray;
@@ -585,6 +586,7 @@ public class MethodAnalyzer {
         //and is covered by a try block should be set to a list of the first instructions of each exception handler
         //for the try block covering the instruction
         List<? extends TryBlock<? extends ExceptionHandler>> tries = methodImpl.getTryBlocks();
+        tries = TryListBuilder.massageTryBlocks(tries);
         int triesIndex = 0;
         TryBlock<? extends ExceptionHandler> currentTry = null;
         AnalyzedInstruction[] currentExceptionHandlers = null;
@@ -650,11 +652,19 @@ public class MethodAnalyzer {
                 OffsetInstruction offsetInstruction = (OffsetInstruction)instruction.instruction;
 
                 if (instructionOpcode == Opcode.PACKED_SWITCH || instructionOpcode == Opcode.SPARSE_SWITCH) {
-                    SwitchPayload switchPayload = (SwitchPayload)analyzedInstructions.get(instructionCodeAddress +
-                                    offsetInstruction.getCodeOffset()).instruction;
+                    AnalyzedInstruction analyzedSwitchPayload = analyzedInstructions.get(
+                            instructionCodeAddress + offsetInstruction.getCodeOffset());
+                    if (analyzedSwitchPayload == null) {
+                        throw new AnalysisException("Invalid switch payload offset");
+                    }
+                    SwitchPayload switchPayload = (SwitchPayload)analyzedSwitchPayload.instruction;
+
                     for (SwitchElement switchElement: switchPayload.getSwitchElements()) {
                         AnalyzedInstruction targetInstruction = analyzedInstructions.get(instructionCodeAddress +
                                 switchElement.getOffset());
+                        if (targetInstruction == null) {
+                            throw new AnalysisException("Invalid switch target offset");
+                        }
 
                         addPredecessorSuccessor(instruction, targetInstruction, exceptionHandlers,
                                 instructionsToProcess);
