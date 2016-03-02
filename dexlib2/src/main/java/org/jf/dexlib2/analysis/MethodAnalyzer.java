@@ -95,11 +95,11 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
 /**
- * The MethodAnalyzer performs several functions. It "analyzes" the instructions and infers the register types
- * for each register, it can deodex odexed instructions, and it can verify the bytecode. The analysis and verification
- * are done in two separate passes, because the analysis has to process instructions multiple times in some cases, and
- * there's no need to perform the verification multiple times, so we wait until the method is fully analyzed and then
- * verify it.
+ * The MethodAnalyzer performs several functions. It "analyzes" the instructions and infers the
+ * register types for each register, it can deodex odexed instructions, and it can verify the
+ * bytecode. The analysis and verification are done in two separate passes, because the analysis
+ * has to process instructions multiple times in some cases, and there's no need to perform the
+ * verification multiple times, so we wait until the method is fully analyzed and then verify it.
  *
  * Before calling the analyze() method, you must have initialized the ClassPath by calling
  * ClassPath.InitializeClassPath
@@ -110,12 +110,12 @@ public class MethodAnalyzer {
 
     private final int totalRegisters;
     private final int paramRegisterCount;
-    private final boolean isStatic;
 
     @Nonnull private final ClassPath classPath;
     @Nullable private final InlineMethodResolver inlineResolver;
 
-    // This contains all the AnalyzedInstruction instances, keyed by the code unit address of the instruction
+    // This contains all the AnalyzedInstruction instances,
+    // keyed by the code unit address of the instruction
     @Nonnull private final SparseArray<AnalyzedInstruction> analyzedInstructions =
             new SparseArray<>(0);
 
@@ -124,17 +124,17 @@ public class MethodAnalyzer {
 
     @Nullable private AnalysisException analysisException = null;
 
-    //This is a dummy instruction that occurs immediately before the first real instruction. We can initialize the
-    //register types for this instruction to the parameter types, in order to have them propagate to all of its
-    //successors, e.g. the first real instruction, the first instructions in any exception handlers covering the first
-    //instruction, etc.
+    // This is a dummy instruction that occurs immediately before the first real instruction.
+    // We can initialize the register types for this instruction to the parameter types,
+    // in order to have them propagate to all of its successors, e.g. the first real instruction,
+    // the first instructions in any exception handlers covering the first instruction, etc.
     private final AnalyzedInstruction startOfMethod;
 
     public final ArrayList<String> analysisInfo = new ArrayList<>();
 
     boolean debug;
 
-    // Store type of v0, v1, ... at specifics ranges
+    // Store type of v0, v1, ... at specified ranges
     SparseArray<ArrayList<TypeScope>> localTypes;
     static class TypeScope {
         static final int TO_END = 0xffff;
@@ -163,12 +163,12 @@ public class MethodAnalyzer {
             throw new IllegalArgumentException("The method has no implementation");
         }
 
-        isStatic = MethodUtil.isStatic(method);
         totalRegisters = impl.getRegisterCount();
         this.methodImpl = impl;
 
-        //override AnalyzedInstruction and provide custom implementations of some of the methods, so that we don't
-        //have to handle the case this special case of instruction being null, in the main class
+        // override AnalyzedInstruction and provide custom implementations of some of
+        // the methods, so that we don't have to handle the case this special case of
+        // instruction being null, in the main class.
         startOfMethod = new AnalyzedInstruction(null, -1, totalRegisters) {
             public boolean setsRegister() {
                 return false;
@@ -205,12 +205,13 @@ public class MethodAnalyzer {
 
         int nonParameterRegisters = totalRegisters - parameterRegisters;
 
-        //if this isn't a static method, determine which register is the "this" register and set the type to the
-        //current class
-        if (!isStatic) {
+        // if this isn't a static method, determine which register is the "this" register
+        // and set the type to the current class.
+        if (!MethodUtil.isStatic(method)) {
             int thisRegister = totalRegisters - parameterRegisters;
 
-            //if this is a constructor, then set the "this" register to an uninitialized reference of the current class
+            // if this is a constructor, then set the "this" register to an uninitialized
+            // reference of the current class.
             if (MethodUtil.isConstructor(method)) {
                 setPostRegisterTypeAndPropagateChanges(startOfMethod, thisRegister,
                         RegisterType.getRegisterType(RegisterType.UNINIT_THIS,
@@ -221,63 +222,63 @@ public class MethodAnalyzer {
                                 classPath.getClass(method.getDefiningClass())));
             }
 
-            propagateParameterTypes(totalRegisters-parameterRegisters+1);
+            propagateParameterTypes(totalRegisters - parameterRegisters + 1);
         } else {
-            propagateParameterTypes(totalRegisters-parameterRegisters);
+            propagateParameterTypes(totalRegisters - parameterRegisters);
         }
 
         RegisterType uninit = RegisterType.getRegisterType(RegisterType.UNINIT, null);
-        for (int i=0; i<nonParameterRegisters; i++) {
+        for (int i = 0; i < nonParameterRegisters; i++) {
             setPostRegisterTypeAndPropagateChanges(startOfMethod, i, uninit);
         }
 
-        BitSet instructionsToAnalyze = new BitSet(analyzedInstructions.size());
+        BitSet toAnalyze = new BitSet(analyzedInstructions.size());
 
-        //make sure all of the "first instructions" are marked for processing
-        for (AnalyzedInstruction successor: startOfMethod.successors) {
-            instructionsToAnalyze.set(successor.instructionIndex);
+        // make sure all of the "first instructions" are marked for processing.
+        for (AnalyzedInstruction successor : startOfMethod.successors) {
+            toAnalyze.set(successor.instructionIndex);
         }
 
-        BitSet undeodexedInstructions = new BitSet(analyzedInstructions.size());
+        BitSet undeodexed = new BitSet(analyzedInstructions.size());
 
         do {
             boolean didSomething = false;
 
-            while (!instructionsToAnalyze.isEmpty()) {
-                for(int i=instructionsToAnalyze.nextSetBit(0); i>=0; i=instructionsToAnalyze.nextSetBit(i+1)) {
-                    instructionsToAnalyze.clear(i);
+            while (!toAnalyze.isEmpty()) {
+                for (int i = toAnalyze.nextSetBit(0); i >= 0; i = toAnalyze.nextSetBit(i + 1)) {
+                    toAnalyze.clear(i);
                     if (analyzedState.get(i)) {
                         continue;
                     }
-                    AnalyzedInstruction instructionToAnalyze = analyzedInstructions.valueAt(i);
+                    AnalyzedInstruction instrToAnalyze = analyzedInstructions.valueAt(i);
                     try {
-                        if (instructionToAnalyze.originalInstruction.getOpcode().odexOnly()) {
-                            //if we had deodexed an odex instruction in a previous pass, we might have more specific
-                            //register information now, so let's restore the original odexed instruction and
-                            //re-deodex it
-                            instructionToAnalyze.restoreOdexedInstruction();
+                        if (instrToAnalyze.originalInstruction.getOpcode().odexOnly()) {
+                            // if we had deodexed an odex instruction in a previous pass,
+                            // we might have more specific register information now, so let's
+                            // restore the original odexed instruction and re-deodex it.
+                            instrToAnalyze.restoreOdexedInstruction();
                         }
 
-                        if (!analyzeInstruction(instructionToAnalyze)) {
-                            undeodexedInstructions.set(i);
+                        if (!analyzeInstruction(instrToAnalyze)) {
+                            undeodexed.set(i);
                             continue;
                         } else {
                             didSomething = true;
-                            undeodexedInstructions.clear(i);
+                            undeodexed.clear(i);
                         }
                     } catch (Exception ex) {
                         if (ex instanceof AnalysisException) {
-                            setAnalysisException((AnalysisException) ex, instructionToAnalyze);
-                        } else  {
-                            setAnalysisException(new AnalysisException(ex), instructionToAnalyze);
+                            setAnalysisException((AnalysisException) ex, instrToAnalyze);
+                        } else {
+                            setAnalysisException(new AnalysisException(ex), instrToAnalyze);
                         }
                         break;
                     }
 
-                    analyzedState.set(instructionToAnalyze.getInstructionIndex());
+                    analyzedState.set(instrToAnalyze.getInstructionIndex());
 
-                    for (AnalyzedInstruction successor: instructionToAnalyze.successors) {
-                        instructionsToAnalyze.set(successor.getInstructionIndex());
+                    for (AnalyzedInstruction successor : instrToAnalyze.successors) {
+                        toAnalyze.set(successor.getInstructionIndex());
                     }
                 }
                 if (analysisException != null) {
@@ -289,20 +290,20 @@ public class MethodAnalyzer {
                 break;
             }
 
-            if (!undeodexedInstructions.isEmpty()) {
-                for (int i=undeodexedInstructions.nextSetBit(0); i>=0; i=undeodexedInstructions.nextSetBit(i+1)) {
-                    instructionsToAnalyze.set(i);
+            if (!undeodexed.isEmpty()) {
+                for (int i = undeodexed.nextSetBit(0); i >= 0; i = undeodexed.nextSetBit(i + 1)) {
+                    toAnalyze.set(i);
                 }
             }
         } while (true);
 
-        //Now, go through and fix up any unresolvable odex instructions. These are usually odex instructions
-        //that operate on a null register, and thus always throw an NPE. They can also be any sort of odex instruction
-        //that occurs after an unresolvable odex instruction. We deodex if possible, or replace with an
-        //UnresolvableOdexInstruction
-        for (int i=0; i< analyzedInstructions.size(); i++) {
+        // Now, go through and fix up any unresolvable odex instructions.
+        // These are usually odex instructions that operate on a null register,
+        // and thus always throw an NPE. They can also be any sort of odex instruction
+        // that occurs after an unresolvable odex instruction. We deodex if possible,
+        // or replace with an UnresolvableOdexInstruction.
+        for (int i = 0; i < analyzedInstructions.size(); i++) {
             AnalyzedInstruction analyzedInstruction = analyzedInstructions.valueAt(i);
-
             Instruction instruction = analyzedInstruction.getInstruction();
 
             if (instruction.getOpcode().odexOnly()) {
@@ -322,22 +323,22 @@ public class MethodAnalyzer {
                         analyzeInvokeObjectInitRange(analyzedInstruction, false);
                         continue;
                     case Format22cs:
-                        objectRegisterNumber = ((Instruction22cs)instruction).getRegisterB();
+                        objectRegisterNumber = ((Instruction22cs) instruction).getRegisterB();
                         break;
                     case Format35mi:
                     case Format35ms:
-                        objectRegisterNumber = ((FiveRegisterInstruction)instruction).getRegisterC();
+                        objectRegisterNumber = ((FiveRegisterInstruction) instruction).getRegisterC();
                         break;
                     case Format3rmi:
                     case Format3rms:
-                        objectRegisterNumber = ((RegisterRangeInstruction)instruction).getStartRegister();
+                        objectRegisterNumber = ((RegisterRangeInstruction) instruction).getStartRegister();
                         break;
                     default:
                         continue;
                 }
                 addAnalysisInfo("UnresolvedOdexInstruction " + instruction.getOpcode()
-                            + " " + instruction.getOpcode().format + " at line "
-                            + getLine(analyzedInstruction));
+                        + " " + instruction.getOpcode().format + " at line "
+                        + getLine(analyzedInstruction));
                 analyzedInstruction.setDeodexedInstruction(
                         new UnresolvedOdexInstruction(instruction, objectRegisterNumber));
             }
@@ -345,8 +346,8 @@ public class MethodAnalyzer {
     }
 
     private void propagateParameterTypes(int parameterStartRegister) {
-        int i=0;
-        for (MethodParameter parameter: method.getParameters()) {
+        int i = 0;
+        for (MethodParameter parameter : method.getParameters()) {
             if (TypeUtils.isWideType(parameter)) {
                 setPostRegisterTypeAndPropagateChanges(startOfMethod, parameterStartRegister + i++,
                         RegisterType.getWideRegisterType(parameter, true));
@@ -364,8 +365,11 @@ public class MethodAnalyzer {
     }
 
     public List<Instruction> getInstructions() {
-        return Lists.transform(analyzedInstructions.getValues(), new Function<AnalyzedInstruction, Instruction>() {
-            @Nullable @Override public Instruction apply(@Nullable AnalyzedInstruction input) {
+        return Lists.transform(analyzedInstructions.getValues(), new Function<
+                AnalyzedInstruction, Instruction>() {
+            @Nullable
+            @Override
+            public Instruction apply(@Nullable AnalyzedInstruction input) {
                 if (input == null) {
                     return null;
                 }
@@ -390,10 +394,19 @@ public class MethodAnalyzer {
         } else if (instr instanceof FiveRegisterInstruction) {
             FiveRegisterInstruction fiveRegInstr = (FiveRegisterInstruction) instr;
             sb.append(" regC=").append(fiveRegInstr.getRegisterC());
-            sb.append(" regD=").append(fiveRegInstr.getRegisterD());
-            sb.append(" regE=").append(fiveRegInstr.getRegisterE());
-            sb.append(" regF=").append(fiveRegInstr.getRegisterF());
-            sb.append(" regG=").append(fiveRegInstr.getRegisterG());
+            int rc = fiveRegInstr.getRegisterCount();
+            if (rc >= 2) {
+                sb.append(" regD=").append(fiveRegInstr.getRegisterD());
+                if (rc >= 3) {
+                    sb.append(" regE=").append(fiveRegInstr.getRegisterE());
+                    if (rc >= 4) {
+                        sb.append(" regF=").append(fiveRegInstr.getRegisterF());
+                        if (rc >= 5) {
+                            sb.append(" regG=").append(fiveRegInstr.getRegisterG());
+                        }
+                    }
+                }
+            }
         }
         return sb.toString();
     }
@@ -411,7 +424,7 @@ public class MethodAnalyzer {
         int end = Math.min(analyzedInstructions.size() - 1, current + 2);
         for (int i = start; i <= end; i++) {
             AnalyzedInstruction pInstr = analyzedInstructions.valueAt(i);
-            ex.addContext(" [" + i + "] " + instructionToString(pInstr.instruction)
+            ex.addContext(" [" + i + "] " + instructionToString(pInstr.originalInstruction)
                 + (i == current ? " <-----" : ""));
         }
     }
@@ -429,54 +442,56 @@ public class MethodAnalyzer {
         return analyzedInstructions.keyAt(instruction.instructionIndex);
     }
 
-    private void setDestinationRegisterTypeAndPropagateChanges(@Nonnull AnalyzedInstruction analyzedInstruction,
-                                                               @Nonnull RegisterType registerType) {
-        setPostRegisterTypeAndPropagateChanges(analyzedInstruction, analyzedInstruction.getDestinationRegister(),
-                registerType);
+    private void setDestinationRegisterTypeAndPropagateChanges(
+            @Nonnull AnalyzedInstruction analyzedInstruction, @Nonnull RegisterType registerType) {
+        setPostRegisterTypeAndPropagateChanges(analyzedInstruction,
+                analyzedInstruction.getDestinationRegister(), registerType);
     }
 
-    private void setPostRegisterTypeAndPropagateChanges(@Nonnull AnalyzedInstruction analyzedInstruction,
-                                                        int registerNumber, @Nonnull RegisterType registerType) {
+    private void setPostRegisterTypeAndPropagateChanges(
+            @Nonnull AnalyzedInstruction analyzedInstruction,
+            int registerNumber, @Nonnull RegisterType registerType) {
 
         BitSet changedInstructions = new BitSet(analyzedInstructions.size());
-
         if (!analyzedInstruction.setPostRegisterType(registerNumber, registerType)) {
             return;
         }
 
         propagateRegisterToSuccessors(analyzedInstruction, registerNumber, changedInstructions);
 
-        //Using a for loop inside the while loop optimizes for the common case of the successors of an instruction
-        //occurring after the instruction. Any successors that occur prior to the instruction will be picked up on
-        //the next iteration of the while loop.
-        //This could also be done recursively, but in large methods it would likely cause very deep recursion,
-        //which requires the user to specify a larger stack size. This isn't really a problem, but it is slightly
-        //annoying.
+        // Using a for loop inside the while loop optimizes for the common case of the successors
+        // of an instruction occurring after the instruction. Any successors that occur prior to
+        // the instruction will be picked up on the next iteration of the while loop. This could
+        // also be done recursively, but in large methods it would likely cause very deep recursion,
+        // which requires the user to specify a larger stack size. This isn't really a problem,
+        // but it is slightly annoying.
         while (!changedInstructions.isEmpty()) {
-            for (int instructionIndex=changedInstructions.nextSetBit(0);
-                     instructionIndex>=0;
-                     instructionIndex=changedInstructions.nextSetBit(instructionIndex+1)) {
-
+            for (int instructionIndex = changedInstructions.nextSetBit(0);
+                 instructionIndex >= 0;
+                 instructionIndex = changedInstructions.nextSetBit(instructionIndex + 1)) {
                 changedInstructions.clear(instructionIndex);
 
-                propagateRegisterToSuccessors(analyzedInstructions.valueAt(instructionIndex), registerNumber,
-                        changedInstructions);
+                propagateRegisterToSuccessors(analyzedInstructions.valueAt(instructionIndex),
+                        registerNumber, changedInstructions);
             }
         }
 
         if (registerType.category == RegisterType.LONG_LO) {
             checkWidePair(registerNumber, analyzedInstruction);
-            setPostRegisterTypeAndPropagateChanges(analyzedInstruction, registerNumber+1, RegisterType.LONG_HI_TYPE);
+            setPostRegisterTypeAndPropagateChanges(
+                    analyzedInstruction, registerNumber + 1, RegisterType.LONG_HI_TYPE);
         } else if (registerType.category == RegisterType.DOUBLE_LO) {
             checkWidePair(registerNumber, analyzedInstruction);
-            setPostRegisterTypeAndPropagateChanges(analyzedInstruction, registerNumber+1, RegisterType.DOUBLE_HI_TYPE);
+            setPostRegisterTypeAndPropagateChanges(
+                    analyzedInstruction, registerNumber + 1, RegisterType.DOUBLE_HI_TYPE);
         }
     }
 
-    private void propagateRegisterToSuccessors(@Nonnull AnalyzedInstruction instruction, int registerNumber,
-                                               @Nonnull BitSet changedInstructions) {
+    private void propagateRegisterToSuccessors(
+            @Nonnull AnalyzedInstruction instruction, int registerNumber,
+            @Nonnull BitSet changedInstructions) {
         RegisterType postRegisterType = instruction.getPostInstructionRegisterType(registerNumber);
-        for (AnalyzedInstruction successor: instruction.successors) {
+        for (AnalyzedInstruction successor : instruction.successors) {
             if (successor.mergeRegister(registerNumber, postRegisterType, analyzedState)) {
                 changedInstructions.set(successor.instructionIndex);
             }
@@ -571,65 +586,68 @@ public class MethodAnalyzer {
 
         analyzedInstructions.ensureCapacity(instructions.size());
 
-        //first, create all the instructions and populate the instructionAddresses array
+        // first, create all the instructions and populate the instructionAddresses array.
         int currentCodeAddress = 0;
         final int instrCount = instructions.size();
         for (int i = 0; i < instrCount; i++) {
             Instruction instruction = instructions.get(i);
-            analyzedInstructions.append(currentCodeAddress, new AnalyzedInstruction(instruction, i, totalRegisters));
+            analyzedInstructions.append(currentCodeAddress,
+                    new AnalyzedInstruction(instruction, i, totalRegisters));
             assert analyzedInstructions.indexOfKey(currentCodeAddress) == i;
             currentCodeAddress += instruction.getCodeUnits();
         }
         buildDebugInfo();
 
-        //next, populate the exceptionHandlers array. The array item for each instruction that can throw an exception
-        //and is covered by a try block should be set to a list of the first instructions of each exception handler
-        //for the try block covering the instruction
+        // next, populate the exceptionHandlers array. The array item for each instruction that
+        // can throw an exception and is covered by a try block should be set to a list of the
+        // first instructions of each exception handler for the try block covering the instruction.
         List<? extends TryBlock<? extends ExceptionHandler>> tries = methodImpl.getTryBlocks();
         int triesIndex = 0;
         TryBlock<? extends ExceptionHandler> currentTry = null;
         AnalyzedInstruction[] currentExceptionHandlers = null;
         AnalyzedInstruction[][] exceptionHandlers = new AnalyzedInstruction[instructions.size()][];
 
-        for (int i=0; i< analyzedInstructions.size(); i++) {
+        for (int i = 0; i < analyzedInstructions.size(); i++) {
             AnalyzedInstruction instruction = analyzedInstructions.valueAt(i);
             Opcode instructionOpcode = instruction.instruction.getOpcode();
             currentCodeAddress = getInstructionAddress(instruction);
 
-            //check if we have gone past the end of the current try
+            // check if we have gone past the end of the current try.
             if (currentTry != null) {
-                if (currentTry.getStartCodeAddress() + currentTry.getCodeUnitCount()  <= currentCodeAddress) {
+                if (currentTry.getStartCodeAddress()
+                        + currentTry.getCodeUnitCount() <= currentCodeAddress) {
                     currentTry = null;
                     triesIndex++;
                 }
             }
 
-            //check if the next try is applicable yet
+            // check if the next try is applicable yet.
             if (currentTry == null && triesIndex < tries.size()) {
                 TryBlock<? extends ExceptionHandler> tryBlock = tries.get(triesIndex);
                 if (tryBlock.getStartCodeAddress() <= currentCodeAddress) {
-                    assert(tryBlock.getStartCodeAddress() + tryBlock.getCodeUnitCount() > currentCodeAddress);
-
+                    assert (tryBlock.getStartCodeAddress()
+                            + tryBlock.getCodeUnitCount() > currentCodeAddress);
                     currentTry = tryBlock;
-
                     currentExceptionHandlers = buildExceptionHandlerArray(tryBlock);
                 }
             }
 
-            //if we're inside a try block, and the instruction can throw an exception, then add the exception handlers
-            //for the current instruction
+            // if we're inside a try block, and the instruction can throw an exception,
+            // then add the exception handlers for the current instruction.
             if (currentTry != null && instructionOpcode.canThrow()) {
                 exceptionHandlers[i] = currentExceptionHandlers;
             }
         }
 
-        //finally, populate the successors and predecessors for each instruction. We start at the fake "StartOfMethod"
-        //instruction and follow the execution path. Any unreachable code won't have any predecessors or successors,
-        //and no reachable code will have an unreachable predessor or successor
+        // finally, populate the successors and predecessors for each instruction. We start at
+        // the fake "StartOfMethod" instruction and follow the execution path. Any unreachable
+        // code won't have any predecessors or successors, and no reachable code will have an
+        // unreachable predessor or successor
         assert analyzedInstructions.size() > 0;
         BitSet instructionsToProcess = new BitSet(instructions.size());
 
-        addPredecessorSuccessor(startOfMethod, analyzedInstructions.valueAt(0), exceptionHandlers, instructionsToProcess);
+        addPredecessorSuccessor(startOfMethod, analyzedInstructions.valueAt(0),
+                exceptionHandlers, instructionsToProcess);
         while (!instructionsToProcess.isEmpty()) {
             int currentInstructionIndex = instructionsToProcess.nextSetBit(0);
             instructionsToProcess.clear(currentInstructionIndex);
@@ -643,28 +661,32 @@ public class MethodAnalyzer {
                     throw new AnalysisException("Execution can continue past the last instruction");
                 }
 
-                AnalyzedInstruction nextInstruction = analyzedInstructions.valueAt(currentInstructionIndex+1);
-                addPredecessorSuccessor(instruction, nextInstruction, exceptionHandlers, instructionsToProcess);
+                AnalyzedInstruction nextInstruction = analyzedInstructions.valueAt(
+                        currentInstructionIndex + 1);
+                addPredecessorSuccessor(instruction, nextInstruction,
+                        exceptionHandlers, instructionsToProcess);
             }
 
             if (instruction.instruction instanceof OffsetInstruction) {
-                OffsetInstruction offsetInstruction = (OffsetInstruction)instruction.instruction;
+                OffsetInstruction offsetInstruction = (OffsetInstruction) instruction.instruction;
 
-                if (instructionOpcode == Opcode.PACKED_SWITCH || instructionOpcode == Opcode.SPARSE_SWITCH) {
-                    SwitchPayload switchPayload = (SwitchPayload)analyzedInstructions.get(instructionCodeAddress +
-                                    offsetInstruction.getCodeOffset()).instruction;
-                    for (SwitchElement switchElement: switchPayload.getSwitchElements()) {
-                        AnalyzedInstruction targetInstruction = analyzedInstructions.get(instructionCodeAddress +
-                                switchElement.getOffset());
+                if (instructionOpcode == Opcode.PACKED_SWITCH
+                        || instructionOpcode == Opcode.SPARSE_SWITCH) {
+                    SwitchPayload switchPayload = (SwitchPayload) analyzedInstructions.get(
+                            instructionCodeAddress + offsetInstruction.getCodeOffset()).instruction;
+                    for (SwitchElement switchElement : switchPayload.getSwitchElements()) {
+                        AnalyzedInstruction targetInstruction = analyzedInstructions.get(
+                                instructionCodeAddress + switchElement.getOffset());
 
                         addPredecessorSuccessor(instruction, targetInstruction, exceptionHandlers,
                                 instructionsToProcess);
                     }
                 } else if (instructionOpcode != Opcode.FILL_ARRAY_DATA) {
                     int targetAddressOffset = offsetInstruction.getCodeOffset();
-                    AnalyzedInstruction targetInstruction = analyzedInstructions.get(instructionCodeAddress +
-                            targetAddressOffset);
-                    addPredecessorSuccessor(instruction, targetInstruction, exceptionHandlers, instructionsToProcess);
+                    AnalyzedInstruction targetInstruction = analyzedInstructions.get(
+                            instructionCodeAddress + targetAddressOffset);
+                    addPredecessorSuccessor(instruction, targetInstruction,
+                            exceptionHandlers, instructionsToProcess);
                 }
             }
         }
@@ -674,19 +696,23 @@ public class MethodAnalyzer {
                                          @Nonnull AnalyzedInstruction successor,
                                          @Nonnull AnalyzedInstruction[][] exceptionHandlers,
                                          @Nonnull BitSet instructionsToProcess) {
-        addPredecessorSuccessor(predecessor, successor, exceptionHandlers, instructionsToProcess, false);
+        addPredecessorSuccessor(predecessor, successor, exceptionHandlers,
+                instructionsToProcess, false);
     }
 
     private void addPredecessorSuccessor(@Nonnull AnalyzedInstruction predecessor,
                                          @Nonnull AnalyzedInstruction successor,
                                          @Nonnull AnalyzedInstruction[][] exceptionHandlers,
-                                         @Nonnull BitSet instructionsToProcess, boolean allowMoveException) {
+                                         @Nonnull BitSet instructionsToProcess,
+                                         boolean allowMoveException) {
 
         if (!allowMoveException && successor.instruction.getOpcode() == Opcode.MOVE_EXCEPTION) {
-            throw new AnalysisException("Execution can pass from the " + predecessor.instruction.getOpcode().name +
-                    " instruction at code address 0x" + Integer.toHexString(getInstructionAddress(predecessor)) +
-                    " to the move-exception instruction at address 0x" +
-                    Integer.toHexString(getInstructionAddress(successor)));
+            throw new AnalysisException("Execution can pass from the "
+                    + predecessor.instruction.getOpcode().name
+                    + " instruction at code address 0x"
+                    + Integer.toHexString(getInstructionAddress(predecessor))
+                    + " to the move-exception instruction at address 0x"
+                    + Integer.toHexString(getInstructionAddress(successor)));
         }
 
         if (!successor.addPredecessor(predecessor)) {
@@ -697,36 +723,39 @@ public class MethodAnalyzer {
         instructionsToProcess.set(successor.getInstructionIndex());
 
 
-        //if the successor can throw an instruction, then we need to add the exception handlers as additional
-        //successors to the predecessor (and then apply this same logic recursively if needed)
-        //Technically, we should handle the monitor-exit instruction as a special case. The exception is actually
-        //thrown *after* the instruction executes, instead of "before" the instruction executes, lke for any other
-        //instruction. But since it doesn't modify any registers, we can treat it like any other instruction.
-        AnalyzedInstruction[] exceptionHandlersForSuccessor = exceptionHandlers[successor.instructionIndex];
+        // if the successor can throw an instruction, then we need to add the exception handlers
+        // as additional successors to the predecessor (and then apply this same logic recursively
+        // if needed) Technically, we should handle the monitor-exit instruction as a special case.
+        // The exception is actuallythrown *after* the instruction executes, instead of "before"
+        // the nstruction executes, lke for any other instruction. But since it doesn't modify any
+        // registers, we can treat it like any other instruction.
+        AnalyzedInstruction[] exceptionHandlersForSuccessor =
+                exceptionHandlers[successor.instructionIndex];
         if (exceptionHandlersForSuccessor != null) {
-            //the item for this instruction in exceptionHandlersForSuccessor should only be set if this instruction
-            //can throw an exception
+            // the item for this instruction in exceptionHandlersForSuccessor should only be set
+            // if this instruction can throw an exception
             assert successor.instruction.getOpcode().canThrow();
 
             for (AnalyzedInstruction exceptionHandler: exceptionHandlersForSuccessor) {
-                addPredecessorSuccessor(predecessor, exceptionHandler, exceptionHandlers, instructionsToProcess, true);
+                addPredecessorSuccessor(predecessor, exceptionHandler,
+                        exceptionHandlers, instructionsToProcess, true);
             }
         }
     }
 
     @Nonnull
-    private AnalyzedInstruction[] buildExceptionHandlerArray(@Nonnull TryBlock<? extends ExceptionHandler> tryBlock) {
-        List<? extends ExceptionHandler> exceptionHandlers = tryBlock.getExceptionHandlers();
-
-        AnalyzedInstruction[] handlerInstructions = new AnalyzedInstruction[exceptionHandlers.size()];
-        for (int i=0; i<exceptionHandlers.size(); i++) {
-            handlerInstructions[i] = analyzedInstructions.get(exceptionHandlers.get(i).getHandlerCodeAddress());
+    private AnalyzedInstruction[] buildExceptionHandlerArray(
+            @Nonnull TryBlock<? extends ExceptionHandler> tryBlock) {
+        List<? extends ExceptionHandler> exHandlers = tryBlock.getExceptionHandlers();
+        AnalyzedInstruction[] handlerInstructions = new AnalyzedInstruction[exHandlers.size()];
+        for (int i = 0; i < exHandlers.size(); i++) {
+            handlerInstructions[i] = analyzedInstructions.get(
+                    exHandlers.get(i).getHandlerCodeAddress());
         }
 
         return handlerInstructions;
     }
 
-    // TODO
     void analyzeOptimizedCheckCast(@Nonnull AnalyzedInstruction analyzedInstruction) {
         int prevIndex = analyzedInstruction.getInstructionIndex() - 1;
         if (prevIndex < 1) {
@@ -767,8 +796,8 @@ public class MethodAnalyzer {
     }
 
     /**
-     * @return false if analyzedInstruction is an odex instruction that couldn't be deodexed, due to its
-     * object register being null
+     * @return false if analyzedInstruction is an odex instruction that couldn't be deodexed,
+     * due to its object register being null
      */
     private boolean analyzeInstruction(@Nonnull AnalyzedInstruction analyzedInstruction) {
         Instruction instruction = analyzedInstruction.instruction;
@@ -1141,15 +1170,15 @@ public class MethodAnalyzer {
                 analyzeLiteralBinaryOp(analyzedInstruction, RegisterType.INTEGER_TYPE, true);
                 return true;
             case SHR_INT_LIT8:
-                analyzeLiteralBinaryOp(analyzedInstruction, getDestTypeForLiteralShiftRight(analyzedInstruction, true),
-                        false);
+                analyzeLiteralBinaryOp(analyzedInstruction,
+                        getDestTypeForLiteralShiftRight(analyzedInstruction, true), false);
                 return true;
             case USHR_INT_LIT8:
-                analyzeLiteralBinaryOp(analyzedInstruction, getDestTypeForLiteralShiftRight(analyzedInstruction, false),
-                        false);
+                analyzeLiteralBinaryOp(analyzedInstruction, getDestTypeForLiteralShiftRight(
+                        analyzedInstruction, false), false);
                 return true;
 
-            /*odexed instructions*/
+            // odexed instructions
             case IGET_VOLATILE:
             case IPUT_VOLATILE:
             case SGET_VOLATILE:
@@ -1249,30 +1278,34 @@ public class MethodAnalyzer {
             RegisterType.BOOLEAN);
 
     private void analyzeMove(@Nonnull AnalyzedInstruction analyzedInstruction) {
-        TwoRegisterInstruction instruction = (TwoRegisterInstruction)analyzedInstruction.instruction;
-
-        RegisterType sourceRegisterType = analyzedInstruction.getPreInstructionRegisterType(instruction.getRegisterB());
+        TwoRegisterInstruction instruction = (TwoRegisterInstruction) analyzedInstruction.instruction;
+        RegisterType sourceRegisterType =
+                analyzedInstruction.getPreInstructionRegisterType(instruction.getRegisterB());
         setDestinationRegisterTypeAndPropagateChanges(analyzedInstruction, sourceRegisterType);
     }
 
     private void analyzeMoveResult(@Nonnull AnalyzedInstruction analyzedInstruction) {
-        AnalyzedInstruction previousInstruction = null;
+        AnalyzedInstruction prevInstruction = null;
         if (analyzedInstruction.instructionIndex > 0) {
-            previousInstruction = analyzedInstructions.valueAt(analyzedInstruction.instructionIndex-1);
+            prevInstruction = analyzedInstructions.valueAt(
+                    analyzedInstruction.instructionIndex - 1);
         }
-        if (previousInstruction == null || !previousInstruction.instruction.getOpcode().setsResult()) {
-            throw new AnalysisException(analyzedInstruction.instruction.getOpcode().name + " must occur after an " +
-                    "invoke-*/fill-new-array instruction");
+        if (prevInstruction == null
+                || !prevInstruction.instruction.getOpcode().setsResult()) {
+            throw new AnalysisException(
+                    analyzedInstruction.instruction.getOpcode().name
+                    + " must occur after an invoke-*/fill-new-array instruction");
         }
 
         RegisterType resultRegisterType;
-        ReferenceInstruction invokeInstruction = (ReferenceInstruction)previousInstruction.instruction;
+        ReferenceInstruction invokeInstruction = (ReferenceInstruction) prevInstruction.instruction;
         Reference reference = invokeInstruction.getReference();
 
         if (reference instanceof MethodReference) {
-            resultRegisterType = RegisterType.getRegisterType(classPath, ((MethodReference)reference).getReturnType());
+            resultRegisterType = RegisterType.getRegisterType(
+                    classPath, ((MethodReference) reference).getReturnType());
         } else {
-            resultRegisterType = RegisterType.getRegisterType(classPath, (TypeReference)reference);
+            resultRegisterType = RegisterType.getRegisterType(classPath, (TypeReference) reference);
         }
 
         setDestinationRegisterTypeAndPropagateChanges(analyzedInstruction, resultRegisterType);
@@ -1283,8 +1316,8 @@ public class MethodAnalyzer {
 
         RegisterType exceptionType = RegisterType.UNKNOWN_TYPE;
 
-        for (TryBlock<? extends ExceptionHandler> tryBlock: methodImpl.getTryBlocks()) {
-            for (ExceptionHandler handler: tryBlock.getExceptionHandlers()) {
+        for (TryBlock<? extends ExceptionHandler> tryBlock : methodImpl.getTryBlocks()) {
+            for (ExceptionHandler handler : tryBlock.getExceptionHandlers()) {
 
                 if (handler.getHandlerCodeAddress() == instructionAddress) {
                     String type = handler.getExceptionType();
@@ -1292,15 +1325,16 @@ public class MethodAnalyzer {
                         exceptionType = RegisterType.getRegisterType(RegisterType.REFERENCE,
                                 classPath.getClass("Ljava/lang/Throwable;"));
                     } else {
-                        exceptionType = RegisterType.getRegisterType(RegisterType.REFERENCE, classPath.getClass(type))
-                                .merge(exceptionType);
+                        exceptionType = RegisterType.getRegisterType(
+                                RegisterType.REFERENCE, classPath.getClass(type)).merge(exceptionType);
                     }
                 }
             }
         }
 
         if (exceptionType.category == RegisterType.UNKNOWN) {
-            throw new AnalysisException("move-exception must be the first instruction in an exception handler block");
+            throw new AnalysisException(
+                    "move-exception must be the first instruction in an exception handler block");
         }
 
         setDestinationRegisterTypeAndPropagateChanges(analyzedInstruction, exceptionType);
@@ -1310,9 +1344,9 @@ public class MethodAnalyzer {
         analyzeReturnVoidBarrier(analyzedInstruction, true);
     }
 
-    private void analyzeReturnVoidBarrier(@Nonnull AnalyzedInstruction analyzedInstruction, boolean analyzeResult) {
+    private void analyzeReturnVoidBarrier(
+            @Nonnull AnalyzedInstruction analyzedInstruction, boolean analyzeResult) {
         Instruction10x deodexedInstruction = new ImmutableInstruction10x(Opcode.RETURN_VOID);
-
         analyzedInstruction.setDeodexedInstruction(deodexedInstruction);
 
         if (analyzeResult) {
@@ -1321,10 +1355,11 @@ public class MethodAnalyzer {
     }
 
     private void analyzeConst(@Nonnull AnalyzedInstruction analyzedInstruction) {
-        NarrowLiteralInstruction instruction = (NarrowLiteralInstruction)analyzedInstruction.instruction;
+        NarrowLiteralInstruction instruction = (NarrowLiteralInstruction) analyzedInstruction.instruction;
 
-        //we assume that the literal value is a valid value for the given instruction type, because it's impossible
-        //to store an invalid literal with the instruction. so we don't need to check the type of the literal
+        // we assume that the literal value is a valid value for the given instruction type,
+        // because it's impossible to store an invalid literal with the instruction.
+        // so we don't need to check the type of the literal
         RegisterType type = RegisterType.getRegisterTypeForLiteral(instruction.getNarrowLiteral());
         setDestinationRegisterTypeAndPropagateChanges(analyzedInstruction, type);
     }
@@ -1366,9 +1401,10 @@ public class MethodAnalyzer {
         int register = ((OneRegisterInstruction)analyzedInstruction.instruction).getRegisterA();
         RegisterType destRegisterType = analyzedInstruction.getPostInstructionRegisterType(register);
         if (destRegisterType.category != RegisterType.UNKNOWN) {
-            //the post-instruction destination register will only be set if we have already analyzed this instruction
-            //at least once. If this is the case, then the uninit reference has already been propagated to all
-            //successors and nothing else needs to be done.
+            // the post-instruction destination register will only be set if we have already
+            // analyzed this instruction at least once. If this is the case, then the uninit
+            // reference has already been propagated to all successors and nothing else needs
+            // to be done.
             assert destRegisterType.category == RegisterType.UNINIT_REF;
             return;
         }
@@ -1404,13 +1440,15 @@ public class MethodAnalyzer {
     }
 
     private void analyzeAgetWide(@Nonnull AnalyzedInstruction analyzedInstruction) {
-        ThreeRegisterInstruction instruction = (ThreeRegisterInstruction)analyzedInstruction.instruction;
+        ThreeRegisterInstruction instruction = (ThreeRegisterInstruction) analyzedInstruction.instruction;
 
-        RegisterType arrayRegisterType = analyzedInstruction.getPreInstructionRegisterType(instruction.getRegisterB());
+        RegisterType arrayRegisterType = analyzedInstruction.getPreInstructionRegisterType(
+                instruction.getRegisterB());
         if (arrayRegisterType.category != RegisterType.NULL) {
             if (arrayRegisterType.category != RegisterType.REFERENCE ||
                     !(arrayRegisterType.type instanceof ArrayProto)) {
-                throw new AnalysisException("aget-wide used with non-array register: %s", arrayRegisterType.toString());
+                throw new AnalysisException("aget-wide used with non-array register: %s",
+                        arrayRegisterType.toString());
             }
             ArrayProto arrayProto = (ArrayProto)arrayRegisterType.type;
 
@@ -1421,23 +1459,29 @@ public class MethodAnalyzer {
 
             char arrayBaseType = arrayProto.getElementType().charAt(0);
             if (arrayBaseType == 'J') {
-                setDestinationRegisterTypeAndPropagateChanges(analyzedInstruction, RegisterType.LONG_LO_TYPE);
+                setDestinationRegisterTypeAndPropagateChanges(
+                        analyzedInstruction, RegisterType.LONG_LO_TYPE);
             } else if (arrayBaseType == 'D') {
-                setDestinationRegisterTypeAndPropagateChanges(analyzedInstruction, RegisterType.DOUBLE_LO_TYPE);
+                setDestinationRegisterTypeAndPropagateChanges(
+                        analyzedInstruction, RegisterType.DOUBLE_LO_TYPE);
             } else {
-                throw new AnalysisException("aget-wide used with narrow array: %s", arrayRegisterType);
+                throw new AnalysisException(
+                        "aget-wide used with narrow array: %s", arrayRegisterType);
             }
         } else {
-            // If the array register is null, we can assume that the destination register was meant to be a wide type.
-            // This is the same behavior as dalvik's verifier
-            setDestinationRegisterTypeAndPropagateChanges(analyzedInstruction, RegisterType.LONG_LO_TYPE);
+            // If the array register is null, we can assume that the destination register
+            // was meant to be a wide type. This is the same behavior as dalvik's verifier.
+            setDestinationRegisterTypeAndPropagateChanges(
+                    analyzedInstruction, RegisterType.LONG_LO_TYPE);
         }
     }
 
     private void analyzeAgetObject(@Nonnull AnalyzedInstruction analyzedInstruction) {
-        ThreeRegisterInstruction instruction = (ThreeRegisterInstruction)analyzedInstruction.instruction;
+        ThreeRegisterInstruction instruction =
+                (ThreeRegisterInstruction) analyzedInstruction.instruction;
 
-        RegisterType arrayRegisterType = analyzedInstruction.getPreInstructionRegisterType(instruction.getRegisterB());
+        RegisterType arrayRegisterType = analyzedInstruction.getPreInstructionRegisterType(
+                instruction.getRegisterB());
         if (arrayRegisterType.category != RegisterType.NULL) {
             if (arrayRegisterType.category != RegisterType.REFERENCE ||
                     !(arrayRegisterType.type instanceof ArrayProto)) {
@@ -1450,16 +1494,19 @@ public class MethodAnalyzer {
                 }
             }
 
-            ArrayProto arrayProto = (ArrayProto)arrayRegisterType.type;
+            ArrayProto arrayProto = (ArrayProto) arrayRegisterType.type;
 
             String elementType = arrayProto.getImmediateElementType();
 
             setDestinationRegisterTypeAndPropagateChanges(analyzedInstruction,
-                    RegisterType.getRegisterType(RegisterType.REFERENCE, classPath.getClass(elementType)));
+                    RegisterType.getRegisterType(
+                            RegisterType.REFERENCE, classPath.getClass(elementType)));
         } else {
-            // If the array register is null, we can assume that the destination register was meant to be a reference
-            // type, so we set the destination to NULL. This is the same behavior as dalvik's verifier
-            setDestinationRegisterTypeAndPropagateChanges(analyzedInstruction, RegisterType.NULL_TYPE);
+            // If the array register is null, we can assume that the destination register
+            // was meant to be a reference type, so we set the destination to NULL.
+            // This is the same behavior as dalvik's verifier.
+            setDestinationRegisterTypeAndPropagateChanges(
+                    analyzedInstruction, RegisterType.NULL_TYPE);
         }
     }
 
@@ -1469,39 +1516,39 @@ public class MethodAnalyzer {
     }
 
     private void analyzeIgetSgetWideObject(@Nonnull AnalyzedInstruction analyzedInstruction) {
-        ReferenceInstruction referenceInstruction = (ReferenceInstruction)analyzedInstruction.instruction;
-
-        FieldReference fieldReference = (FieldReference)referenceInstruction.getReference();
-
+        ReferenceInstruction refInstruction = (ReferenceInstruction) analyzedInstruction.instruction;
+        FieldReference fieldReference = (FieldReference) refInstruction.getReference();
         RegisterType fieldType = RegisterType.getRegisterType(classPath, fieldReference.getType());
         setDestinationRegisterTypeAndPropagateChanges(analyzedInstruction, fieldType);
     }
 
     private void analyzeInvokeDirect(@Nonnull AnalyzedInstruction analyzedInstruction) {
-        FiveRegisterInstruction instruction = (FiveRegisterInstruction)analyzedInstruction.instruction;
+        FiveRegisterInstruction instruction =
+                (FiveRegisterInstruction) analyzedInstruction.instruction;
         analyzeInvokeDirectCommon(analyzedInstruction, instruction.getRegisterC());
     }
 
     private void analyzeInvokeDirectRange(@Nonnull AnalyzedInstruction analyzedInstruction) {
-        RegisterRangeInstruction instruction = (RegisterRangeInstruction)analyzedInstruction.instruction;
+        RegisterRangeInstruction instruction =
+                (RegisterRangeInstruction) analyzedInstruction.instruction;
         analyzeInvokeDirectCommon(analyzedInstruction, instruction.getStartRegister());
     }
 
-    private void analyzeInvokeDirectCommon(@Nonnull AnalyzedInstruction analyzedInstruction, int objectRegister) {
-        //the only time that an invoke instruction changes a register type is when using invoke-direct on a
-        //constructor (<init>) method, which changes the uninitialized reference (and any register that the same
-        //uninit reference has been copied to) to an initialized reference
+    private void analyzeInvokeDirectCommon(@Nonnull AnalyzedInstruction analyzedInstruction,
+                                           int objectRegister) {
+        // the only time that an invoke instruction changes a register type is when using
+        // invoke-direct on a constructor (<init>) method, which changes the uninitialized
+        // reference (and any register that the same uninit reference has been copied to)
+        // to an initialized reference.
 
-        ReferenceInstruction instruction = (ReferenceInstruction)analyzedInstruction.instruction;
-
-        MethodReference methodReference = (MethodReference)instruction.getReference();
-
+        ReferenceInstruction instruction = (ReferenceInstruction) analyzedInstruction.instruction;
+        MethodReference methodReference = (MethodReference) instruction.getReference();
         if (!methodReference.getName().equals("<init>")) {
             return;
         }
 
-        RegisterType objectRegisterType = analyzedInstruction.getPreInstructionRegisterType(objectRegister);
-
+        RegisterType objectRegisterType =
+                analyzedInstruction.getPreInstructionRegisterType(objectRegister);
         if (objectRegisterType.category != RegisterType.UNINIT_REF &&
                 objectRegisterType.category != RegisterType.UNINIT_THIS) {
             return;
@@ -1510,7 +1557,7 @@ public class MethodAnalyzer {
         setPostRegisterTypeAndPropagateChanges(analyzedInstruction, objectRegister,
                 RegisterType.getRegisterType(RegisterType.REFERENCE, objectRegisterType.type));
 
-        for (int i=0; i<analyzedInstruction.postRegisterMap.length; i++) {
+        for (int i = 0; i < analyzedInstruction.postRegisterMap.length; i++) {
             RegisterType postInstructionRegisterType = analyzedInstruction.postRegisterMap[i];
             if (postInstructionRegisterType.category == RegisterType.UNKNOWN) {
                 RegisterType preInstructionRegisterType =
@@ -1539,8 +1586,8 @@ public class MethodAnalyzer {
     private void analyzeBinaryOp(@Nonnull AnalyzedInstruction analyzedInstruction,
                                  @Nonnull RegisterType destRegisterType, boolean checkForBoolean) {
         if (checkForBoolean) {
-            ThreeRegisterInstruction instruction = (ThreeRegisterInstruction)analyzedInstruction.instruction;
-
+            ThreeRegisterInstruction instruction =
+                    (ThreeRegisterInstruction) analyzedInstruction.instruction;
             RegisterType source1RegisterType =
                     analyzedInstruction.getPreInstructionRegisterType(instruction.getRegisterB());
             RegisterType source2RegisterType =
@@ -1556,10 +1603,11 @@ public class MethodAnalyzer {
     }
 
     private void analyzeBinary2AddrOp(@Nonnull AnalyzedInstruction analyzedInstruction,
-                                      @Nonnull RegisterType destRegisterType, boolean checkForBoolean) {
+                                      @Nonnull RegisterType destRegisterType,
+                                      boolean checkForBoolean) {
         if (checkForBoolean) {
-            TwoRegisterInstruction instruction = (TwoRegisterInstruction)analyzedInstruction.instruction;
-
+            TwoRegisterInstruction instruction =
+                    (TwoRegisterInstruction) analyzedInstruction.instruction;
             RegisterType source1RegisterType =
                     analyzedInstruction.getPreInstructionRegisterType(instruction.getRegisterA());
             RegisterType source2RegisterType =
@@ -1570,35 +1618,34 @@ public class MethodAnalyzer {
                 destRegisterType = RegisterType.BOOLEAN_TYPE;
             }
         }
-
         setDestinationRegisterTypeAndPropagateChanges(analyzedInstruction, destRegisterType);
     }
 
     private void analyzeLiteralBinaryOp(@Nonnull AnalyzedInstruction analyzedInstruction,
-                                        @Nonnull RegisterType destRegisterType, boolean checkForBoolean) {
+                                        @Nonnull RegisterType destRegisterType,
+                                        boolean checkForBoolean) {
         if (checkForBoolean) {
-            TwoRegisterInstruction instruction = (TwoRegisterInstruction)analyzedInstruction.instruction;
-
-            RegisterType sourceRegisterType =
-                    analyzedInstruction.getPreInstructionRegisterType(instruction.getRegisterB());
+            TwoRegisterInstruction instruction =
+                    (TwoRegisterInstruction) analyzedInstruction.instruction;
+            RegisterType sourceRegisterType = analyzedInstruction.getPreInstructionRegisterType(
+                    instruction.getRegisterB());
 
             if (BooleanCategories.get(sourceRegisterType.category)) {
-                int literal = ((NarrowLiteralInstruction)analyzedInstruction.instruction).getNarrowLiteral();
+                int literal = ((NarrowLiteralInstruction) instruction).getNarrowLiteral();
                 if (literal == 0 || literal == 1) {
                     destRegisterType = RegisterType.BOOLEAN_TYPE;
                 }
             }
         }
-
         setDestinationRegisterTypeAndPropagateChanges(analyzedInstruction, destRegisterType);
     }
 
-    private RegisterType getDestTypeForLiteralShiftRight(@Nonnull AnalyzedInstruction analyzedInstruction, boolean signedShift) {
-        TwoRegisterInstruction instruction = (TwoRegisterInstruction)analyzedInstruction.instruction;
-
-        RegisterType sourceRegisterType = getAndCheckSourceRegister(analyzedInstruction, instruction.getRegisterB(),
-                Primitive32BitCategories);
-        long literalShift = ((NarrowLiteralInstruction)analyzedInstruction.instruction).getNarrowLiteral();
+    private RegisterType getDestTypeForLiteralShiftRight(
+            @Nonnull AnalyzedInstruction analyzedInstruction, boolean signedShift) {
+        TwoRegisterInstruction instruction = (TwoRegisterInstruction) analyzedInstruction.instruction;
+        RegisterType sourceRegisterType = getAndCheckSourceRegister(
+                analyzedInstruction, instruction.getRegisterB(), Primitive32BitCategories);
+        long literalShift = ((NarrowLiteralInstruction) instruction).getNarrowLiteral();
 
         if (literalShift == 0) {
             return sourceRegisterType;
@@ -1665,23 +1712,25 @@ public class MethodAnalyzer {
 
     private void analyzeExecuteInline(@Nonnull AnalyzedInstruction analyzedInstruction) {
         if (inlineResolver == null) {
-            throw new AnalysisException("Cannot analyze an odexed instruction unless we are deodexing");
+            throw new AnalysisException(
+                    "Cannot analyze an odexed instruction unless we are deodexing");
         }
 
         Instruction35mi instruction = (Instruction35mi)analyzedInstruction.instruction;
         Method resolvedMethod = inlineResolver.resolveExecuteInline(analyzedInstruction);
 
         Opcode deodexedOpcode;
-        int acccessFlags = resolvedMethod.getAccessFlags();
-        if (AccessFlags.STATIC.isSet(acccessFlags)) {
+        int accessFlags = resolvedMethod.getAccessFlags();
+        if (AccessFlags.STATIC.isSet(accessFlags)) {
             deodexedOpcode = Opcode.INVOKE_STATIC;
-        } else if (AccessFlags.PRIVATE.isSet(acccessFlags)) {
+        } else if (AccessFlags.PRIVATE.isSet(accessFlags)) {
             deodexedOpcode = Opcode.INVOKE_DIRECT;
         } else {
             deodexedOpcode = Opcode.INVOKE_VIRTUAL;
         }
 
-        Instruction35c deodexedInstruction = new ImmutableInstruction35c(deodexedOpcode, instruction.getRegisterCount(),
+        Instruction35c deodexedInstruction = new ImmutableInstruction35c(
+                deodexedOpcode, instruction.getRegisterCount(),
                 instruction.getRegisterC(), instruction.getRegisterD(), instruction.getRegisterE(),
                 instruction.getRegisterF(), instruction.getRegisterG(), resolvedMethod);
 
@@ -1691,7 +1740,8 @@ public class MethodAnalyzer {
 
     private void analyzeExecuteInlineRange(@Nonnull AnalyzedInstruction analyzedInstruction) {
         if (inlineResolver == null) {
-            throw new AnalysisException("Cannot analyze an odexed instruction unless we are deodexing");
+            throw new AnalysisException(
+                    "Cannot analyze an odexed instruction unless we are deodexing");
         }
 
         Instruction3rmi instruction = (Instruction3rmi)analyzedInstruction.instruction;
@@ -1707,7 +1757,8 @@ public class MethodAnalyzer {
             deodexedOpcode = Opcode.INVOKE_VIRTUAL_RANGE;
         }
 
-        Instruction3rc deodexedInstruction = new ImmutableInstruction3rc(deodexedOpcode, instruction.getStartRegister(),
+        Instruction3rc deodexedInstruction = new ImmutableInstruction3rc(
+                deodexedOpcode, instruction.getStartRegister(),
                 instruction.getRegisterCount(), resolvedMethod);
 
         analyzedInstruction.setDeodexedInstruction(deodexedInstruction);
@@ -1718,13 +1769,14 @@ public class MethodAnalyzer {
         analyzeInvokeDirectEmpty(analyzedInstruction, true);
     }
 
-    private void analyzeInvokeDirectEmpty(@Nonnull AnalyzedInstruction analyzedInstruction, boolean analyzeResult) {
+    private void analyzeInvokeDirectEmpty(@Nonnull AnalyzedInstruction analyzedInstruction,
+                                          boolean analyzeResult) {
         Instruction35c instruction = (Instruction35c)analyzedInstruction.instruction;
 
-        Instruction35c deodexedInstruction = new ImmutableInstruction35c(Opcode.INVOKE_DIRECT,
-                instruction.getRegisterCount(), instruction.getRegisterC(), instruction.getRegisterD(),
-                instruction.getRegisterE(), instruction.getRegisterF(), instruction.getRegisterG(),
-                instruction.getReference());
+        Instruction35c deodexedInstruction = new ImmutableInstruction35c(
+                Opcode.INVOKE_DIRECT, instruction.getRegisterCount(),
+                instruction.getRegisterC(), instruction.getRegisterD(), instruction.getRegisterE(),
+                instruction.getRegisterF(), instruction.getRegisterG(), instruction.getReference());
 
         analyzedInstruction.setDeodexedInstruction(deodexedInstruction);
 
@@ -1737,15 +1789,16 @@ public class MethodAnalyzer {
         analyzeInvokeObjectInitRange(analyzedInstruction, true);
     }
 
-    private void analyzeInvokeObjectInitRange(@Nonnull AnalyzedInstruction analyzedInstruction, boolean analyzeResult) {
-        Instruction3rc instruction = (Instruction3rc)analyzedInstruction.instruction;
+    private void analyzeInvokeObjectInitRange(@Nonnull AnalyzedInstruction analyzedInstruction,
+                                              boolean analyzeResult) {
+        Instruction3rc instruction = (Instruction3rc) analyzedInstruction.instruction;
 
         Instruction deodexedInstruction;
 
         int startRegister = instruction.getStartRegister();
-        // hack: we should be using instruction.getRegisterCount, but some tweaked versions of dalvik appear
-        // to generate invoke-object-init/range instructions with an invalid register count. We know it should
-        // always be 1, so just use that.
+        // hack: we should be using instruction.getRegisterCount, but some tweaked versions
+        // of dalvik appear to generate invoke-object-init/range instructions with an invalid
+        // register count. We know it should always be 1, so just use that.
         int registerCount = 1;
         if (startRegister < 16) {
             deodexedInstruction = new ImmutableInstruction35c(Opcode.INVOKE_DIRECT,
@@ -1807,7 +1860,7 @@ public class MethodAnalyzer {
     @Nullable
     private TypeProto guessTypeByNearestInstanceOf(int instrIndex, int reg) {
         Instruction22c instrInsOf = findTypeNearestInstanceOf(instrIndex);
-        // Result in getRegisterA, target to check in getRegisterB
+        // Result in getRegisterA, target to check in getRegisterB.
         if (instrInsOf != null && (instrInsOf.getRegisterB() == reg || reg < 0)) {
             TypeReference ref = (TypeReference) instrInsOf.getReference();
             TypeProto insOfType = RegisterType.getRegisterType(
@@ -2178,21 +2231,23 @@ public class MethodAnalyzer {
 
         if (!canAccessClass(thisClass, classPath.getClassDef(resolvedField.getDefiningClass()))) {
 
-            // the class is not accessible. So we start looking at objectRegisterTypeProto (which may be different
-            // than resolvedField.getDefiningClass()), and walk up the class hierarchy.
+            // the class is not accessible. So we start looking at objectRegisterTypeProto
+            // (which may be different than resolvedField.getDefiningClass()),
+            // and walk up the class hierarchy.
             ClassDef fieldClass = classPath.getClassDef(objectRegisterTypeProto.getType());
             while (!canAccessClass(thisClass, fieldClass)) {
                 String superclass = fieldClass.getSuperclass();
                 if (superclass == null) {
-                    throw new ExceptionWithContext("Couldn't find accessible class while resolving field %s",
+                    throw new ExceptionWithContext(
+                            "Couldn't find accessible class while resolving field %s",
                             ReferenceUtil.getShortFieldDescriptor(resolvedField));
                 }
 
                 fieldClass = classPath.getClassDef(superclass);
             }
 
-            // fieldClass is now the first accessible class found. Now. we need to make sure that the field is
-            // actually valid for this class
+            // fieldClass is now the first accessible class found.
+            // Now, we need to make sure that the field is actually valid for this class.
             FieldReference originalResolvedField = resolvedField;
             resolvedField = classPath.getClass(fieldClass.getType()).getFieldByOffset(fieldOffset);
             if (resolvedField == null) {
@@ -2200,16 +2255,17 @@ public class MethodAnalyzer {
                         "Couldn't find accessible class while resolving field %s",
                         ReferenceUtil.getShortFieldDescriptor(originalResolvedField));
             }
-            resolvedField = new ImmutableFieldReference(fieldClass.getType(), resolvedField.getName(),
-                    resolvedField.getType());
+            resolvedField = new ImmutableFieldReference(
+                    fieldClass.getType(), resolvedField.getName(), resolvedField.getType());
         }
 
         String fieldType = resolvedField.getType();
 
-        Opcode opcode = OdexedFieldInstructionMapper.getAndCheckDeodexedOpcodeForOdexedOpcode(fieldType,
-                instruction.getOpcode());
+        Opcode opcode = OdexedFieldInstructionMapper.getAndCheckDeodexedOpcodeForOdexedOpcode(
+                fieldType, instruction.getOpcode());
 
-        Instruction22c deodexedInstruction = new ImmutableInstruction22c(opcode, (byte)instruction.getRegisterA(),
+        Instruction22c deodexedInstruction = new ImmutableInstruction22c(
+                opcode, (byte)instruction.getRegisterA(),
                 (byte)instruction.getRegisterB(), resolvedField);
         analyzedInstruction.setDeodexedInstruction(deodexedInstruction);
 
@@ -2218,23 +2274,23 @@ public class MethodAnalyzer {
         return true;
     }
 
-    private boolean analyzeInvokeVirtualQuick(@Nonnull AnalyzedInstruction analyzedInstruction, boolean isSuper,
-                                              boolean isRange) {
+    private boolean analyzeInvokeVirtualQuick(@Nonnull AnalyzedInstruction analyzedInstruction,
+                                              boolean isSuper, boolean isRange) {
         final int methodIndex;
         final int objectRegister;
 
         if (isRange) {
-            Instruction3rms instruction = (Instruction3rms)analyzedInstruction.instruction;
+            Instruction3rms instruction = (Instruction3rms) analyzedInstruction.instruction;
             methodIndex = instruction.getVtableIndex();
             objectRegister = instruction.getStartRegister();
         } else {
-            Instruction35ms instruction = (Instruction35ms)analyzedInstruction.instruction;
+            Instruction35ms instruction = (Instruction35ms) analyzedInstruction.instruction;
             methodIndex = instruction.getVtableIndex();
             objectRegister = instruction.getRegisterC();
         }
 
-        RegisterType objectRegisterType = getAndCheckSourceRegister(analyzedInstruction, objectRegister,
-                ReferenceOrUninitCategories);
+        RegisterType objectRegisterType = getAndCheckSourceRegister(
+                analyzedInstruction, objectRegister, ReferenceOrUninitCategories);
         if (objectRegisterType == RegisterType.NULL_TYPE) {
             objectRegisterType = findRegisterType(analyzedInstruction,
                     objectRegister, -1, methodIndex);
@@ -2316,38 +2372,45 @@ public class MethodAnalyzer {
         if (resolvedMethod == null || objectRegisterTypeProto == null) {
             String type = objectRegisterTypeProto == null
                     ? "unknown" : objectRegisterTypeProto.getType();
-            throw new AnalysisException("Could not resolve the method in class %s at index %d, objReg=%d",
+            throw new AnalysisException(
+                    "Could not resolve the method in class %s at index %d, objReg=%d",
                     type, methodIndex, objectRegister);
         }
 
-        // no need to check class access for invoke-super. A class can obviously access its superclass.
+        // no need to check class access for invoke-super.
+        // A class can obviously access its superclass.
         ClassDef thisClass = classPath.getClassDef(method.getDefiningClass());
 
-        if (!isSuper && !canAccessClass(thisClass, classPath.getClassDef(resolvedMethod.getDefiningClass()))) {
+        if (!isSuper && !canAccessClass(thisClass,
+                classPath.getClassDef(resolvedMethod.getDefiningClass()))) {
 
-            // the class is not accessible. So we start looking at objectRegisterTypeProto (which may be different
-            // than resolvedMethod.getDefiningClass()), and walk up the class hierarchy.
+            // the class is not accessible. So we start looking at objectRegisterTypeProto
+            // (which may be different than resolvedMethod.getDefiningClass()), and walk up
+            // the class hierarchy.
             ClassDef methodClass = classPath.getClassDef(objectRegisterTypeProto.getType());
             while (!canAccessClass(thisClass, methodClass)) {
                 String superclass = methodClass.getSuperclass();
                 if (superclass == null) {
-                    throw new ExceptionWithContext("Couldn't find accessible class while resolving method %s",
+                    throw new ExceptionWithContext(
+                            "Couldn't find accessible class while resolving method %s",
                             ReferenceUtil.getMethodDescriptor(resolvedMethod, true));
                 }
 
                 methodClass = classPath.getClassDef(superclass);
             }
 
-            // methodClass is now the first accessible class found. Now. we need to make sure that the method is
-            // actually valid for this class
+            // methodClass is now the first accessible class found. Now. we need to make sure
+            // that the method is actually valid for this class
             MethodReference newResolvedMethod =
                     classPath.getClass(methodClass.getType()).getMethodByVtableIndex(methodIndex);
             if (newResolvedMethod == null) {
-                throw new ExceptionWithContext("Couldn't find accessible class while resolving method %s",
+                throw new ExceptionWithContext(
+                        "Couldn't find accessible class while resolving method %s",
                         ReferenceUtil.getMethodDescriptor(resolvedMethod, true));
             }
             resolvedMethod = newResolvedMethod;
-            resolvedMethod = new ImmutableMethodReference(methodClass.getType(), resolvedMethod.getName(),
+            resolvedMethod = new ImmutableMethodReference(
+                    methodClass.getType(), resolvedMethod.getName(),
                     resolvedMethod.getParameterTypes(), resolvedMethod.getReturnType());
         }
 
@@ -2361,7 +2424,8 @@ public class MethodAnalyzer {
                 opcode = Opcode.INVOKE_VIRTUAL_RANGE;
             }
 
-            deodexedInstruction = new ImmutableInstruction3rc(opcode, instruction.getStartRegister(),
+            deodexedInstruction = new ImmutableInstruction3rc(
+                    opcode, instruction.getStartRegister(),
                     instruction.getRegisterCount(), resolvedMethod);
         } else {
             Instruction35ms instruction = (Instruction35ms)analyzedInstruction.instruction;
@@ -2372,8 +2436,9 @@ public class MethodAnalyzer {
                 opcode = Opcode.INVOKE_VIRTUAL;
             }
 
-            deodexedInstruction = new ImmutableInstruction35c(opcode, instruction.getRegisterCount(),
-                    instruction.getRegisterC(), instruction.getRegisterD(), instruction.getRegisterE(),
+            deodexedInstruction = new ImmutableInstruction35c(opcode,
+                    instruction.getRegisterCount(), instruction.getRegisterC(),
+                    instruction.getRegisterD(), instruction.getRegisterE(),
                     instruction.getRegisterF(), instruction.getRegisterG(), resolvedMethod);
         }
 
@@ -2383,14 +2448,16 @@ public class MethodAnalyzer {
         return true;
     }
 
-    private boolean canAccessClass(@Nonnull ClassDef accessorClassDef, @Nonnull ClassDef accesseeClassDef) {
+    private boolean canAccessClass(
+            @Nonnull ClassDef accessorClassDef, @Nonnull ClassDef accesseeClassDef) {
         if (AccessFlags.PUBLIC.isSet(accesseeClassDef.getAccessFlags())) {
             return true;
         }
 
-        // Classes can only be public or package private. Any private or protected inner classes are actually
-        // package private.
-        return getPackage(accesseeClassDef.getType()).equals(getPackage(accessorClassDef.getType()));
+        // Classes can only be public or package private. Any private or protected
+        // inner classes are actually package private.
+        return getPackage(accesseeClassDef.getType()).equals(
+                getPackage(accessorClassDef.getType()));
     }
 
     private static String getPackage(String className) {
@@ -2405,25 +2472,30 @@ public class MethodAnalyzer {
         return analyzePutGetVolatile(analyzedInstruction, true);
     }
 
-    private boolean analyzePutGetVolatile(@Nonnull AnalyzedInstruction analyzedInstruction, boolean analyzeResult) {
-        FieldReference field = (FieldReference)((ReferenceInstruction)analyzedInstruction.instruction).getReference();
+    private boolean analyzePutGetVolatile(
+            @Nonnull AnalyzedInstruction analyzedInstruction, boolean analyzeResult) {
+        FieldReference field = (FieldReference)
+                ((ReferenceInstruction) analyzedInstruction.instruction).getReference();
         String fieldType = field.getType();
 
         Opcode originalOpcode = analyzedInstruction.instruction.getOpcode();
 
-        Opcode opcode = OdexedFieldInstructionMapper.getAndCheckDeodexedOpcodeForOdexedOpcode(fieldType,
-                originalOpcode);
+        Opcode opcode = OdexedFieldInstructionMapper.getAndCheckDeodexedOpcodeForOdexedOpcode(
+                fieldType, originalOpcode);
 
         Instruction deodexedInstruction;
 
         if (originalOpcode.isOdexedStaticVolatile()) {
-            OneRegisterInstruction instruction = (OneRegisterInstruction)analyzedInstruction.instruction;
-            deodexedInstruction = new ImmutableInstruction21c(opcode, instruction.getRegisterA(), field);
+            OneRegisterInstruction instruction =
+                    (OneRegisterInstruction) analyzedInstruction.instruction;
+            deodexedInstruction = new ImmutableInstruction21c(
+                    opcode, instruction.getRegisterA(), field);
         } else {
-            TwoRegisterInstruction instruction = (TwoRegisterInstruction)analyzedInstruction.instruction;
+            TwoRegisterInstruction instruction =
+                    (TwoRegisterInstruction) analyzedInstruction.instruction;
 
-            deodexedInstruction = new ImmutableInstruction22c(opcode, instruction.getRegisterA(),
-                    instruction.getRegisterB(), field);
+            deodexedInstruction = new ImmutableInstruction22c(
+                    opcode, instruction.getRegisterA(), instruction.getRegisterB(), field);
         }
 
         analyzedInstruction.setDeodexedInstruction(deodexedInstruction);
@@ -2435,26 +2507,28 @@ public class MethodAnalyzer {
     }
 
     @Nonnull
-    private static RegisterType getAndCheckSourceRegister(@Nonnull AnalyzedInstruction analyzedInstruction,
-                                                          int registerNumber, BitSet validCategories) {
+    private static RegisterType getAndCheckSourceRegister(
+            @Nonnull AnalyzedInstruction analyzedInstruction,
+            int registerNumber, BitSet validCategories) {
         assert registerNumber >= 0 && registerNumber < analyzedInstruction.postRegisterMap.length;
 
         RegisterType registerType = analyzedInstruction.getPreInstructionRegisterType(registerNumber);
-
         checkRegister(registerType, registerNumber, validCategories);
 
         if (validCategories == WideLowCategories) {
             checkRegister(registerType, registerNumber, WideLowCategories);
             checkWidePair(registerNumber, analyzedInstruction);
 
-            RegisterType secondRegisterType = analyzedInstruction.getPreInstructionRegisterType(registerNumber + 1);
-            checkRegister(secondRegisterType, registerNumber+1, WideHighCategories);
+            RegisterType secondRegisterType = analyzedInstruction.getPreInstructionRegisterType(
+                    registerNumber + 1);
+            checkRegister(secondRegisterType, registerNumber + 1, WideHighCategories);
         }
 
         return registerType;
     }
 
-    private static void checkRegister(RegisterType registerType, int registerNumber, BitSet validCategories) {
+    private static void checkRegister(
+            RegisterType registerType, int registerNumber, BitSet validCategories) {
         if (!validCategories.get(registerType.category)) {
             throw new AnalysisException(String.format("Invalid register type %s for register v%d.",
                     registerType.toString(), registerNumber));
@@ -2463,8 +2537,9 @@ public class MethodAnalyzer {
 
     private static void checkWidePair(int registerNumber, AnalyzedInstruction analyzedInstruction) {
         if (registerNumber + 1 >= analyzedInstruction.postRegisterMap.length) {
-            throw new AnalysisException(String.format("v%d cannot be used as the first register in a wide register" +
-                    "pair because it is the last register.", registerNumber));
+            throw new AnalysisException(String.format(
+                    "v%d cannot be used as the first register in a wide register"
+                            + "pair because it is the last register.", registerNumber));
         }
     }
 }
