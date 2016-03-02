@@ -1988,16 +1988,20 @@ public class MethodAnalyzer {
                     type = RegisterType.INTEGER_TYPE;
                     break;
                 case AGET_OBJECT:
-                    RegisterType arrayRegisterType = aInstr.getPostInstructionRegisterType(regB);
-                    if (arrayRegisterType == RegisterType.NULL_TYPE) {
-                        arrayRegisterType = getLastRegisterType(regB);
+                    RegisterType registerType = aInstr.getPostInstructionRegisterType(regB);
+                    if (registerType == RegisterType.NULL_TYPE
+                            || !(registerType.type instanceof ArrayProto)) {
+                        registerType = getLastRegisterType(regB);
+                        if (!(registerType.type instanceof ArrayProto)) {
+                            addAnalysisInfo("Cannot find proper type from aget-object regB=" + regB
+                                    + " type=" + registerType.type + " line=" + getLine(aInstr));
+                            break;
+                        }
                     }
-                    ArrayProto arrayProto = (ArrayProto) arrayRegisterType.type;
-                    if (arrayProto != null) {
-                        String elementType = arrayProto.getImmediateElementType();
-                        type = RegisterType.getRegisterType(
-                                RegisterType.REFERENCE, classPath.getClass(elementType));
-                    }
+                    ArrayProto arrayProto = (ArrayProto) registerType.type;
+                    String elementType = arrayProto.getImmediateElementType();
+                    type = RegisterType.getRegisterType(
+                            RegisterType.REFERENCE, classPath.getClass(elementType));
                     break;
                 case INSTANCE_OF:
                     TypeReference ref = (TypeReference)
