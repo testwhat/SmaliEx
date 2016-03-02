@@ -38,9 +38,9 @@ public class MiscUtil {
     public static File changeExt(File f, String targetExt) {
         String outPath = f.getAbsolutePath();
         if (!outPath.endsWith(targetExt)) {
-            int dpos = outPath.lastIndexOf(".");
-            if (dpos > 0) {
-                outPath = outPath.substring(0, dpos + 1) + targetExt;
+            int dotPos = outPath.lastIndexOf(".");
+            if (dotPos > 0) {
+                outPath = outPath.substring(0, dotPos + 1) + targetExt;
             } else {
                 outPath = outPath + "." + targetExt;
             }

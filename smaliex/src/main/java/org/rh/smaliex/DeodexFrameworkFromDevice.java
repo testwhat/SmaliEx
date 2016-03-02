@@ -37,10 +37,9 @@ public class DeodexFrameworkFromDevice {
                 }
             }
             if (args.length > 2) {
-                String byFilePath = args[args.length - 1];
-                if (new File(byFilePath).isDirectory()) {
-                    sysFolder = byFilePath;
-                    return;
+                String inputPath = args[args.length - 1];
+                if (new File(inputPath).isDirectory()) {
+                    sysFolder = inputPath;
                 }
             }
             if ("t".equals(args[0])) {

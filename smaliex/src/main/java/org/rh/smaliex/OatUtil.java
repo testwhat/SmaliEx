@@ -35,6 +35,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
@@ -52,7 +53,40 @@ import org.rh.smaliex.reader.Oat;
 
 public class OatUtil {
 
-    public static void smaliRaw(File inputFile, int apiLevel) throws IOException {
+    public static List<DexBackedDexFile> getDexFiles(
+            File file, int apiLevel, List<String> outputNames) {
+        List<DexBackedDexFile> dexFiles = new ArrayList<>();
+        if (Elf.isElf(file)) {
+            try (Elf e = new Elf(file)) {
+                Oat oat = getOat(e);
+                Opcodes opc = new Opcodes(apiLevel > 0 ? apiLevel : oat.guessApiLevel());
+                for (int i = 0; i < oat.mDexFiles.length; i++) {
+                    Oat.DexFile df = oat.mDexFiles[i];
+                    dexFiles.add(readDex(df, df.mHeader.file_size_, opc));
+                    if (outputNames != null) {
+                        String dexName = new String(oat.mOatDexFiles[i].dex_file_location_data_);
+                        dexName = getOutputNameForSubDex(dexName);
+                        outputNames.add(MiscUtil.getFilenamePrefix(dexName));
+                    }
+                }
+            } catch (IOException ex) {
+                LLog.ex(ex);
+            }
+        } else {
+            Opcodes opc = new Opcodes(apiLevel > 0 ? apiLevel : DexUtil.API_LEVEL);
+            dexFiles = DexUtil.loadMultiDex(file, opc);
+            if (outputNames != null) {
+                String dexName = "classes";
+                for (int i = 0; i < dexFiles.size(); i++) {
+                    outputNames.add(dexName);
+                    dexName = "classes" + (i + 2);
+                }
+            }
+        }
+        return dexFiles;
+    }
+
+    public static void smaliRaw(File inputFile, int apiLevel) {
         if (!inputFile.isFile()) {
             LLog.i(inputFile + " is not a file.");
         }
@@ -65,31 +99,14 @@ public class OatUtil {
         options.allowOdex = true;
         options.jobs = 4;
 
-        java.util.List<DexBackedDexFile> dexFiles = new ArrayList<>();
-        java.util.List<String> outSubFolders = new ArrayList<>();
-        if (Elf.isElf(inputFile)) {
-            try (Elf e = new Elf(inputFile)) {
-                Oat oat = getOat(e);
-                for (int i = 0; i < oat.mDexFiles.length; i++) {
-                    Oat.DexFile df = oat.mDexFiles[i];
-                    dexFiles.add(readDex(df, df.mHeader.file_size_, opc));
-                    String outFile = new String(oat.mOatDexFiles[i].dex_file_location_data_);
-                    outFile = MiscUtil.getFilenamePrefix(getOuputNameForSubDex(outFile));
-                    outSubFolders.add(MiscUtil.path(outputBaseFolder, outFile));
-                }
-            } catch (IOException ex) {
-                throw handleIOE(ex);
-            }
-        } else {
-            dexFiles = DexUtil.loadMultiDex(inputFile, opc);
-            String subFolder = "classes";
-            for (int i = 0; i < dexFiles.size(); i++) {
-                outSubFolders.add(MiscUtil.path(outputBaseFolder, subFolder));
-                subFolder = "classes" + (i + 2);
-            }
-        }
+        List<String> outSubFolders = new ArrayList<>();
+        List<DexBackedDexFile> dexFiles = getDexFiles(inputFile, apiLevel, outSubFolders);
         if (outSubFolders.size() == 1) {
             outSubFolders.set(0, outputBaseFolder);
+        } else {
+            for (int i = 0; i < outSubFolders.size(); i++) {
+                outSubFolders.set(i, MiscUtil.path(outputBaseFolder, outSubFolders.get(i)));
+            }
         }
 
         for (int i = 0; i < dexFiles.size(); i++) {
@@ -163,12 +180,12 @@ public class OatUtil {
         return names;
     }
 
-    public static String getOuputNameForSubDex(String jarPathInOat) {
-        int spos = jarPathInOat.indexOf(':');
-        if (spos > 0) {
+    public static String getOutputNameForSubDex(String jarPathInOat) {
+        int colonPos = jarPathInOat.indexOf(':');
+        if (colonPos > 0) {
             // framework.jar:classes2.dex -> framework-classes2.dex
-            jarPathInOat = jarPathInOat.substring(0, spos - 4)
-                    + "-" + jarPathInOat.substring(spos + 1);
+            jarPathInOat = jarPathInOat.substring(0, colonPos - 4)
+                    + "-" + jarPathInOat.substring(colonPos + 1);
         }
         return jarPathInOat.substring(jarPathInOat.lastIndexOf('/') + 1);
     }
@@ -185,7 +202,7 @@ public class OatUtil {
                 Oat.OatDexFile odf = oat.mOatDexFiles[i];
                 Oat.DexFile df = oat.mDexFiles[i];
                 String outFile = new String(odf.dex_file_location_data_);
-                outFile = getOuputNameForSubDex(outFile);
+                outFile = getOutputNameForSubDex(outFile);
                 File out = MiscUtil.changeExt(new File(outputFolder, outFile), "dex");
                 df.saveTo(out);
                 LLog.i("Output raw dex: " + out.getAbsolutePath());
@@ -260,11 +277,11 @@ public class OatUtil {
         for (int i = 0; i < oat.mOatDexFiles.length; i++) {
             Oat.OatDexFile odf = oat.mOatDexFiles[i];
             String dexLoc = new String(odf.dex_file_location_data_);
-            String opath = getOuputNameForSubDex(dexLoc);
-            if ("base.apk".equals(opath)) {
-                opath = MiscUtil.getFilenamePrefix(oat.mSrcFile.getName());
+            String outputName = getOutputNameForSubDex(dexLoc);
+            if ("base.apk".equals(outputName)) {
+                outputName = MiscUtil.getFilenamePrefix(oat.mSrcFile.getName());
             }
-            File outputFile = MiscUtil.changeExt(new File(outputFolder, opath), "dex");
+            File outputFile = MiscUtil.changeExt(new File(outputFolder, outputName), "dex");
             LLog.i("De-optimizing " + dexLoc);
             DexFile d = deOpt.rewriteDexFile(dexFiles[i]);
             if (!ODexRewriter.isValid(d)) {
@@ -291,19 +308,19 @@ public class OatUtil {
         HashMap<String, ArrayList<Oat.DexFile>> dexFileGroup = new HashMap<>();
         for (int i = 0; i < oat.mOatDexFiles.length; i++) {
             Oat.OatDexFile odf = oat.mOatDexFiles[i];
-            String opath = new String(odf.dex_file_location_data_);
-            int spos = opath.indexOf(':');
-            if (spos > 0) {
+            String dexPath = new String(odf.dex_file_location_data_);
+            int colonPos = dexPath.indexOf(':');
+            if (colonPos > 0) {
                 // .../framework.jar:classes2.dex
-                opath = opath.substring(0, spos);
+                dexPath = dexPath.substring(0, colonPos);
             }
-            opath = opath.substring(opath.lastIndexOf('/') + 1);
-            ArrayList<Oat.DexFile> dfiles = dexFileGroup.get(opath);
-            if (dfiles == null) {
-                dfiles = new ArrayList<>();
-                dexFileGroup.put(opath, dfiles);
+            dexPath = dexPath.substring(dexPath.lastIndexOf('/') + 1);
+            ArrayList<Oat.DexFile> dexFiles = dexFileGroup.get(dexPath);
+            if (dexFiles == null) {
+                dexFiles = new ArrayList<>();
+                dexFileGroup.put(dexPath, dexFiles);
             }
-            dfiles.add(oat.mDexFiles[i]);
+            dexFiles.add(oat.mDexFiles[i]);
             if (!isBoot) {
                 Oat.DexFile dex = oat.mDexFiles[i];
                 deOpt.addDexToClassPath(readDex(dex, dex.mHeader.file_size_, opcodes));
