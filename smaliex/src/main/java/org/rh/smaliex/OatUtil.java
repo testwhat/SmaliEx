@@ -122,22 +122,24 @@ public class OatUtil {
             String outputJarFolder) throws IOException {
         File odexFolder = prepareOdex(bootOat);
         String bootClassPathFolder = odexFolder.getAbsolutePath();
-        extractDexFromBootOat(bootOat, outputJarFolder, bootClassPathFolder, noClassJarFolder);
+        convertDexFromBootOat(bootOat, outputJarFolder, bootClassPathFolder, noClassJarFolder);
     }
 
     public static void bootOat2Dex(String bootOat, String outFolder) throws IOException {
         File odexFolder = prepareOdex(bootOat);
+        String folderName = odexFolder.getName().replace("odex", "dex");
         File outputJarFolder = outFolder != null ? new File(outFolder) :
-                new File(new File(bootOat).getParent(), "dex");
-        extractDexFromBootOat(bootOat, outputJarFolder.getAbsolutePath(),
+                new File(new File(bootOat).getParent(), folderName);
+        convertDexFromBootOat(bootOat, outputJarFolder.getAbsolutePath(),
                 odexFolder.getAbsolutePath(), null);
     }
 
     private static File prepareOdex(String bootOat) throws IOException {
         File oatFile = new File(bootOat);
-        File odexFolder = new File(oatFile.getParentFile(), "odex");
+        String folderName = (oatFile.isDirectory() ? oatFile.getName() + "-" : "") + "odex";
+        File odexFolder = new File(oatFile.getParentFile(), folderName);
         MiscUtil.mkdirs(odexFolder);
-        extractOdexFromOat(oatFile, odexFolder);
+        extractOdexFromOat(bootOat, odexFolder);
         return odexFolder;
     }
 
@@ -158,7 +160,7 @@ public class OatUtil {
         Elf.Elf_Shdr sec = e.getSection(Oat.SECTION_RODATA);
         if (sec != null) {
             r.seek(sec.getOffset());
-            return new Oat(r, true);
+            return new Oat(r);
         }
         throw new IOException("oat not found");
     }
@@ -190,43 +192,67 @@ public class OatUtil {
         return jarPathInOat.substring(jarPathInOat.lastIndexOf('/') + 1);
     }
 
+    static File[] getOatFile(String oatPath) {
+        File path = new File(oatPath);
+        return path.isDirectory() ? MiscUtil.getFiles(oatPath, ".oat") : new File[] { path };
+    }
+
     // Get optimized dex from oat
-    public static void extractOdexFromOat(File oatFile, File outputFolder) throws IOException {
+    public static void extractOdexFromOat(String oatPath, File outputFolder) throws IOException {
         if (outputFolder == null) {
             outputFolder = new File(MiscUtil.workingDir());
             MiscUtil.mkdirs(outputFolder);
         }
-        try (Elf e = new Elf(oatFile)) {
-            Oat oat = getOat(e);
-            for (int i = 0; i < oat.mDexFiles.length; i++) {
-                Oat.OatDexFile odf = oat.mOatDexFiles[i];
-                Oat.DexFile df = oat.mDexFiles[i];
-                String outFile = new String(odf.dex_file_location_data_);
-                outFile = getOutputNameForSubDex(outFile);
-                File out = MiscUtil.changeExt(new File(outputFolder, outFile), "dex");
-                df.saveTo(out);
-                LLog.i("Output raw dex: " + out.getAbsolutePath());
+        IOException ioe = null;
+        for (File oatFile : getOatFile(oatPath)) {
+            try (Elf e = new Elf(oatFile)) {
+                Oat oat = getOat(e);
+                for (int i = 0; i < oat.mDexFiles.length; i++) {
+                    Oat.OatDexFile odf = oat.mOatDexFiles[i];
+                    Oat.DexFile df = oat.mDexFiles[i];
+                    String outFile = new String(odf.dex_file_location_data_);
+                    outFile = getOutputNameForSubDex(outFile);
+                    File out = MiscUtil.changeExt(new File(outputFolder, outFile), "dex");
+                    df.saveTo(out);
+                    LLog.i("Output raw dex: " + out.getAbsolutePath());
+                }
+            } catch (IOException ex) {
+                if (ioe == null) {
+                    ioe = new IOException("Error at " + oatFile);
+                }
+                ioe.addSuppressed(ex);
             }
-        } catch (IOException ex) {
-            throw handleIOE(ex);
+        }
+        if (ioe != null) {
+            throw handleIOE(ioe);
         }
     }
 
-    public static void extractDexFromBootOat(String oatFile, String outputFolder,
+    public static void convertDexFromBootOat(String oatPath, String outputFolder,
             String bootClassPath, String noClassJarFolder) throws IOException {
-        try (Elf e = new Elf(oatFile)) {
-            Oat oat = getOat(e);
-            File outFolder = new File(outputFolder);
-            if (!outFolder.exists()) {
-                MiscUtil.mkdirs(outFolder);
+        File outFolder = new File(outputFolder);
+        if (!outFolder.exists()) {
+            MiscUtil.mkdirs(outFolder);
+        }
+
+        IOException ioe = null;
+        for (File oatFile : getOatFile(oatPath)) {
+            try (Elf e = new Elf(oatFile)) {
+                Oat oat = getOat(e);
+                if (noClassJarFolder == null) {
+                    convertToDex(oat, outFolder, bootClassPath, false);
+                } else {
+                    convertToDexJar(oat, outFolder, bootClassPath, noClassJarFolder, true);
+                }
+            } catch (IOException ex) {
+                if (ioe == null) {
+                    ioe = new IOException("Error at " + oatFile);
+                }
+                ioe.addSuppressed(ex);
             }
-            if (noClassJarFolder == null) {
-                convertToDex(oat, outFolder, bootClassPath, false);
-            } else {
-                convertToDexJar(oat, outFolder, bootClassPath, noClassJarFolder, true);
-            }
-        } catch (IOException ex) {
-            throw handleIOE(ex);
+        }
+        if (ioe != null) {
+            throw handleIOE(ioe);
         }
     }
 

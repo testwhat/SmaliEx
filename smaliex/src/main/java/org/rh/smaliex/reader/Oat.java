@@ -44,6 +44,11 @@ import org.rh.smaliex.LLog;
 public class Oat {
     public final static String SECTION_RODATA = ".rodata";
 
+    public final static int VERSION_L_50 = 39;
+    public final static int VERSION_L_MR1_51 = 45;
+    public final static int VERSION_M_60 = 64;
+    public final static int VERSION_N = 75;
+
     // /art/runtime/instruction_set.h
     public final static int kNone = 0;
     public final static int kArm = 1;
@@ -90,12 +95,16 @@ public class Oat {
         @DumpFormat(type = DumpFormat.TYPE_CHAR, isString = true)
         final char[] key_value_store_;
 
+        int artVersion = 64;
+
         public Header(DataReader r) throws IOException {
             r.readBytes(magic_);
             if (magic_[0] != 'o' || magic_[1] != 'a' || magic_[2] != 't') {
                 LLog.e(String.format("Invalid art magic %c%c%c", magic_[0], magic_[1], magic_[2]));
             }
             r.readBytes(version_);
+            artVersion = org.rh.smaliex.MiscUtil.toInt(new String(version_));
+
             adler32_checksum_ = r.readInt();
             instruction_set_ = r.readInt();
             instruction_set_features_ = r.readInt();
@@ -104,8 +113,9 @@ public class Oat {
             executable_offset_ = r.readInt();
             interpreter_to_interpreter_bridge_offset_ = r.readInt();
             interpreter_to_compiled_code_bridge_offset_ = r.readInt();
+
             jni_dlsym_lookup_offset_ = r.readInt();
-            if (version_[1] <= '4') {
+            if (artVersion < 52) {
                 // Remove portable. (since oat version 052)
                 // https://android.googlesource.com/platform/art/+/956af0f0
                 portable_imt_conflict_trampoline_offset_ = r.readInt();
@@ -221,23 +231,27 @@ public class Oat {
         }
     }
 
-    // art/compiler/oat_writer art/runtime/oat_file
+    // See art/compiler/oat_writer OatDexFile::Write
     public static class OatDexFile {
         public final int dex_file_location_size_;
         @DumpFormat(type = DumpFormat.TYPE_BYTE, isString = true)
         public final byte[] dex_file_location_data_;
         @DumpFormat(hex = true)
-        final int dex_file_checksum_;
+        final int dex_file_location_checksum_;
         final int dex_file_offset_;
+        int class_offsets_offset_;
+        int lookup_table_offset_;
 
-        int[] methods_offsets_;
-
-        public OatDexFile(DataReader r) throws IOException {
+        public OatDexFile(DataReader r, int version) throws IOException {
             dex_file_location_size_ = r.readInt();
             dex_file_location_data_ = new byte[dex_file_location_size_];
             r.readBytes(dex_file_location_data_);
-            dex_file_checksum_ = r.readInt();
+            dex_file_location_checksum_ = r.readInt();
             dex_file_offset_ = r.readInt();
+            if (version >= VERSION_N) {
+                class_offsets_offset_ = r.readInt();
+                lookup_table_offset_ = r.readInt();
+            }
         }
 
         public String getLocation() {
@@ -256,10 +270,6 @@ public class Oat {
     public final File mSrcFile;
 
     public Oat(DataReader reader) throws IOException {
-        this(reader, false);
-    }
-
-    public Oat(DataReader reader, boolean skipMode) throws IOException {
         mOatPosition = reader.position();
         if (mOatPosition != 4096) {
              // Normally start from 4096(0x1000)
@@ -270,38 +280,52 @@ public class Oat {
         mOatDexFiles = new OatDexFile[mHeader.dex_file_count_];
         mDexFiles = new DexFile[mHeader.dex_file_count_];
         for (int i = 0; i < mOatDexFiles.length; i++) {
-            OatDexFile odf = new OatDexFile(reader);
+            OatDexFile odf = new OatDexFile(reader, mHeader.artVersion);
             mOatDexFiles[i] = odf;
             long thisOatPos = reader.position();
             reader.seek(mOatPosition + odf.dex_file_offset_);
             DexFile dex = new DexFile(reader);
             mDexFiles[i] = dex;
 
-            int num_methods_offsets_ = dex.mHeader.class_defs_size_;
-            reader.seek(thisOatPos + 4 * num_methods_offsets_);
-            if (reader.previewInt() > 0xff) { // workaround for samsung offset
-                num_methods_offsets_ += 4;
-                if (skipMode) {
+            if (mHeader.artVersion < VERSION_N) {
+                int num_methods_offsets_ = dex.mHeader.class_defs_size_;
+                reader.seek(thisOatPos + 4 * num_methods_offsets_);
+                if (reader.previewInt() > 0xff) { // workaround for samsung offset
+                    //num_methods_offsets_ += 4;
                     reader.readInt();
                 }
-            }
-            if (!skipMode) {
-                odf.methods_offsets_ = new int[num_methods_offsets_];
+                // No need to read method information
+                // methods_offsets_ change to method_bitmap_ since N
+                //odf.methods_offsets_ = new int[num_methods_offsets_];
+                //reader.seek(thisOatPos);
+                //reader.readIntArray(odf.methods_offsets_);
+
+            } else {
                 reader.seek(thisOatPos);
-                reader.readIntArray(odf.methods_offsets_);
             }
         }
     }
 
     public int guessApiLevel() {
         // See runtime/oat kOatVersion
-        // Android 5.0 { '0', '3', '9', '\0' };
-        // Android 5.1 { '0', '4', '5', '\0' };
-        // Android M   { '0', '6', '4', '\0' };
-        if (mHeader.version_[1] >= '6') {
+        // https://android.googlesource.com/platform/art/+/
+        // 075 625a64aa, 9bdf1088
+        // 072 3cfa4d05
+        if (mHeader.artVersion >= VERSION_N) {
+            return 24;
+        }
+        if (mHeader.artVersion > VERSION_L_MR1_51) {
             return 23;
         }
-        return mHeader.version_[1] < '4' ? 21 : 22;
+        if (mHeader.artVersion == VERSION_L_MR1_51) {
+            return 22;
+        }
+        return 21;
+    }
+
+
+    public int getArtVersion() {
+        return mHeader.artVersion;
     }
 
     public void dump() {
@@ -382,20 +406,22 @@ public class Oat {
                 oat.dump();
             }
         } catch (IOException ex) {
+            LLog.e("Failed to dump " + oatFile);
             LLog.ex(ex);
         }
     }
 
     @Retention(value = RetentionPolicy.RUNTIME)
     @Target(value = {ElementType.FIELD})
-    public static @interface DumpFormat {
-        public static int TYPE_BYTE = 0;
-        public static int TYPE_CHAR = 1;
+    public @interface DumpFormat {
+        int TYPE_BYTE = 0;
+        int TYPE_CHAR = 1;
         int type() default -1;
         boolean isString() default false;
         boolean hex() default false;
     }
 
+// See compiler/oat_writer.h
 // OatHeader         variable length with count of D OatDexFiles
 //
 // OatDexFile[0]     one variable sized OatDexFile with offsets to Dex and OatClasses

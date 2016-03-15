@@ -49,6 +49,19 @@ public class MiscUtil {
         return f;
     }
 
+    public static int toInt(String str) {
+        int len = str.length(), p = 0;
+        char[] sb = new char[len];
+        for (int i = 0; i < len; i++) {
+            char c = str.charAt(i);
+            if ((c >= '0' && c <= '9') || c == '-') {
+                sb[p++] = c;
+            }
+        }
+
+        return p == 0 ? 0 : Integer.parseInt(new String(sb, 0, p));
+    }
+
     public static File appendTail(File f, String str) {
         String name = getFilenamePrefix(f.getName())
                 + str + "." + getFilenameSuffix(f.getName());

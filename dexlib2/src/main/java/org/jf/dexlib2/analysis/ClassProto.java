@@ -567,7 +567,8 @@ public class ClassProto implements TypeProto {
             }
 
             // References should be at the front.
-            TreeSet<FieldGap> gaps = new TreeSet<>();
+            GapContainer gaps = new GapContainer(classProto.classPath.apiLevel > Opcode.M
+                    ? new FieldGapCreator() : new FieldGapCreatorM());
             int currentField = 0;
             for (; currentField < fieldCount; currentField++) {
                 Field f = fields.get(0);
@@ -632,11 +633,23 @@ public class ClassProto implements TypeProto {
             }
         }
 
+        static class GapContainer extends TreeSet<FieldGap> {
+            final IFieldGapCreator creator;
+
+            GapContainer(IFieldGapCreator c) {
+                creator = c;
+            }
+
+            void add(int offset, int size) {
+                add(creator.create(offset, size));
+            }
+        }
+
         static class FieldOffsetData {
             int currentField;
             int fieldOffset;
             ArrayList<Field> fields;
-            TreeSet<FieldGap> gaps;
+            GapContainer gaps;
             SparseArray<FieldReference> instanceFields;
         }
 
@@ -645,20 +658,80 @@ public class ClassProto implements TypeProto {
         final static int sizeof_uint16_t = 2;
         final static int sizeof_uint8_t = 1;
 
+        interface IFieldGapCreator {
+            FieldGap create(int offset, int size);
+        }
+
+        static class FieldGapCreator implements IFieldGapCreator {
+
+            @Override
+            public FieldGap create(int offset, int size) {
+                return new FieldGap(offset, size);
+            }
+        }
+
+        static class FieldGapCreatorM implements IFieldGapCreator {
+
+            @Override
+            public FieldGap create(int offset, int size) {
+                return new FieldGapM(offset, size);
+            }
+        }
+
         static class FieldGap implements Comparable<FieldGap> {
             final int startOffset;
             final int size;
 
-            public FieldGap(int o, int s) {
+            FieldGap(int o, int s) {
                 startOffset = o;
                 size = s;
             }
 
             @Override
             public int compareTo(@Nonnull FieldGap rhs) {
-                // kOatVersion 064+
+                // kOatVersion 067+
+                // Fix FieldGap priority queue ordering bug
+                // https://android.googlesource.com/platform/art/+/fab67883
+                // Note that the priority queue returns the largest element, so operator()
+                // should return true if lhs is less than rhs.
+                // return lhs.size < rhs.size || (lhs.size == rhs.size && lhs.start_offset > rhs.start_offset);
+                int c = rhs.size - size;
+                if (c != 0) {
+                    return c;
+                } else {
+                    return startOffset - rhs.startOffset;
+                }
+            }
+
+            static void add(int gapStart, int gapEnd, GapContainer gaps) {
+                int currentOffset = gapStart;
+                while (currentOffset != gapEnd) {
+                    int remaining = gapEnd - currentOffset;
+                    if (remaining >= sizeof_uint32_t && isAligned(4, currentOffset)) {
+                        gaps.add(currentOffset, sizeof_uint32_t);
+                        currentOffset += sizeof_uint32_t;
+                    } else if (remaining >= sizeof_uint16_t && isAligned(2, currentOffset)) {
+                        gaps.add(currentOffset, sizeof_uint16_t);
+                        currentOffset += sizeof_uint16_t;
+                    } else {
+                        gaps.add(currentOffset, sizeof_uint8_t);
+                        currentOffset += sizeof_uint8_t;
+                    }
+                }
+            }
+        }
+
+        static class FieldGapM extends FieldGap {
+            // https://android.googlesource.com/platform/art/+/381e4ca3
+            FieldGapM(int o, int s) {
+                super(o, s);
+            }
+
+            @Override
+            public int compareTo(@Nonnull FieldGap rhs) {
+                // kOatVersion 55~66
                 // Ensure order of field gaps
-                // https://android-review.googlesource.com/#/c/133351/
+                // https://android.googlesource.com/platform/art/+/fab67883
                 // Sort by gap size, largest first. Secondary sort by starting offset.
                 // lhs.size > rhs.size || (lhs.size == rhs.size && lhs.start_offset < rhs.start_offset)
                 int c = size - rhs.size;
@@ -666,30 +739,6 @@ public class ClassProto implements TypeProto {
                     return c;
                 } else {
                     return rhs.startOffset - startOffset;
-                }
-
-                // TODO kOatVersion 067+
-                // Fix FieldGap priority queue ordering bug
-                // https://android-review.googlesource.com/#/c/159386/
-                // Note that the priority queue returns the largest element, so operator()
-                // should return true if lhs is less than rhs.
-                // return lhs.size < rhs.size || (lhs.size == rhs.size && lhs.start_offset > rhs.start_offset);
-            }
-
-            static void add(int gapStart, int gapEnd, TreeSet<FieldGap> gaps) {
-                int currentOffset = gapStart;
-                while (currentOffset != gapEnd) {
-                    int remaining = gapEnd - currentOffset;
-                    if (remaining >= sizeof_uint32_t && isAligned(4, currentOffset)) {
-                        gaps.add(new FieldGap(currentOffset, sizeof_uint32_t));
-                        currentOffset += sizeof_uint32_t;
-                    } else if (remaining >= sizeof_uint16_t && isAligned(2, currentOffset)) {
-                        gaps.add(new FieldGap(currentOffset, sizeof_uint16_t));
-                        currentOffset += sizeof_uint16_t;
-                    } else {
-                        gaps.add(new FieldGap(currentOffset, sizeof_uint8_t));
-                        currentOffset += sizeof_uint8_t;
-                    }
                 }
             }
         }

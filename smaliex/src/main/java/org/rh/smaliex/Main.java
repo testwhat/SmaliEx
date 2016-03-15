@@ -114,7 +114,8 @@ public class Main {
                 return;
             }
             if ("odex".equals(cmd)) {
-                OatUtil.extractOdexFromOat(checkExist(args[1]),
+                OatUtil.extractOdexFromOat(
+                        checkExist(args[1]).getAbsolutePath(),
                         outputFolder == null ? null : new File(outputFolder));
                 return;
             }

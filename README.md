@@ -9,6 +9,9 @@ app.odex(oat) -> reference boot dex files to deoptimize
 Download latest version:  
 https://github.com/testwhat/SmaliEx/blob/master/smaliex-bin/oat2dex.jar?raw=true
 
+Build command:  
+gradlew -b smaliex/build.gradle dist
+
 Usage:  
 Deoptimize boot classes (The output will be in "odex" and "dex" folders):  
 &nbsp;&nbsp;java -jar oat2dex.jar boot &lt;boot.oat file&gt;  

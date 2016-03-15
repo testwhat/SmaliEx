@@ -373,6 +373,7 @@ public enum Opcode
 
     public static final int LOLLIPOP = 21; // API level
     public static final int LOLLIPOP_MR1 = 22;
+    public static final int M = 23;
 
     public static final int FLAGS_QUICK_ART = Opcode.ODEX_ONLY | Opcode.ODEXED_INSTANCE_QUICK
                     | Opcode.CAN_THROW | Opcode.CAN_CONTINUE;
