@@ -68,7 +68,7 @@ public class MiscUtil {
         return new File(getFileDirPath(f.getAbsolutePath()), name);
     }
 
-    static File[] getFiles(String path, String extensionsStr) {
+    public static File[] getFiles(String path, String extensionsStr) {
         File dir = new File(path);
         final String[] extensions = extensionsStr.split(";");
         for (int i = 0; i < extensions.length; i++) {
@@ -112,9 +112,12 @@ public class MiscUtil {
     }
 
     public static String path(String... path) {
-        StringBuilder sb = new StringBuilder(64);
-        int last = path.length - 1;
+        StringBuilder sb = new StringBuilder(128);
+        final int last = path.length - 1;
         for (int i = 0; i < last; i++) {
+            if (path[i].length() < 1) {
+                continue;
+            }
             sb.append(path[i]);
             if (!path[i].endsWith(File.separator)) {
                 sb.append(File.separator);
@@ -134,6 +137,22 @@ public class MiscUtil {
         if (!file.delete()) {
             LLog.e("Failed to delete " + file);
         }
+
+    }
+    public static byte[] readBytes(java.io.InputStream input, int size) throws IOException {
+        byte[] data = new byte[size];
+        int remain = data.length;
+        int read = 0;
+        int readSize;
+        while (remain > 0 && (readSize = input.read(data, read, remain)) != -1) {
+            remain -= readSize;
+            read += readSize;
+        }
+        return data;
+    }
+
+    public static byte[] readBytes(java.io.InputStream input) throws IOException {
+        return readBytes(input, input.available());
     }
 
     static boolean checkFourBytes(File file, long fourBytes) {

@@ -6,6 +6,7 @@
 /smali/build
 /smaliex/build
 /smaliex/src/main/java/localtest
+/smaliex-bin/*
 /util/build
 *.iml
 *.ipr

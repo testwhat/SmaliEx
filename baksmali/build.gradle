@@ -109,6 +109,7 @@ task dist(dependsOn: proguard) {
     doLast {
         def dist = file("../smaliex-bin/baksmali.jar")
         dist.delete()
+        dist.parentFile.mkdirs()
         file(project.outFile).renameTo(dist)
     }
 }

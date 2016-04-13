@@ -42,10 +42,10 @@ public class Main {
         System.out.println(" Output folder: -o <folder path>");
         System.out.println(" Print detail : -v");
         System.out.println("<action>");
-        System.out.println(" Get dex from boot.oat: boot <boot.oat>");
-        System.out.println(" Get dex from oat/odex: <oat/odex file> <boot-class-folder>");
-        System.out.println(" Get raw odex from oat: odex <oat file>");
-        System.out.println(" Get raw odex smali   : smali <oat/odex file>");
+        System.out.println(" Get dex from boot.oat: boot <boot.oat/boot-folder>");
+        System.out.println(" Get dex from oat/odex: <oat/odex-file/folder> <boot-class-folder>");
+        System.out.println(" Get raw odex from oat: odex <oat-file/folder>");
+        System.out.println(" Get raw odex smali   : smali <oat/odex-file>");
         System.out.println(" Deodex framework     : devfw [empty or path of /system/framework/]");
     }
 
@@ -114,8 +114,7 @@ public class Main {
                 return;
             }
             if ("odex".equals(cmd)) {
-                OatUtil.extractOdexFromOat(
-                        checkExist(args[1]).getAbsolutePath(),
+                OatUtil.extractOdexFromOat(checkExist(args[1]),
                         outputFolder == null ? null : new File(outputFolder));
                 return;
             }

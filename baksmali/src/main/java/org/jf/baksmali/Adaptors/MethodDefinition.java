@@ -28,8 +28,16 @@
 
 package org.jf.baksmali.Adaptors;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
 import org.jf.baksmali.Adaptors.Debug.DebugMethodItem;
 import org.jf.baksmali.Adaptors.Format.InstructionMethodItemFactory;
 import org.jf.baksmali.baksmaliOptions;
@@ -41,7 +49,12 @@ import org.jf.dexlib2.analysis.AnalysisException;
 import org.jf.dexlib2.analysis.AnalyzedInstruction;
 import org.jf.dexlib2.analysis.MethodAnalyzer;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile.InvalidItemIndex;
-import org.jf.dexlib2.iface.*;
+import org.jf.dexlib2.iface.Annotation;
+import org.jf.dexlib2.iface.ExceptionHandler;
+import org.jf.dexlib2.iface.Method;
+import org.jf.dexlib2.iface.MethodImplementation;
+import org.jf.dexlib2.iface.MethodParameter;
+import org.jf.dexlib2.iface.TryBlock;
 import org.jf.dexlib2.iface.debug.DebugItem;
 import org.jf.dexlib2.iface.instruction.Instruction;
 import org.jf.dexlib2.iface.instruction.OffsetInstruction;
@@ -59,10 +72,8 @@ import org.jf.util.ExceptionWithContext;
 import org.jf.util.IndentingWriter;
 import org.jf.util.SparseIntArray;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.io.IOException;
-import java.util.*;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 
 public class MethodDefinition {
     @Nonnull public final ClassDefinition classDef;
@@ -363,7 +374,7 @@ public class MethodDefinition {
         return sparseSwitchMap.get(sparseSwitchPayloadCodeOffset, -1);
     }
 
-    private List<MethodItem> getMethodItems() {
+    public List<MethodItem> getMethodItems() {
         ArrayList<MethodItem> methodItems = new ArrayList<MethodItem>();
 
         if ((classDef.options.registerInfo != 0) || (classDef.options.deodex && needsAnalyzed())) {

@@ -128,9 +128,9 @@ public class OatUtil {
     public static void bootOat2Dex(String bootOat, String outFolder) throws IOException {
         File odexFolder = prepareOdex(bootOat);
         String folderName = odexFolder.getName().replace("odex", "dex");
-        File outputJarFolder = outFolder != null ? new File(outFolder) :
+        File outputDexFolder = outFolder != null ? new File(outFolder) :
                 new File(new File(bootOat).getParent(), folderName);
-        convertDexFromBootOat(bootOat, outputJarFolder.getAbsolutePath(),
+        convertDexFromBootOat(bootOat, outputDexFolder.getAbsolutePath(),
                 odexFolder.getAbsolutePath(), null);
     }
 
@@ -139,7 +139,7 @@ public class OatUtil {
         String folderName = (oatFile.isDirectory() ? oatFile.getName() + "-" : "") + "odex";
         File odexFolder = new File(oatFile.getParentFile(), folderName);
         MiscUtil.mkdirs(odexFolder);
-        extractOdexFromOat(bootOat, odexFolder);
+        extractOdexFromOat(oatFile, odexFolder);
         return odexFolder;
     }
 
@@ -192,19 +192,23 @@ public class OatUtil {
         return jarPathInOat.substring(jarPathInOat.lastIndexOf('/') + 1);
     }
 
-    static File[] getOatFile(String oatPath) {
-        File path = new File(oatPath);
-        return path.isDirectory() ? MiscUtil.getFiles(oatPath, ".oat") : new File[] { path };
+    static File[] getOatFile(File oatPath) {
+        return oatPath.isDirectory() ? MiscUtil.getFiles(oatPath.getAbsolutePath(), ".oat;.odex")
+                : new File[] { oatPath };
     }
 
-    // Get optimized dex from oat
-    public static void extractOdexFromOat(String oatPath, File outputFolder) throws IOException {
+    public static void extractOdexFromOat(File oatPath, File outputFolder) throws IOException {
         if (outputFolder == null) {
-            outputFolder = new File(MiscUtil.workingDir());
-            MiscUtil.mkdirs(outputFolder);
+            String folderName = (oatPath.isDirectory() ? oatPath.getName() + "-" : "") + "odex";
+            outputFolder = new File(oatPath.getParentFile(), folderName);
         }
+        MiscUtil.mkdirs(outputFolder);
         IOException ioe = null;
         for (File oatFile : getOatFile(oatPath)) {
+            if (!Elf.isElf(oatFile)) {
+                LLog.i("Skip not ELF: " + oatFile);
+                continue;
+            }
             try (Elf e = new Elf(oatFile)) {
                 Oat oat = getOat(e);
                 for (int i = 0; i < oat.mDexFiles.length; i++) {
@@ -231,12 +235,10 @@ public class OatUtil {
     public static void convertDexFromBootOat(String oatPath, String outputFolder,
             String bootClassPath, String noClassJarFolder) throws IOException {
         File outFolder = new File(outputFolder);
-        if (!outFolder.exists()) {
-            MiscUtil.mkdirs(outFolder);
-        }
+        MiscUtil.mkdirs(outFolder);
 
         IOException ioe = null;
-        for (File oatFile : getOatFile(oatPath)) {
+        for (File oatFile : getOatFile(new File(oatPath))) {
             try (Elf e = new Elf(oatFile)) {
                 Oat oat = getOat(e);
                 if (noClassJarFolder == null) {
@@ -278,7 +280,12 @@ public class OatUtil {
         for (int i = 0; i < oat.mOatDexFiles.length; i++) {
             Oat.DexFile dex = oat.mDexFiles[i];
             final int dexSize = dex.mHeader.file_size_;
-            dexFiles[i] = readDex(dex, dexSize, opcodes);
+            DexBackedDexFile dexFile = readDex(dex, dexSize, opcodes);
+            if (!DexUtil.verifyStringOffset(dexFile)) {
+                LLog.i("Bad string offset.");
+                throw new IOException("The dex does not have formal format in: " + oat.mSrcFile);
+            }
+            dexFiles[i] = dexFile;
         }
         return dexFiles;
     }
@@ -294,6 +301,7 @@ public class OatUtil {
             deOpt.setFailInfoLocation(outputFolder.getAbsolutePath());
         }
 
+        LLog.i("Art version=" + oat.getArtVersion() + " (" + oat.mSrcFile + ")");
         DexFile[] dexFiles = getOdexFromOat(oat, opcodes);
         if (addSelfToBcp) {
             for (DexFile d : dexFiles) {
@@ -356,7 +364,6 @@ public class OatUtil {
             deOpt.setFailInfoLocation(outputFolder.getAbsolutePath());
         }
 
-        final byte[] buf = new byte[8192];
         for (String jarName : dexFileGroup.keySet()) {
             File outputFile = MiscUtil.changeExt(new File(outputFolder, jarName), "jar");
             String classesIdx = "";
@@ -391,10 +398,7 @@ public class OatUtil {
                         }
                         jos.putNextEntry(new ZipEntry(name));
                         try (InputStream is = jarFile.getInputStream(e)) {
-                            int bytesRead;
-                            while ((bytesRead = is.read(buf)) != -1) {
-                                jos.write(buf, 0, bytesRead);
-                            }
+                            jos.write(MiscUtil.readBytes(is));
                         }
                         jos.closeEntry();
                     }
