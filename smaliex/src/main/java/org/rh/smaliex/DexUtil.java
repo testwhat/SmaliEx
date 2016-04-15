@@ -140,7 +140,7 @@ public class DexUtil {
         File outputFolder = new File(outFolder == null ? MiscUtil.workingDir() : outFolder);
         MiscUtil.mkdirs(outputFolder);
 
-        Opcodes opcodes = new Opcodes(apiLevel);
+        Opcodes opcodes = getOpcodes(apiLevel);
         File input = new File(odex);
         DexFile odexFile = loadSingleDex(input, opcodes);
         ODexRewriter rewriter = getODexRewriter(bootClassPath, opcodes);

@@ -184,7 +184,7 @@ public class DeodexFrameworkFromDevice {
                 bootLocation = new File(mFolder, autoPath(SYS_FRAMEWORK + mAbiFolder));
             }
             java.util.ArrayList<String> jars = OatUtil.getBootJarNames(
-                    MiscUtil.path(bootLocation.getAbsolutePath(), BOOT_OAT), mContainsSysFw);
+                    bootLocation.getAbsolutePath(), mContainsSysFw);
             booJars = jars.toArray(new String[jars.size()]);
         }
 
