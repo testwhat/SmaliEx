@@ -34,7 +34,7 @@ import java.io.IOException;
 public class Main {
 
     static void printUsage() {
-        System.out.println("Easy oat2dex 0.86");
+        System.out.println("Easy oat2dex 0.87");
         System.out.println("Usage:");
         System.out.println(" java -jar oat2dex.jar [options] <action>");
         System.out.println("[options]");
@@ -42,10 +42,10 @@ public class Main {
         System.out.println(" Output folder: -o <folder path>");
         System.out.println(" Print detail : -v");
         System.out.println("<action>");
-        System.out.println(" Get dex from boot.oat: boot <boot.oat>");
-        System.out.println(" Get dex from oat/odex: <oat/odex file> <boot-class-folder>");
-        System.out.println(" Get raw odex from oat: odex <oat file>");
-        System.out.println(" Get raw odex smali   : smali <oat/odex file>");
+        System.out.println(" Get dex from boot.oat: boot <boot.oat/boot-folder>");
+        System.out.println(" Get dex from oat/odex: <oat/odex-file/folder> <boot-class-folder>");
+        System.out.println(" Get raw odex from oat: odex <oat-file/folder>");
+        System.out.println(" Get raw odex smali   : smali <oat/odex-file>");
         System.out.println(" Deodex framework     : devfw [empty or path of /system/framework/]");
     }
 
@@ -122,12 +122,17 @@ public class Main {
                 OatUtil.smaliRaw(checkExist(args[1]), apiLevel);
                 return;
             }
-            File input = checkExist(args[0]);
-            checkExist(args[1]);
-            if (MiscUtil.isElf(input)) {
-                OatUtil.oat2dex(args[0], args[1], outputFolder);
-            } else if (MiscUtil.isDex(input)) {
-                DexUtil.odex2dex(args[0], args[1], outputFolder, apiLevel);
+            String inputPath = args[0];
+            String bootPath = args[1];
+            File input = checkExist(inputPath);
+            checkExist(bootPath);
+            int type = getInputType(input);
+            if (type > 0) {
+                if (type == TYPE_ODEX) {
+                    DexUtil.odex2dex(inputPath, bootPath, outputFolder, apiLevel);
+                } else if (type == TYPE_OAT) {
+                    OatUtil.oat2dex(inputPath, bootPath, outputFolder);
+                }
             } else {
                 exit("Unknown input file type: " + input);
             }
@@ -151,6 +156,25 @@ public class Main {
             exit("Input file not found: " + input);
         }
         return input;
+    }
+
+    final static int TYPE_ODEX = 1;
+    final static int TYPE_OAT = 2;
+
+    static int getInputType(File input) {
+        if (input.isDirectory()) {
+            File[] files = MiscUtil.getFiles(input.getAbsolutePath(), "dex;oat");
+            if (files != null && files.length > 0) {
+                input = files[0];
+            }
+        }
+        if (MiscUtil.isDex(input)) {
+            return TYPE_ODEX;
+        }
+        if (MiscUtil.isElf(input)) {
+            return TYPE_OAT;
+        }
+        return -1;
     }
 
     static void exit(String msg) {

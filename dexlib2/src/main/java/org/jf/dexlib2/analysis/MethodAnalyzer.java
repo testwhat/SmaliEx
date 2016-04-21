@@ -114,7 +114,6 @@ public class MethodAnalyzer {
 
     private final int totalRegisters;
     private final int paramRegisterCount;
-    private final boolean isStatic;
 
     @Nonnull private final ClassPath classPath;
     @Nullable private final InlineMethodResolver inlineResolver;
@@ -138,7 +137,7 @@ public class MethodAnalyzer {
 
     boolean debug;
 
-    // Store type of v0, v1, ... at specifics ranges
+    // Store type of v0, v1, ... at specified ranges
     SparseArray<ArrayList<TypeScope>> localTypes;
     static class TypeScope {
         static final int TO_END = 0xffff;
@@ -168,7 +167,6 @@ public class MethodAnalyzer {
             throw new IllegalArgumentException("The method has no implementation");
         }
 
-        isStatic = MethodUtil.isStatic(method);
         totalRegisters = impl.getRegisterCount();
         this.methodImpl = impl;
 
@@ -210,12 +208,13 @@ public class MethodAnalyzer {
 
         int nonParameterRegisters = totalRegisters - parameterRegisters;
 
-        //if this isn't a static method, determine which register is the "this" register and set the type to the
-        //current class
-        if (!isStatic) {
+        // if this isn't a static method, determine which register is the "this" register
+        // and set the type to the current class.
+        if (!MethodUtil.isStatic(method)) {
             int thisRegister = totalRegisters - parameterRegisters;
 
-            //if this is a constructor, then set the "this" register to an uninitialized reference of the current class
+            // if this is a constructor, then set the "this" register to an uninitialized
+            // reference of the current class.
             if (MethodUtil.isConstructor(method)) {
                 setPostRegisterTypeAndPropagateChanges(startOfMethod, thisRegister,
                         RegisterType.getRegisterType(RegisterType.UNINIT_THIS,
@@ -341,8 +340,8 @@ public class MethodAnalyzer {
                         continue;
                 }
                 addAnalysisInfo("UnresolvedOdexInstruction " + instruction.getOpcode()
-                            + " " + instruction.getOpcode().format + " at line "
-                            + getNearestLineByAddress(getInstructionAddress(analyzedInstruction)));
+                        + " " + instruction.getOpcode().format + " at line "
+                        + getLine(analyzedInstruction));
                 analyzedInstruction.setDeodexedInstruction(
                         new UnresolvedOdexInstruction(instruction, objectRegisterNumber));
             }
@@ -379,14 +378,55 @@ public class MethodAnalyzer {
         });
     }
 
-    private void setAnalysisException(AnalysisException ex, AnalyzedInstruction instr) {
+    static String instructionToString(Instruction instr) {
+        StringBuilder sb = new StringBuilder(instr.getOpcode().name);
+        if (instr instanceof OneRegisterInstruction) {
+            OneRegisterInstruction oneRegInstr = (OneRegisterInstruction) instr;
+            sb.append(" regA=").append(oneRegInstr.getRegisterA());
+            if (instr instanceof TwoRegisterInstruction) {
+                TwoRegisterInstruction twoRegInstr = (TwoRegisterInstruction) instr;
+                sb.append(" regB=").append(twoRegInstr.getRegisterB());
+                if (instr instanceof ThreeRegisterInstruction) {
+                    ThreeRegisterInstruction threeRegInstr = (ThreeRegisterInstruction) instr;
+                    sb.append(" regC=").append(threeRegInstr.getRegisterC());
+                }
+            }
+        } else if (instr instanceof FiveRegisterInstruction) {
+            FiveRegisterInstruction fiveRegInstr = (FiveRegisterInstruction) instr;
+            sb.append(" regC=").append(fiveRegInstr.getRegisterC());
+            int rc = fiveRegInstr.getRegisterCount();
+            if (rc >= 2) {
+                sb.append(" regD=").append(fiveRegInstr.getRegisterD());
+                if (rc >= 3) {
+                    sb.append(" regE=").append(fiveRegInstr.getRegisterE());
+                    if (rc >= 4) {
+                        sb.append(" regF=").append(fiveRegInstr.getRegisterF());
+                        if (rc >= 5) {
+                            sb.append(" regG=").append(fiveRegInstr.getRegisterG());
+                        }
+                    }
+                }
+            }
+        }
+        return sb.toString();
+    }
+
+    private void setAnalysisException(AnalysisException ex, AnalyzedInstruction aInstr) {
         analysisException = ex;
-        int codeAddress = getInstructionAddress(instr);
+        int codeAddress = getInstructionAddress(aInstr);
         ex.codeAddress = codeAddress;
         ex.addContext("Method: " + ReferenceUtil.getReferenceString(method));
-        ex.addContext("Opcode: " + instr.instruction.getOpcode().name);
-        ex.addContext("Code address: " + codeAddress);
-        ex.addContext("Near line: " + getNearestLineByAddress(codeAddress));
+        ex.addContext("Near line: " + getNearestLineByAddress(codeAddress)
+                + " (address " + codeAddress + ")");
+        ex.addContext("Instructions: ");
+        int current = aInstr.instructionIndex;
+        int start = Math.max(0, current - 2);
+        int end = Math.min(analyzedInstructions.size() - 1, current + 2);
+        for (int i = start; i <= end; i++) {
+            AnalyzedInstruction pInstr = analyzedInstructions.valueAt(i);
+            ex.addContext(" [" + i + "] " + instructionToString(pInstr.originalInstruction)
+                + (i == current ? " <-----" : ""));
+        }
     }
 
     @Nullable
@@ -483,8 +523,7 @@ public class MethodAnalyzer {
     }
 
     private void buildDebugInfo() {
-        if (debug) System.out.println("@ " + method.getDefiningClass()
-                + " " + method.getName());
+        if (debug) println("@ " + method.getDefiningClass() + " " + method.getName());
         // e.g. this(p0) 1, parameter 3, local 6, v0 and p1 are long
         // totalRegisters=1+3+6=10 parameterCount=2 (p1,p2) parameterRegisterCount=4 (p0~p3)
         // parameterStart = totalRegisters - paramRegisterCount + (isStatic ? 0 : 1)
@@ -540,7 +579,7 @@ public class MethodAnalyzer {
 
                     if (debug) {
                         AnalyzedInstruction a = analyzedInstructions.get(local.getCodeAddress());
-                        System.out.println("  " + a.getInstruction().getOpcode() + " "
+                        println("  " + a.getInstruction().getOpcode() + " "
                                 + getNearestLineByAddress(local.getCodeAddress())
                                 + " " + objectRegister
                                 + " " + registerType);
@@ -553,16 +592,16 @@ public class MethodAnalyzer {
             for (int i = 0; i < localTypes.size(); i++) {
                 ArrayList<TypeScope> scopes = localTypes.valueAt(i);
                 if (scopes != null) {
-                    System.out.println("#Reg " + localTypes.keyAt(i));
+                    println("#Reg " + localTypes.keyAt(i));
                     for (TypeScope t : scopes) {
-                        System.out.println("  "
-                                + t.begin + "(" + getNearestLineByAddress(t.begin) + ")"
+                        println("  " + t.begin + "(" + getNearestLineByAddress(t.begin) + ")"
                                 + "~" + t.end + "(" + (t.end == TypeScope.TO_END
                                 ? TypeScope.TO_END : getNearestLineByAddress(t.end)) + ")"
                                 + " " + t.type);
                     }
                 }
             }
+            println("");
         }
     }
 
@@ -736,11 +775,11 @@ public class MethodAnalyzer {
     }
 
     void analyzeOptimizedCheckCast(@Nonnull AnalyzedInstruction analyzedInstruction) {
-        int prevIndex = analyzedInstruction.getInstructionIndex() - 1;
+        int prevIndex = analyzedInstruction.instructionIndex - 1;
         if (prevIndex < 1) {
             return;
         }
-        int nextIndex = analyzedInstruction.getInstructionIndex() + 1;
+        int nextIndex = analyzedInstruction.instructionIndex + 1;
         if (nextIndex >= analyzedInstructions.size()) {
             return;
         }
@@ -748,8 +787,7 @@ public class MethodAnalyzer {
         if (prevInstruction.getInstruction().getOpcode() != Opcode.NOP) {
             return;
         }
-        Instruction22c insOf = findTypeNearestInstanceOf(
-                analyzedInstruction.getInstructionIndex());
+        Instruction22c insOf = findTypeByNearestInstanceOf(analyzedInstruction.instructionIndex);
         if (insOf == null) {
             return;
         }
@@ -757,7 +795,7 @@ public class MethodAnalyzer {
         ImmutableInstruction21c instr = new ImmutableInstruction21c(
                 Opcode.CHECK_CAST, insOf.getRegisterB(), insOf.getReference());
         AnalyzedInstruction newInstr = new AnalyzedInstruction(instr,
-                analyzedInstruction.getInstructionIndex(),
+                analyzedInstruction.instructionIndex,
                 analyzedInstruction.getRegisterCount());
 
         ReferenceInstruction instruction = (ReferenceInstruction)newInstr.instruction;
@@ -766,13 +804,12 @@ public class MethodAnalyzer {
 
         AnalyzedInstruction nextInstruction = analyzedInstructions.valueAt(nextIndex);
         addAnalysisInfo("Recover optimized nop-nop: cast v" + insOf.getRegisterB()
-                + " to " + castRegisterType.type.getType()
+                + " to " + castRegisterType.type
                 + " for " + nextInstruction.getInstruction().getOpcode()
-                + " at line " + getNearestLineByAddress(getInstructionAddress(nextInstruction)));
+                + " at line " + getLine(nextInstruction));
         newInstr.addSuccessor(nextInstruction);
         setPostRegisterTypeAndPropagateChanges(
                 newInstr, newInstr.getDestinationRegister(), castRegisterType);
-        return;
     }
 
     /**
@@ -1453,16 +1490,25 @@ public class MethodAnalyzer {
         setDestinationRegisterTypeAndPropagateChanges(analyzedInstruction, registerType);
     }
 
+    private static boolean isValidArrayType(@Nonnull RegisterType registerType) {
+        return registerType.type instanceof ArrayProto;
+    }
+
     private void analyzeAgetWide(@Nonnull AnalyzedInstruction analyzedInstruction) {
         ThreeRegisterInstruction instruction = (ThreeRegisterInstruction)analyzedInstruction.instruction;
 
         RegisterType arrayRegisterType = analyzedInstruction.getPreInstructionRegisterType(instruction.getRegisterB());
         if (arrayRegisterType.category != RegisterType.NULL) {
-            if (arrayRegisterType.category != RegisterType.REFERENCE ||
-                    !(arrayRegisterType.type instanceof ArrayProto)) {
-                throw new AnalysisException("aget-wide used with non-array register: %s", arrayRegisterType.toString());
+            if (!isValidArrayType(arrayRegisterType)) {
+                arrayRegisterType = findRegisterType(analyzedInstruction,
+                        instruction.getRegisterB(), -1, -1);
+                if (!isValidArrayType(arrayRegisterType)) {
+                    throw new AnalysisException("aget-wide used with non-array register: %s",
+                            arrayRegisterType.toString());
+                }
             }
-            ArrayProto arrayProto = (ArrayProto)arrayRegisterType.type;
+            ArrayProto arrayProto = (ArrayProto) arrayRegisterType.type;
+            assert arrayProto != null;
 
             if (arrayProto.dimensions != 1) {
                 throw new AnalysisException("aget-wide used with multi-dimensional array: %s",
@@ -1832,7 +1878,7 @@ public class MethodAnalyzer {
     }
 
     @Nullable
-    private TypeProto findTypeProtoByAddress(int address, int reg) {
+    private TypeProto findTypeByAddress(int address, int reg) {
         StartLocal local = findStartLocalByAddress(address, reg);
         if (local != null) {
             TypeReference typeReference = local.getTypeReference();
@@ -1843,8 +1889,28 @@ public class MethodAnalyzer {
         return null;
     }
 
+    @Nonnull
+    private RegisterType getReferenceType(Instruction22c instruction) {
+        TypeReference ref = (TypeReference) instruction.getReference();
+        return RegisterType.getRegisterType(classPath, ref.getType());
+    }
+
+    @Nonnull
+    private RegisterType findTypeByInstanceOf(int instrIndex, int reg) {
+        for (int i = instrIndex; i >= 0; i--) {
+            AnalyzedInstruction instr = analyzedInstructions.valueAt(i);
+            if (instr.instruction.getOpcode() == Opcode.INSTANCE_OF) {
+                Instruction22c instrInsOf = (Instruction22c) instr.instruction;
+                if (instrInsOf.getRegisterB() == reg) {
+                    return getReferenceType(instrInsOf);
+                }
+            }
+        }
+        return RegisterType.NULL_TYPE;
+    }
+
     @Nullable
-    private Instruction22c findTypeNearestInstanceOf(int instrIndex) {
+    private Instruction22c findTypeByNearestInstanceOf(int instrIndex) {
         for (int i = instrIndex; i >= 0; i--) {
             AnalyzedInstruction instr = analyzedInstructions.valueAt(i);
             if (instr.instruction.getOpcode() == Opcode.INSTANCE_OF) {
@@ -1856,15 +1922,10 @@ public class MethodAnalyzer {
 
     @Nullable
     private TypeProto guessTypeByNearestInstanceOf(int instrIndex, int reg) {
-        Instruction22c instrInsOf = findTypeNearestInstanceOf(instrIndex);
-        // Result in getRegisterA, target to check in getRegisterB
+        Instruction22c instrInsOf = findTypeByNearestInstanceOf(instrIndex);
+        // Result in getRegisterA, target to check in getRegisterB.
         if (instrInsOf != null && (instrInsOf.getRegisterB() == reg || reg < 0)) {
-            TypeReference ref = (TypeReference) instrInsOf.getReference();
-            TypeProto insOfType = RegisterType.getRegisterType(
-                    classPath, ref.getType()).type;
-            if (insOfType != null) {
-                return classPath.getClass(insOfType.getType());
-            }
+            return classPath.getClass(getReferenceType(instrInsOf).getType());
         }
         return null;
     }
@@ -1895,8 +1956,30 @@ public class MethodAnalyzer {
         return RegisterType.NULL_TYPE;
     }
 
+    int getLine(AnalyzedInstruction analyzedInstruction) {
+        int instrAddress = getInstructionAddress(analyzedInstruction);
+        return getNearestLineByAddress(instrAddress);
+    }
+
+    static void println(String string) {
+        System.out.println(string);
+    }
+
+    String toRegString(int reg) {
+        if (reg >= totalRegisters - paramRegisterCount) {
+            return "p" + (reg - totalRegisters + paramRegisterCount);
+        }
+        return "v" + reg;
+    }
+
     @Nonnull
-    private RegisterType findRegisterTypeInner(AnalyzedInstruction analyzedInstruction, int reg) {
+    String toString(AnalyzedInstruction analyzedInstruction) {
+        int line = getLine(analyzedInstruction);
+        return "[" + analyzedInstruction.originalInstruction.getOpcode().name + " @ " + line + "]";
+    }
+
+    @Nonnull
+    private RegisterType findTypeByLocal(AnalyzedInstruction analyzedInstruction, int reg) {
         ArrayList<TypeScope> scopes = localTypes.get(reg);
         if (scopes != null) {
             int instrAddress = getInstructionAddress(analyzedInstruction);
@@ -1909,137 +1992,234 @@ public class MethodAnalyzer {
         return RegisterType.NULL_TYPE;
     }
 
-    @Nonnull
-    private RegisterType findRegisterType(AnalyzedInstruction analyzedInstruction, int reg,
-            int fieldOffset, int methodOffset) {
-        if (debug) System.out.println(">findRegisterType " + method.getDefiningClass()
-                + "->" + method.getName());
-        boolean instanceOfMode = false;
-        RegisterType type = findRegisterTypeInner(analyzedInstruction, reg);
-        if (type != RegisterType.NULL_TYPE) {
-            if (debug) {
-                int instrAddress = getInstructionAddress(analyzedInstruction);
-                int line = getNearestLineByAddress(instrAddress);
-                System.out.println("@@0 " + line
-                    + " instr=" +
-                    analyzedInstruction.instruction.getOpcode()
-                    + " type="+ type);
+    private static class TraceRegisterParam {
+        RegisterType type;
+        final int[] tracingRegs;
+        final RegisterType[] instanceOfType;
+
+        TraceRegisterParam(int totalRegisters) {
+            tracingRegs = new int[totalRegisters];
+            instanceOfType = new RegisterType[totalRegisters];
+        }
+
+        void setTracingReg(int reg) {
+            tracingRegs[reg] = 1;
+        }
+
+        boolean containsReg(int reg) {
+            return tracingRegs[reg] != 0;
+        }
+
+        void setInstanceOfType(int reg, RegisterType type) {
+            instanceOfType[reg] = type;
+        }
+
+        @Nullable
+        RegisterType getInstanceOfType(int reg) {
+            return instanceOfType[reg];
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder("candiReg=");
+            for (int i = 0; i < tracingRegs.length; i++) {
+                if (tracingRegs[i] != 0) {
+                    sb.append(i);
+                    if (instanceOfType[i] != null) {
+                        sb.append(instanceOfType[i]);
+                    }
+                    sb.append(',');
+                }
             }
-            boolean validField = fieldOffset < 0
-                    || type.type.getFieldByOffset(fieldOffset) != null;
-            boolean validMethod = methodOffset < 0
-                    || type.type.getMethodByVtableIndex(methodOffset) != null;
-            if (validField && validMethod) {
-                return type;
+            sb.setLength(sb.length() - 1);
+            return sb.toString();
+        }
+    }
+
+    private static boolean isValidOffset(RegisterType type, int fieldOffset, int methodOffset) {
+        if (type.type != null) {
+            if (fieldOffset >= 0 && type.type.getFieldByOffset(fieldOffset) != null) {
+                return true;
+            }
+            if (methodOffset >= 0 && type.type.getMethodByVtableIndex(methodOffset) != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isMoveFrom(Opcode opcode) {
+        return opcode == Opcode.MOVE_OBJECT || opcode == Opcode.MOVE_OBJECT_FROM16;
+    }
+
+    private static boolean useOffset(AnalyzedInstruction aInstr) {
+        Opcode opcode = aInstr.originalInstruction.getOpcode();
+        return opcode.isQuickFieldaccessor() || (opcode.setsResult() && opcode.odexOnly());
+    }
+
+    private boolean verifyType(RegisterType type, AnalyzedInstruction aInstr,
+                               int fieldOffset, int methodOffset) {
+        boolean ok = true;
+        if (type == RegisterType.NULL_TYPE || type == RegisterType.UNKNOWN_TYPE) {
+            ok = false;
+        } else if (type.category == RegisterType.REFERENCE) {
+            if (useOffset(aInstr)) {
+                if (!isValidOffset(type, fieldOffset, methodOffset)) {
+                    ok = false;
+                }
             } else {
-                instanceOfMode = true;
+                Opcode opcode = aInstr.originalInstruction.getOpcode();
+                if ((opcode == Opcode.AGET_OBJECT || opcode == Opcode.AGET_WIDE)
+                        && !isValidArrayType(type)) {
+                    ok = false;
+                }
+            }
+        }
+        return ok;
+    }
+
+    private void traceTwoRegInstr(AnalyzedInstruction unaInstr, AnalyzedInstruction aInstr,
+                                  TraceRegisterParam param, int fieldOffset, int methodOffset) {
+        TwoRegisterInstruction twoRegInstr = (TwoRegisterInstruction) aInstr.instruction;
+        final int regA = twoRegInstr.getRegisterA();
+        final int regB = twoRegInstr.getRegisterB();
+        if (debug) {
+            println("  [>] traceTwoRegInstr " + toString(aInstr)
+                    + " " + toRegString(regA) + ", " + toRegString(regB) + " type=" + param.type);
+        }
+
+        boolean containsRegA = param.containsReg(regA);
+        boolean containsRegB = param.containsReg(regB);
+        RegisterType type = RegisterType.NULL_TYPE;
+        if (containsRegA) {
+            switch (twoRegInstr.getOpcode()) {
+                case AGET_OBJECT: // aget-object a, b, c means a = b[c]
+                    // Assign from array, so use the type of array element
+                    RegisterType registerType = aInstr.getPostInstructionRegisterType(regB);
+                    if (!isValidArrayType(registerType)) {
+                        registerType = getLastRegisterType(regB);
+                        if (!isValidArrayType(registerType)) {
+                            addAnalysisInfo("Cannot find proper type from aget-object regB=" + regB
+                                    + " type=" + registerType.type + " line=" + getLine(aInstr));
+                            break;
+                        }
+                    }
+                    assert registerType.type != null;
+                    ArrayProto arrayProto = (ArrayProto) registerType.type;
+                    String elementType = arrayProto.getImmediateElementType();
+                    type = RegisterType.getRegisterType(
+                            RegisterType.REFERENCE, classPath.getClass(elementType));
+                    break;
+                case INSTANCE_OF: // instance-of a, b, type
+                    // if b is type c, then a is true
+                    RegisterType insOfType = getReferenceType((Instruction22c) twoRegInstr);
+                    if (param.containsReg(regB)) {
+                        type = insOfType;
+                    }
+                    param.setInstanceOfType(regB, insOfType);
+                    break;
+                default:
+                    if (isMoveFrom(twoRegInstr.getOpcode())) {
+                        type = aInstr.getPostInstructionRegisterType(regB);
+                        if (!verifyType(type, unaInstr, fieldOffset, methodOffset)) {
+                            type = findTypeByLocal(aInstr, regB);
+                            if (!verifyType(type, unaInstr, fieldOffset, methodOffset)) {
+                                type = findTypeByInstanceOf(aInstr.instructionIndex, regB);
+                            }
+                        }
+                        if (debug) {
+                            println("    [def] " + type);
+                        }
+                    }
+            }
+        } else if (containsRegB) {
+            if (twoRegInstr.getOpcode() == Opcode.INSTANCE_OF) {
+                type = getReferenceType((Instruction22c) twoRegInstr);
             }
         }
 
-        for (int i = analyzedInstruction.getInstructionIndex() - 1; i >= 0; i--) {
+        if (verifyType(type, unaInstr, fieldOffset, methodOffset)) {
+            param.type = type;
+        } else if ((containsRegA || containsRegB) && isMoveFrom(twoRegInstr.getOpcode())) {
+            RegisterType bType = findTypeByLocal(aInstr, regB);
+            if (verifyType(bType, unaInstr, fieldOffset, methodOffset)) {
+                param.type = bType;
+            } else {
+                RegisterType insOfType = param.getInstanceOfType(regA);
+                if (insOfType != null
+                        && verifyType(insOfType, unaInstr, fieldOffset, methodOffset)) {
+                    param.type = insOfType;
+                } else {
+                    if (param.containsReg(regA)) {
+                        param.setTracingReg(regB);
+                    }
+                }
+            }
+        }
+        if (debug) println("  [<] traceTwoRegInstr " + " " + param + " type=" + type);
+    }
+
+    @Nonnull
+    private RegisterType findRegisterType(AnalyzedInstruction unaInstr, int reg,
+            int fieldOffset, int methodOffset) {
+        if (debug) println(">>findRegisterType "
+                + method.getDefiningClass() + "->" + method.getName()
+                + " " + toString(unaInstr) + " reg=" + toRegString(reg) + "(" + reg + ")"
+                + " fo=" + fieldOffset + " mo=" + methodOffset);
+
+        TraceRegisterParam regTracer = new TraceRegisterParam(totalRegisters);
+        regTracer.setTracingReg(reg);
+
+        RegisterType type = findTypeByLocal(unaInstr, reg);
+        if (type != RegisterType.NULL_TYPE) {
+            if (debug) {
+                println("  @@0 " + toString(unaInstr) + " type="+ type);
+            }
+            if (!useOffset(unaInstr) || isValidOffset(type, fieldOffset, methodOffset)) {
+                if (debug) {
+                    println("<<findRegisterType " + type);
+                }
+                return type;
+            }
+        }
+
+        for (int i = unaInstr.instructionIndex - 1; i >= 0; i--) {
             AnalyzedInstruction aInstr = analyzedInstructions.valueAt(i);
             Instruction instr = aInstr.instruction;
             if (!instr.getOpcode().setsRegister()) {
                 continue;
             }
             if (instr instanceof TwoRegisterInstruction) {
-                TwoRegisterInstruction twoRegInstr = (TwoRegisterInstruction) instr;
-                boolean assignType = false;
-                if (reg == twoRegInstr.getRegisterA()) {
-                    assignType = true;
-                    switch (twoRegInstr.getOpcode()) {
-                        case ARRAY_LENGTH:
-                            type = RegisterType.INTEGER_TYPE;
-                            break;
-                        case AGET_OBJECT:
-                            RegisterType arrayRegisterType = aInstr.getPostInstructionRegisterType(
-                                    twoRegInstr.getRegisterB());
-                            if (arrayRegisterType == RegisterType.NULL_TYPE) {
-                                arrayRegisterType = getLastRegisterType(twoRegInstr.getRegisterB());
-                            }
-                            ArrayProto arrayProto = (ArrayProto) arrayRegisterType.type;
-                            if (arrayProto != null) {
-                                String elementType = arrayProto.getImmediateElementType();
-                                type = RegisterType.getRegisterType(
-                                        RegisterType.REFERENCE, classPath.getClass(elementType));
-                            }
-                            break;
-                        case INSTANCE_OF:
-                            TypeReference ref = (TypeReference)
-                                    ((Instruction22c) twoRegInstr).getReference();
-                            type = RegisterType.getRegisterType(
-                                    classPath, ref.getType());
-                            instanceOfMode = false;
-                            break;
-                        default:
-                            boolean propagateRegister = false;;
-                            int regB = twoRegInstr.getRegisterB();
-                            type = aInstr.getPostInstructionRegisterType(regB);
-                            if (type == RegisterType.NULL_TYPE) {
-                                type = findRegisterTypeInner(aInstr, regB);
-                            }
-                            if (type != RegisterType.NULL_TYPE) {
-                                if (fieldOffset > -1
-                                        && type.type.getFieldByOffset(fieldOffset) == null) {
-                                    propagateRegister = true;
-                                    instanceOfMode = true;
-                                } else if (methodOffset > -1
-                                        && type.type.getMethodByVtableIndex(methodOffset) == null) {
-                                    instanceOfMode = true;
-                                }
-                            } else {
-                                propagateRegister = true;
-                            }
-                            if (propagateRegister) {
-                                reg = regB;
-                            }
-                    }
-                } else if (instanceOfMode && reg == twoRegInstr.getRegisterB()) {
-                    if (twoRegInstr.getOpcode() == Opcode.INSTANCE_OF) {
-                        assignType = true;
-                        TypeReference ref = (TypeReference)
-                                ((Instruction22c) twoRegInstr).getReference();
-                        type = RegisterType.getRegisterType(
-                                classPath, ref.getType());
-                        instanceOfMode = false;
-                    }
-                }
-                if (assignType && debug) {
-                    int instrAddress = getInstructionAddress(aInstr);
-                    int line = getNearestLineByAddress(instrAddress);
-                    System.out.println("@@1 " + line + " regA="
-                            + twoRegInstr.getRegisterA() + " regB=" + twoRegInstr.getRegisterB()
-                            + " nextReg=" + reg + " instr=" + instr.getOpcode() + " type=" + type);
-                }
+                regTracer.type = type;
+                traceTwoRegInstr(unaInstr, aInstr, regTracer, fieldOffset, methodOffset);
+                type = regTracer.type;
             } else if (instr instanceof OneRegisterInstruction) {
                 OneRegisterInstruction oneRegInstr = (OneRegisterInstruction) instr;
-                if (reg == oneRegInstr.getRegisterA()) {
-                    int regA = oneRegInstr.getRegisterA();
-                    type = aInstr.getPostInstructionRegisterType(reg);
-                    if (type == RegisterType.NULL_TYPE) {
-                        type = findRegisterTypeInner(aInstr, regA);
+                int regA = oneRegInstr.getRegisterA();
+                if (regTracer.containsReg(regA)) {
+                    RegisterType typeA = aInstr.getPostInstructionRegisterType(regA);
+                    if (!verifyType(typeA, unaInstr, fieldOffset, methodOffset)) {
+                        typeA = findTypeByLocal(aInstr, regA);
                     }
-
+                    if (type.category == RegisterType.REFERENCE
+                            && verifyType(typeA, unaInstr, fieldOffset, methodOffset)) {
+                        type = typeA;
+                    }
                     if (debug) {
-                        int instrAddress = getInstructionAddress(aInstr);
-                        int line = getNearestLineByAddress(instrAddress);
-                        System.out.println("@@2 " + line + " regA="
-                                + oneRegInstr.getRegisterA()
-                                + " instr=" + instr.getOpcode()
-                                + " type=" + type);
+                        println("  @@1 " + toString(aInstr) + " regA="
+                                + oneRegInstr.getRegisterA() + " type=" + type);
                     }
                 }
             }
-            if (type != RegisterType.NULL_TYPE && !instanceOfMode) {
+            if (type.category == RegisterType.REFERENCE) {
                 break;
             }
         }
 
         if (type.category != RegisterType.REFERENCE) {
             int size = analyzedInstructions.size();
-            for (int i = analyzedInstruction.getInstructionIndex() + 1; i < size; i++) {
-                AnalyzedInstruction aInstr = analyzedInstructions.valueAt(i);
-                Instruction instr = aInstr.instruction;
+            for (int i = unaInstr.instructionIndex + 1; i < size; i++) {
+                Instruction instr = analyzedInstructions.valueAt(i).instruction;
                 if (instr.getOpcode() == Opcode.MOVE_EXCEPTION) {
                     Instruction11x moveException = (Instruction11x) instr;
                     if (moveException.getRegisterA() == reg) {
@@ -2052,20 +2232,20 @@ public class MethodAnalyzer {
         }
 
         if (type.category != RegisterType.REFERENCE) {
-            Instruction instr = analyzedInstruction.instruction;
+            Instruction instr = unaInstr.instruction;
             if (instr instanceof FiveRegisterInstruction) {
                 // Workaround for try-with-resource Throwable.addSuppressed
                 FiveRegisterInstruction fiveRegInstr = (FiveRegisterInstruction) instr;
                 int regD = fiveRegInstr.getRegisterD();
-                RegisterType paramType = analyzedInstruction.getPostInstructionRegisterType(regD);
+                RegisterType paramType = unaInstr.getPostInstructionRegisterType(regD);
                 if (paramType.category == RegisterType.REFERENCE
-                        && "Ljava/lang/Throwable;".equals(paramType.type.getType())) {
+                        && "Ljava/lang/Throwable;".equals(paramType.getType())) {
                     type = paramType;
                 }
             }
         }
         if (debug) {
-            System.out.println("Find type=" + type);
+            println("<<findRegisterType " + type);
         }
         return type;
     }
@@ -2088,30 +2268,21 @@ public class MethodAnalyzer {
                 analyzedInstruction, instruction.getRegisterB(),
                 ReferenceOrUninitCategories);
 
-        if (objectRegisterType.category == RegisterType.NULL) {
+        if (!verifyType(objectRegisterType, analyzedInstruction, fieldOffset, -1)) {
             objectRegisterType = findRegisterType(analyzedInstruction,
                     instruction.getRegisterB(), fieldOffset, -1);
             if (debug) {
-                int instrAddress = getInstructionAddress(analyzedInstruction);
-                int line = getNearestLineByAddress(instrAddress);
                 addAnalysisInfo(method.getDefiningClass()
                         + " null object register type, guess "
-                        + objectRegisterType + " at line " + line);
+                        + objectRegisterType + " at line " + getLine(analyzedInstruction));
             }
             if (objectRegisterType == RegisterType.NULL_TYPE) {
-                addAnalysisInfo("Cannot find type "
-                        + instruction.getOpcode() + " "
-                        + instruction.getRegisterA() + " "
-                        + instruction.getRegisterB());
+                addAnalysisInfo("Cannot find type " + toString(analyzedInstruction));
+
             }
         }
 
         FieldReference resolvedField = resolveField(objectRegisterType, fieldOffset);
-        if (resolvedField == null) {
-            objectRegisterType = findRegisterType(analyzedInstruction,
-                    instruction.getRegisterB(), fieldOffset, -1);
-            resolvedField = resolveField(objectRegisterType, fieldOffset);
-        }
         TypeProto objectRegisterTypeProto = objectRegisterType.type;
 
         if (resolvedField == null) {
@@ -2119,7 +2290,7 @@ public class MethodAnalyzer {
             int line = getNearestLineByAddress(instrAddress);
             int srcReg = instruction.getRegisterB();
             TypeProto classTypeProto = guessTypeByNearestInstanceOf(
-                    analyzedInstruction.getInstructionIndex(), srcReg);
+                    analyzedInstruction.instructionIndex, srcReg);
 
             if (classTypeProto != null) {
                 objectRegisterTypeProto = classTypeProto;
@@ -2129,9 +2300,9 @@ public class MethodAnalyzer {
                 addAnalysisInfo("Resolve field from the nearest instance-of."
                         + " field=" + resolvedField.getDefiningClass()
                         + "." + resolvedField.getName()
-                        + " instr=" + instruction.getOpcode() + " at line " + line);
+                        + " instr=" + toString(analyzedInstruction) + " at line " + line);
             } else {
-                classTypeProto = findTypeProtoByAddress(instrAddress, srcReg);
+                classTypeProto = findTypeByAddress(instrAddress, srcReg);
                 if (classTypeProto != null) {
                     objectRegisterTypeProto = classTypeProto;
                     resolvedField = classTypeProto.getFieldByOffset(fieldOffset);
@@ -2139,7 +2310,7 @@ public class MethodAnalyzer {
                         addAnalysisInfo("Resolve field from debug info."
                                 + " field=" + resolvedField.getDefiningClass()
                                 + "." + resolvedField.getName()
-                                + " instr=" + instruction.getOpcode()
+                                + " instr=" + toString(analyzedInstruction)
                                 + " at line " + line);
                     }
                 }
@@ -2277,38 +2448,37 @@ public class MethodAnalyzer {
         final int objectRegister;
 
         if (isRange) {
-            Instruction3rms instruction = (Instruction3rms)analyzedInstruction.instruction;
+            Instruction3rms instruction = (Instruction3rms) analyzedInstruction.instruction;
             methodIndex = instruction.getVtableIndex();
             objectRegister = instruction.getStartRegister();
         } else {
-            Instruction35ms instruction = (Instruction35ms)analyzedInstruction.instruction;
+            Instruction35ms instruction = (Instruction35ms) analyzedInstruction.instruction;
             methodIndex = instruction.getVtableIndex();
             objectRegister = instruction.getRegisterC();
         }
 
-        RegisterType objectRegisterType = getAndCheckSourceRegister(analyzedInstruction, objectRegister,
-                ReferenceOrUninitCategories);
+        RegisterType objectRegisterType = getAndCheckSourceRegister(
+                analyzedInstruction, objectRegister, ReferenceOrUninitCategories);
         if (objectRegisterType == RegisterType.NULL_TYPE) {
             objectRegisterType = findRegisterType(analyzedInstruction,
                     objectRegister, -1, methodIndex);
         }
         TypeProto objectRegisterTypeProto = objectRegisterType.type;
 
-        if (objectRegisterType.category == RegisterType.NULL) {
-            // For register is used after ".end local"
+        if (!verifyType(objectRegisterType, analyzedInstruction, -1, methodIndex)) {
+             // For register is used after ".end local"
             int instrAddress = getInstructionAddress(analyzedInstruction);
-            int line = getNearestLineByAddress(instrAddress);
-            objectRegisterTypeProto = findTypeProtoByAddress(instrAddress, objectRegister);
+            objectRegisterTypeProto = findTypeByAddress(instrAddress, objectRegister);
             if (objectRegisterTypeProto != null) {
                 addAnalysisInfo("Resolve calling object from debug info:"
-                        + " instr=" +  analyzedInstruction.instruction.getOpcode()
+                        + " instr=" + toString(analyzedInstruction)
                         + " type=" + objectRegisterTypeProto.getType()
                         + " mIdx=" + methodIndex + " objReg=" + objectRegister
-                        + " at line " + line);
+                        + " at line " + getLine(analyzedInstruction));
             } else {
-                addAnalysisInfo("Unresolved " + analyzedInstruction.instruction.getOpcode()
+                addAnalysisInfo("Unresolved " + toString(analyzedInstruction)
                         + " mIdx=" + methodIndex + " objReg=" + objectRegister
-                        + " at line " + line);
+                        + " at line " + getLine(analyzedInstruction));
             }
         }
 
@@ -2329,19 +2499,11 @@ public class MethodAnalyzer {
             resolvedMethod = superType.getMethodByVtableIndex(methodIndex);
         } else if (objectRegisterTypeProto != null) {
             resolvedMethod = objectRegisterTypeProto.getMethodByVtableIndex(methodIndex);
-            if (resolvedMethod == null) {
-                objectRegisterTypeProto = findRegisterType(analyzedInstruction,
-                        objectRegister, -1, methodIndex).type;
-                if (objectRegisterTypeProto != null) {
-                    resolvedMethod = objectRegisterTypeProto.getMethodByVtableIndex(methodIndex);
-                }
-            }
         }
 
         if (resolvedMethod == null) {
-            int instrAddress = getInstructionAddress(analyzedInstruction);
             objectRegisterTypeProto = guessTypeByNearestInstanceOf(
-                    analyzedInstruction.getInstructionIndex(), objectRegister);
+                    analyzedInstruction.instructionIndex, objectRegister);
             if (objectRegisterTypeProto != null) {
                 resolvedMethod = objectRegisterTypeProto.getMethodByVtableIndex(methodIndex);
             }
@@ -2350,19 +2512,19 @@ public class MethodAnalyzer {
                         + " method=" + resolvedMethod.getDefiningClass()
                         + "->" + resolvedMethod.getName()
                         + " reg=" + objectRegister
-                        + " instr=" + analyzedInstruction.instruction.getOpcode()
-                        + " at line " + getNearestLineByAddress(instrAddress));
+                        + " instr=" + toString(analyzedInstruction)
+                        + " at line " + getLine(analyzedInstruction));
             } else {
                 objectRegisterTypeProto = guessTypeByNearestInstanceOf(
-                        analyzedInstruction.getInstructionIndex(), -1);
+                        analyzedInstruction.instructionIndex, -1);
                 if (objectRegisterTypeProto != null) {
                     resolvedMethod = objectRegisterTypeProto.getMethodByVtableIndex(methodIndex);
                     if (resolvedMethod != null) {
                         addAnalysisInfo("Resolve method from the nearest instance-of."
                                 + " method=" + resolvedMethod.getDefiningClass()
                                 + "->" + resolvedMethod.getName()
-                                + " instr=" + analyzedInstruction.instruction.getOpcode()
-                                + " at line " + getNearestLineByAddress(instrAddress));
+                                + " instr=" + toString(analyzedInstruction)
+                                + " at line " + getLine(analyzedInstruction));
                     }
                 }
             }

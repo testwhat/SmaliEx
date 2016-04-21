@@ -21,10 +21,8 @@ import java.io.IOException;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -49,15 +47,11 @@ public final class Device {
     /** Serial number of the device */
     private final String mSerialNumber;
 
-    /** Name of the AVD */
-    private String mAvdName = null;
-
     /** State of the device. */
     private DeviceState mState = null;
 
     /** Device properties. */
     private final PropertyFetcher mPropFetcher = new PropertyFetcher(this);
-    private final Map<String, String> mMountPoints = new HashMap<>();
 
     private static final String LOG_TAG = "Device";
     private static final char SEPARATOR = '-';
@@ -80,31 +74,6 @@ public final class Device {
         return mSerialNumber;
     }
 
-    /**
-     * Returns the name of the AVD the emulator is running.
-     * <p/>This is only valid if {@link #isEmulator()} returns true.
-     * <p/>If the emulator is not running any AVD (for instance it's running from an Android source
-     * tree build), this method will return "<code>&lt;build&gt;</code>".
-     *
-     * @return the name of the AVD or <code>null</code> if there isn't any.
-     */
-    @Nullable
-    public String getAvdName() {
-        return mAvdName;
-    }
-
-    /**
-     * Sets the name of the AVD
-     */
-    void setAvdName(String avdName) {
-        if (!isEmulator()) {
-            throw new IllegalArgumentException(
-                    "Cannot set the AVD name of the device is not an emulator");
-        }
-
-        mAvdName = avdName;
-    }
-
     public String getName() {
         if (mName != null) {
             return mName;
@@ -120,42 +89,34 @@ public final class Device {
     }
 
     private String constructName() {
-        if (isEmulator()) {
-            String avdName = getAvdName();
-            if (avdName != null) {
-                return String.format("%s [%s]", avdName, getSerialNumber());
-            } else {
-                return getSerialNumber();
-            }
-        } else {
-            String manufacturer = null;
-            String model = null;
+        String manufacturer = null;
+        String model = null;
 
-            try {
-                manufacturer = cleanupStringForDisplay(
+        try {
+            manufacturer = cleanupStringForDisplay(
                     getSystemProperty(PROP_DEVICE_MANUFACTURER).get());
-                model = cleanupStringForDisplay(
-                        getSystemProperty(PROP_DEVICE_MODEL).get());
-            } catch (Exception e) {
-                // If there are exceptions thrown while attempting to get these properties,
-                // we can just use the serial number, so ignore these exceptions.
-            }
-
-            StringBuilder sb = new StringBuilder(20);
-
-            if (manufacturer != null) {
-                sb.append(manufacturer);
-                sb.append(SEPARATOR);
-            }
-
-            if (model != null) {
-                sb.append(model);
-                sb.append(SEPARATOR);
-            }
-
-            sb.append(getSerialNumber());
-            return sb.toString();
+            model = cleanupStringForDisplay(
+                    getSystemProperty(PROP_DEVICE_MODEL).get());
+        } catch (Exception e) {
+            // If there are exceptions thrown while attempting to get these properties,
+            // we can just use the serial number, so ignore these exceptions.
         }
+
+        StringBuilder sb = new StringBuilder(20);
+
+        if (manufacturer != null) {
+            sb.append(manufacturer);
+            sb.append(SEPARATOR);
+        }
+
+        if (model != null) {
+            sb.append(model);
+            sb.append(SEPARATOR);
+        }
+
+        sb.append(getSerialNumber());
+        return sb.toString();
+
     }
 
     private static String cleanupStringForDisplay(String s) {
@@ -241,20 +202,6 @@ public final class Device {
 
         return mHardwareCharacteristics.contains(feature.getCharacteristic());
     }
-
-    /**
-     * Returns a mount point.
-     *
-     * @param name the name of the mount point to return
-     *
-     * @see #MNT_EXTERNAL_STORAGE
-     * @see #MNT_ROOT
-     * @see #MNT_DATA
-     */
-    public String getMountPoint(String name) {
-        return mMountPoints.get(name);
-    }
-
 
     @Override
     public String toString() {
@@ -439,10 +386,6 @@ public final class Device {
         return mSocketChannel;
     }
 
-    void setMountingPoint(String name, String value) {
-        mMountPoints.put(name, value);
-    }
-
     /**
      * Push a single file.
      * @param local the local filepath.
@@ -601,11 +544,11 @@ public final class Device {
 
     /** Device level hardware features. */
     public enum HardwareFeature {
-        WATCH("watch");                   // supports feature watch
+        WATCH("watch"); // supports feature watch
 
         private final String mCharacteristic;
 
-        private HardwareFeature(String characteristic) {
+        HardwareFeature(String characteristic) {
             mCharacteristic = characteristic;
         }
 
@@ -614,14 +557,10 @@ public final class Device {
         }
     }
 
-    public static final String MNT_EXTERNAL_STORAGE = "EXTERNAL_STORAGE";
-    public static final String MNT_ROOT = "ANDROID_ROOT";
-    public static final String MNT_DATA = "ANDROID_DATA";
-
     /**
      * The state of a device.
      */
-    public static enum DeviceState {
+    public enum DeviceState {
         BOOTLOADER("bootloader"),
         OFFLINE("offline"),
         ONLINE("device"),
@@ -654,14 +593,14 @@ public final class Device {
     /**
      * Namespace of a Unix Domain Socket created on the device.
      */
-    public static enum DeviceUnixSocketNamespace {
+    public enum DeviceUnixSocketNamespace {
         ABSTRACT("localabstract"),
         FILESYSTEM("localfilesystem"),
         RESERVED("localreserved");
 
         private final String mType;
 
-        private DeviceUnixSocketNamespace(String type) {
+        DeviceUnixSocketNamespace(String type) {
             mType = type;
         }
 

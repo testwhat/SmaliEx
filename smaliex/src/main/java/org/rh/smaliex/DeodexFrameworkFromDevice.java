@@ -37,10 +37,9 @@ public class DeodexFrameworkFromDevice {
                 }
             }
             if (args.length > 2) {
-                String byFilePath = args[args.length - 1];
-                if (new File(byFilePath).isDirectory()) {
-                    sysFolder = byFilePath;
-                    return;
+                String inputPath = args[args.length - 1];
+                if (new File(inputPath).isDirectory()) {
+                    sysFolder = inputPath;
                 }
             }
             if ("t".equals(args[0])) {
@@ -185,7 +184,7 @@ public class DeodexFrameworkFromDevice {
                 bootLocation = new File(mFolder, autoPath(SYS_FRAMEWORK + mAbiFolder));
             }
             java.util.ArrayList<String> jars = OatUtil.getBootJarNames(
-                    MiscUtil.path(bootLocation.getAbsolutePath(), BOOT_OAT), mContainsSysFw);
+                    bootLocation.getAbsolutePath(), mContainsSysFw);
             booJars = jars.toArray(new String[jars.size()]);
         }
 

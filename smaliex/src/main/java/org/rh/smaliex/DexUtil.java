@@ -28,7 +28,6 @@
 
 package org.rh.smaliex;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -62,13 +61,11 @@ import org.jf.dexlib2.iface.Method;
 import org.jf.dexlib2.iface.MethodImplementation;
 import org.jf.dexlib2.iface.instruction.Instruction;
 import org.jf.dexlib2.immutable.ImmutableDexFile;
-import org.jf.dexlib2.rewriter.DexRewriter;
 import org.jf.dexlib2.rewriter.MethodImplementationRewriter;
 import org.jf.dexlib2.rewriter.MethodRewriter;
 import org.jf.dexlib2.rewriter.Rewriter;
 import org.jf.dexlib2.rewriter.RewriterModule;
 import org.jf.dexlib2.rewriter.Rewriters;
-import org.jf.util.IndentingWriter;
 
 import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.ImmutableSet;
@@ -78,10 +75,25 @@ import com.google.common.collect.Maps;
 public class DexUtil {
     public static Opcodes DEFAULT_OPCODES;
 
+    private static final ConcurrentHashMap<Integer, SoftReference<Opcodes>> opCodesCache =
+            new ConcurrentHashMap<>();
+
+    public static Opcodes getOpcodes(int apiLevel) {
+        if (apiLevel <= 0) {
+            apiLevel = VersionMap.DEFAULT;
+        }
+        Opcodes opcodes = getCache(opCodesCache, apiLevel);
+        if (opcodes == null) {
+            opcodes = Opcodes.forApi(apiLevel);
+            putCache(opCodesCache, apiLevel, opcodes);
+        }
+        return opcodes;
+    }
+
     public static Opcodes getDefaultOpCodes(Opcodes opc) {
         if (opc == null) {
             if (DEFAULT_OPCODES == null) {
-                DEFAULT_OPCODES = Opcodes.forApi(VersionMap.DEFAULT);
+                DEFAULT_OPCODES = getOpcodes(VersionMap.DEFAULT);
             }
             opc = DEFAULT_OPCODES;
         }
@@ -115,8 +127,6 @@ public class DexUtil {
         List<byte[]> dexBytes = new ArrayList<>(2);
         try (ZipFile zipFile = new ZipFile(file)) {
             Enumeration<? extends ZipEntry> zs = zipFile.entries();
-            byte[] buf = new byte[8192];
-            ByteArrayOutputStream out = new ByteArrayOutputStream(1024 * 1024);
             while (zs.hasMoreElements()) {
                 ZipEntry entry = zs.nextElement();
                 String name = entry.getName();
@@ -125,12 +135,7 @@ public class DexUtil {
                         LLog.i("The dex file in " + file + " is too small to be a valid dex file");
                         continue;
                     }
-                    InputStream is = zipFile.getInputStream(entry);
-                    for (int c = is.read(buf); c > 0; c = is.read(buf)) {
-                        out.write(buf, 0, c);
-                    }
-                    dexBytes.add(out.toByteArray());
-                    out.reset();
+                    dexBytes.add(MiscUtil.readBytes(zipFile.getInputStream(entry)));
                 }
             }
             if (dexBytes.isEmpty()) {
@@ -145,9 +150,9 @@ public class DexUtil {
         File outputFolder = new File(outFolder == null ? MiscUtil.workingDir() : outFolder);
         MiscUtil.mkdirs(outputFolder);
 
-        Opcodes opcodes = Opcodes.forApi(apiLevel);
+        Opcodes opcodes = getOpcodes(apiLevel);
         File input = new File(odex);
-        DexFile odexFile = DexUtil.loadSingleDex(input, opcodes);
+        DexFile odexFile = loadSingleDex(input, opcodes);
         ODexRewriter rewriter = getODexRewriter(bootClassPath, opcodes);
         if (LLog.VERBOSE) {
             rewriter.setFailInfoLocation(outputFolder.getAbsolutePath());
@@ -165,9 +170,31 @@ public class DexUtil {
     public static ClassPathEx getClassPath(String path, Opcodes opcodes, String ext) {
         ArrayList<DexFile> dexFiles = new ArrayList<>();
         for (File f : MiscUtil.getFiles(path, ext)) {
-            dexFiles.addAll(DexUtil.loadMultiDex(f, opcodes));
+            dexFiles.addAll(loadMultiDex(f, opcodes));
         }
         return new ClassPathEx(dexFiles, opcodes.artVersion);
+    }
+
+    // If return false, the dex may be customized format or encrypted.
+    public static boolean verifyStringOffset(DexBackedDexFile dex) {
+        int strIdsStartOffset = dex.readSmallUint(
+                org.jf.dexlib2.dexbacked.raw.HeaderItem.STRING_START_OFFSET);
+        int strStartOffset = dex.readInt(strIdsStartOffset);
+        int mapOffset = dex.readSmallUint(org.jf.dexlib2.dexbacked.raw.HeaderItem.MAP_OFFSET);
+        int mapSize = dex.readSmallUint(mapOffset);
+        for (int i = 0; i < mapSize; i++) {
+            int mapItemOffset = mapOffset + 4 + i * org.jf.dexlib2.dexbacked.raw.MapItem.ITEM_SIZE;
+            if (dex.readUshort(mapItemOffset)
+                    == org.jf.dexlib2.dexbacked.raw.ItemType.STRING_DATA_ITEM) {
+                int realStrStartOffset = dex.readSmallUint(
+                        mapItemOffset + org.jf.dexlib2.dexbacked.raw.MapItem.OFFSET_OFFSET);
+                if (strStartOffset != realStrStartOffset) {
+                    return false;
+                }
+                break;
+            }
+        }
+        return true;
     }
 
     public static class ByteData {
@@ -302,7 +329,7 @@ public class DexUtil {
 
         ClassDefinition cd = new ClassDefinition(options, classDef);
         try {
-            IndentingWriter writer = new IndentingWriter(outWriter);
+            org.jf.util.IndentingWriter writer = new org.jf.util.IndentingWriter(outWriter);
             cd.writeTo(writer);
         } catch (IOException ex) {
             LLog.ex(ex);
@@ -312,7 +339,7 @@ public class DexUtil {
     private static final ConcurrentHashMap<String, SoftReference<ODexRewriter>> rewriterCache =
             new ConcurrentHashMap<>();
 
-    private static <T> T getCache(Map<String, SoftReference<T>> pool, String key) {
+    private static <K, T> T getCache(Map<K, SoftReference<T>> pool, K key) {
         SoftReference<T> ref = pool.get(key);
         if (ref != null) {
             return ref.get();
@@ -320,7 +347,7 @@ public class DexUtil {
         return null;
     }
 
-    private static <T> void putCache(Map<String, SoftReference<T>> pool, String key, T val) {
+    private static <K, T> void putCache(Map<K, SoftReference<T>> pool, K key, T val) {
         pool.put(key, new SoftReference<>(val));
     }
 
@@ -341,7 +368,7 @@ public class DexUtil {
 
         public ClassPathEx(@Nonnull Iterable<? extends DexFile> classPath, int oatVersion) {
             super(false, oatVersion);
-            DexFile basicClasses = new ImmutableDexFile(Opcodes.forApi(VersionMap.DEFAULT),
+            DexFile basicClasses = new ImmutableDexFile(getOpcodes(VersionMap.DEFAULT),
                     ImmutableSet.of(
                             new ReflectionClassDef(Class.class),
                             new ReflectionClassDef(Cloneable.class),
@@ -393,7 +420,7 @@ public class DexUtil {
         }
     }
 
-    public static class ODexRewriter extends DexRewriter {
+    public static class ODexRewriter extends org.jf.dexlib2.rewriter.DexRewriter {
         final ODexRewriterModule mRewriterModule;
 
         ODexRewriter(ODexRewriterModule module) {
