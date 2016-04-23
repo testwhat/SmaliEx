@@ -1424,7 +1424,7 @@ public class MethodAnalyzer {
         AnalyzedInstruction nextAnalyzedInstruction = analyzedInstructions.valueAt(instructionIndex + 1);
 
         Instruction nextInstruction = nextAnalyzedInstruction.instruction;
-        if (nextInstruction.getOpcode() == Opcode.IF_EQZ) {
+        if (nextInstruction.getOpcode() == Opcode.IF_EQZ || nextInstruction.getOpcode() == Opcode.IF_NEZ) {
             if (((Instruction21t)nextInstruction).getRegisterA() == analyzedInstruction.getDestinationRegister()) {
                 Reference reference = ((Instruction22c)analyzedInstruction.getInstruction()).getReference();
                 RegisterType registerType = RegisterType.getRegisterType(classPath, (TypeReference)reference);
@@ -1449,9 +1449,16 @@ public class MethodAnalyzer {
                         }
 
                         if (override) {
-                            overridePredecessorRegisterTypeAndPropagateChanges(
-                                    analyzedInstructions.valueAt(instructionIndex + 2), nextAnalyzedInstruction,
-                                    objectRegister, registerType);
+                            AnalyzedInstruction branchStartInstruction;
+                            if (nextInstruction.getOpcode() == Opcode.IF_EQZ) {
+                                branchStartInstruction = analyzedInstructions.valueAt(instructionIndex + 2);
+                            } else {
+                                int nextAddress = getInstructionAddress(nextAnalyzedInstruction) +
+                                        ((Instruction21t)nextInstruction).getCodeOffset();
+                                branchStartInstruction = analyzedInstructions.get(nextAddress);
+                            }
+                            overridePredecessorRegisterTypeAndPropagateChanges(branchStartInstruction,
+                                    nextAnalyzedInstruction, objectRegister, registerType);
                         }
                     }
                 }
