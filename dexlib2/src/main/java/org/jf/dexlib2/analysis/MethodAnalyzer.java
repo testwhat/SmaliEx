@@ -31,12 +31,9 @@
 
 package org.jf.dexlib2.analysis;
 
-import java.util.ArrayList;
-import java.util.BitSet;
-import java.util.List;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import com.google.common.base.Function;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 
 import org.jf.dexlib2.AccessFlags;
 import org.jf.dexlib2.DebugItemType;
@@ -91,9 +88,11 @@ import org.jf.util.BitSetUtils;
 import org.jf.util.ExceptionWithContext;
 import org.jf.util.SparseArray;
 
-import com.google.common.base.Function;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.List;
 
 /**
  * The MethodAnalyzer performs several functions. It "analyzes" the instructions and infers the
@@ -167,29 +166,19 @@ public class MethodAnalyzer {
         totalRegisters = impl.getRegisterCount();
         this.methodImpl = impl;
 
-        // override AnalyzedInstruction and provide custom implementations of some of
+        // Override AnalyzedInstruction and provide custom implementations of some of
         // the methods, so that we don't have to handle the case this special case of
         // instruction being null, in the main class.
         startOfMethod = new AnalyzedInstruction(this,
                 AnalyzedInstruction.START_INSTR, -1, totalRegisters) {
-            public boolean setsRegister() {
-                return false;
+            @Override protected boolean addPredecessor(AnalyzedInstruction predecessor) {
+                throw new UnsupportedOperationException();
             }
 
-            @Override
-            public boolean setsWideRegister() {
-                return false;
-            }
-
-            @Override
-            public boolean setsRegister(int registerNumber) {
-                return false;
-            }
-
-            @Override
-            public int getDestinationRegister() {
-                assert false;
-                return -1;
+            @Override @Nonnull
+            public RegisterType getPredecessorRegisterType(
+                    @Nonnull AnalyzedInstruction predecessor, int registerNumber) {
+                throw new UnsupportedOperationException();
             }
         };
 
@@ -2441,15 +2430,14 @@ public class MethodAnalyzer {
 
             // fieldClass is now the first accessible class found.
             // Now, we need to make sure that the field is actually valid for this class.
-            FieldReference originalResolvedField = resolvedField;
-            resolvedField = classPath.getClass(fieldClass.getType()).getFieldByOffset(fieldOffset);
-            if (resolvedField == null) {
-                throw new ExceptionWithContext(
-                        "Couldn't find accessible class while resolving field %s",
-                        ReferenceUtil.getShortFieldDescriptor(originalResolvedField));
+            FieldReference newResolvedField = classPath.getClass(
+                    fieldClass.getType()).getFieldByOffset(fieldOffset);
+            if (newResolvedField == null) {
+                throw new ExceptionWithContext("Couldn't find accessible class while resolving field %s",
+                        ReferenceUtil.getShortFieldDescriptor(resolvedField));
             }
-            resolvedField = new ImmutableFieldReference(
-                    fieldClass.getType(), resolvedField.getName(), resolvedField.getType());
+            resolvedField = new ImmutableFieldReference(fieldClass.getType(), newResolvedField.getName(),
+                    newResolvedField.getType());
         }
 
         String fieldType = resolvedField.getType();
