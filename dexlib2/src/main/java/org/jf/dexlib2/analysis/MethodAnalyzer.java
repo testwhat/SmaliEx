@@ -172,7 +172,7 @@ public class MethodAnalyzer {
 
         //override AnalyzedInstruction and provide custom implementations of some of the methods, so that we don't
         //have to handle the case this special case of instruction being null, in the main class
-        startOfMethod = new AnalyzedInstruction(this, null, -1, methodImpl.getRegisterCount()) {
+        startOfMethod = new AnalyzedInstruction(this, null, -1, totalRegisters) {
             public boolean setsRegister() {
                 return false;
             }

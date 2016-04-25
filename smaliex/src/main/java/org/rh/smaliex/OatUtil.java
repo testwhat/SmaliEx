@@ -95,7 +95,7 @@ public class OatUtil {
         String outputBaseFolder = MiscUtil.path(
                 inputFile.getAbsoluteFile().getParent(), folderName);
         baksmaliOptions options = new baksmaliOptions();
-        Opcodes opc = Opcodes.forApi(apiLevel);
+        Opcodes opc = DexUtil.getOpcodes(apiLevel);
         options.apiLevel = opc.api;
         options.allowOdex = true;
         options.jobs = 4;

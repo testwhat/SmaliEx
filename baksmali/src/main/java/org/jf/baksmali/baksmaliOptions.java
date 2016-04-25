@@ -31,17 +31,19 @@
 
 package org.jf.baksmali;
 
-import com.google.common.collect.Lists;
-import org.jf.dexlib2.analysis.ClassPath;
-import org.jf.dexlib2.analysis.InlineMethodResolver;
-import org.jf.dexlib2.util.SyntheticAccessorResolver;
-
-import javax.annotation.Nullable;
 import java.io.File;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import javax.annotation.Nullable;
+
+import org.jf.dexlib2.analysis.ClassPath;
+import org.jf.dexlib2.analysis.InlineMethodResolver;
+import org.jf.dexlib2.util.SyntheticAccessorResolver;
+
+import com.google.common.collect.Lists;
 
 public class baksmaliOptions {
     // register info values
@@ -89,18 +91,18 @@ public class baksmaliOptions {
     public SyntheticAccessorResolver syntheticAccessorResolver = null;
 
     public void setBootClassPath(String bootClassPath) {
-        bootClassPathEntries = Lists.newArrayList(bootClassPath.split(":"));
+        bootClassPathEntries = Lists.newArrayList(bootClassPath.split(File.pathSeparator));
     }
 
     public void addExtraClassPath(String extraClassPath) {
         if (extraClassPath.startsWith(":")) {
             extraClassPath = extraClassPath.substring(1);
         }
-        extraClassPathEntries.addAll(Arrays.asList(extraClassPath.split(":")));
+        extraClassPathEntries.addAll(Arrays.asList(extraClassPath.split(File.pathSeparator)));
     }
 
     public void setResourceIdFiles(String resourceIdFiles) {
-        for (String resourceIdFile: resourceIdFiles.split(":")) {
+        for (String resourceIdFile: resourceIdFiles.split(File.pathSeparator)) {
             String[] entry = resourceIdFile.split("=");
             resourceIdFileEntries.put(entry[1], entry[0]);
         }

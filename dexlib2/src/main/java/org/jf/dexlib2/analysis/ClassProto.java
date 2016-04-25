@@ -785,7 +785,6 @@ public class ClassProto implements TypeProto {
                 private int getFieldSize(@Nonnull FieldReference field) {
                     return getTypeSize(field.getType().charAt(0));
                 }
-
             });
 
     private int getNextFieldOffset() {

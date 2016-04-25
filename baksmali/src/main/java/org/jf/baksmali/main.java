@@ -225,7 +225,7 @@ public class main {
                     break;
                 case 'c':
                     String bcp = commandLine.getOptionValue("c");
-                    if (bcp != null && bcp.charAt(0) == ':') {
+                    if (bcp != null && bcp.charAt(0) == File.pathSeparatorChar) {
                         options.addExtraClassPath(bcp);
                     } else {
                         options.setBootClassPath(bcp);

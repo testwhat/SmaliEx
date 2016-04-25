@@ -368,17 +368,19 @@ public class DexUtil {
 
         public ClassPathEx(@Nonnull Iterable<? extends DexFile> classPath, int oatVersion) {
             super(false, oatVersion);
-            DexFile basicClasses = new ImmutableDexFile(getOpcodes(VersionMap.DEFAULT),
-                    ImmutableSet.of(
-                            new ReflectionClassDef(Class.class),
-                            new ReflectionClassDef(Cloneable.class),
-                            new ReflectionClassDef(Object.class),
-                            new ReflectionClassDef(Serializable.class),
-                            new ReflectionClassDef(String.class),
-                            new ReflectionClassDef(Throwable.class)));
-            addDex(basicClasses, false);
             for (DexFile dexFile : classPath) {
                 addDex(dexFile, false);
+            }
+            if (availableClasses.get("Ljava/lang/Class;") == null) {
+                DexFile basicClasses = new ImmutableDexFile(getOpcodes(VersionMap.DEFAULT),
+                        ImmutableSet.of(
+                                new ReflectionClassDef(Class.class),
+                                new ReflectionClassDef(Cloneable.class),
+                                new ReflectionClassDef(Object.class),
+                                new ReflectionClassDef(Serializable.class),
+                                new ReflectionClassDef(String.class),
+                                new ReflectionClassDef(Throwable.class)));
+                addDex(basicClasses, false);
             }
         }
 
@@ -387,6 +389,8 @@ public class DexUtil {
                 ClassDef prev = availableClasses.get(classDef.getType());
                 if (prev == null) {
                     availableClasses.put(classDef.getType(), classDef);
+                } else {
+                    LLog.v("Duplicated class " + prev.getType());
                 }
             }
             if (additional) {
@@ -471,7 +475,7 @@ public class DexUtil {
         }
     }
 
-    // Covert optimized dex in oat to normal dex
+    // Covert optimized dex to normal dex
     static class ODexRewriterModule extends RewriterModule {
         private final ClassPathEx mClassPath;
         private Method mCurrentMethod;
