@@ -31,21 +31,42 @@
 
 package org.jf.dexlib2.analysis;
 
-import com.google.common.base.Objects;
-import com.google.common.collect.Maps;
-import org.jf.dexlib2.iface.instruction.*;
+import java.util.BitSet;
+import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.SortedSet;
+import java.util.TreeSet;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
+import org.jf.dexlib2.Opcode;
+import org.jf.dexlib2.iface.instruction.FiveRegisterInstruction;
+import org.jf.dexlib2.iface.instruction.Instruction;
+import org.jf.dexlib2.iface.instruction.OneRegisterInstruction;
+import org.jf.dexlib2.iface.instruction.ReferenceInstruction;
+import org.jf.dexlib2.iface.instruction.RegisterRangeInstruction;
+import org.jf.dexlib2.iface.instruction.formats.Instruction22c;
 import org.jf.dexlib2.iface.reference.MethodReference;
 import org.jf.dexlib2.iface.reference.Reference;
 import org.jf.util.ExceptionWithContext;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.util.*;
+import com.google.common.base.Objects;
+import com.google.common.collect.Maps;
 
 public class AnalyzedInstruction implements Comparable<AnalyzedInstruction> {
     /**
+     * The MethodAnalyzer containing this instruction
+     */
+    @Nonnull
+    protected final MethodAnalyzer methodAnalyzer;
+
+    /**
      * The actual instruction
      */
+    @Nullable
     protected Instruction instruction;
 
     /**
@@ -85,7 +106,9 @@ public class AnalyzedInstruction implements Comparable<AnalyzedInstruction> {
      */
     protected final Instruction originalInstruction;
 
-    public AnalyzedInstruction(Instruction instruction, int instructionIndex, int registerCount) {
+    public AnalyzedInstruction(MethodAnalyzer methodAnalyzer, Instruction instruction, int instructionIndex,
+                               int registerCount) {
+        this.methodAnalyzer = methodAnalyzer;
         this.instruction = instruction;
         this.originalInstruction = instruction;
         this.instructionIndex = instructionIndex;
@@ -353,6 +376,17 @@ public class AnalyzedInstruction implements Comparable<AnalyzedInstruction> {
             return false;
         }
 
+        if (instruction.getOpcode() == Opcode.IF_EQZ || instruction.getOpcode() == Opcode.IF_NEZ) {
+            AnalyzedInstruction previousInstruction = getPreviousInstruction();
+            if (previousInstruction != null &&
+                    previousInstruction.instruction != null &&
+                    previousInstruction.instruction.getOpcode() == Opcode.INSTANCE_OF &&
+                    registerNumber == ((Instruction22c)previousInstruction.instruction).getRegisterB() &&
+                    MethodAnalyzer.canNarrowAfterInstanceOf(previousInstruction, this, methodAnalyzer.getClassPath())) {
+                return true;
+            }
+        }
+
         if (!setsRegister()) {
             return false;
         }
@@ -365,6 +399,16 @@ public class AnalyzedInstruction implements Comparable<AnalyzedInstruction> {
             return true;
         }
         return false;
+    }
+
+    @Nullable
+    private AnalyzedInstruction getPreviousInstruction() {
+        for (AnalyzedInstruction predecessor: predecessors) {
+            if (predecessor.getInstructionIndex() == getInstructionIndex() - 1) {
+                return predecessor;
+            }
+        }
+        return null;
     }
 
     public int getDestinationRegister() {
