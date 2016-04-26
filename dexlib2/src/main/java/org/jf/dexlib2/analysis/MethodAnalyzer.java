@@ -1566,8 +1566,8 @@ public class MethodAnalyzer {
                             arrayRegisterType.toString());
                 }
             }
-            assert arrayRegisterType.type != null;
             ArrayProto arrayProto = (ArrayProto) arrayRegisterType.type;
+            assert arrayProto != null;
 
             if (arrayProto.dimensions != 1) {
                 throw new AnalysisException("aget-wide used with multi-dimensional array: %s",

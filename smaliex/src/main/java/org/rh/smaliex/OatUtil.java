@@ -59,7 +59,7 @@ public class OatUtil {
         if (MiscUtil.isElf(file)) {
             try (Elf e = new Elf(file)) {
                 Oat oat = getOat(e);
-                Opcodes opc = new Opcodes(apiLevel > 0 ? apiLevel : oat.guessApiLevel());
+                Opcodes opc = DexUtil.getOpcodes(apiLevel > 0 ? apiLevel : oat.guessApiLevel());
                 for (int i = 0; i < oat.mDexFiles.length; i++) {
                     Oat.DexFile df = oat.mDexFiles[i];
                     dexFiles.add(readDex(df, df.mHeader.file_size_, opc));
@@ -73,7 +73,7 @@ public class OatUtil {
                 LLog.ex(ex);
             }
         } else {
-            Opcodes opc = new Opcodes(apiLevel > 0 ? apiLevel : DexUtil.API_LEVEL);
+            Opcodes opc = DexUtil.getOpcodes(apiLevel > 0 ? apiLevel : DexUtil.API_LEVEL);
             dexFiles = DexUtil.loadMultiDex(file, opc);
             if (outputNames != null) {
                 String dexName = "classes";
@@ -94,7 +94,7 @@ public class OatUtil {
         String outputBaseFolder = MiscUtil.path(
                 inputFile.getAbsoluteFile().getParent(), folderName);
         baksmaliOptions options = new baksmaliOptions();
-        Opcodes opc = new Opcodes(apiLevel);
+        Opcodes opc = DexUtil.getOpcodes(apiLevel);
         options.apiLevel = opc.apiLevel;
         options.allowOdex = true;
         options.jobs = 4;
