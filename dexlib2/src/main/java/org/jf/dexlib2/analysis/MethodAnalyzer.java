@@ -2445,7 +2445,13 @@ public class MethodAnalyzer {
         Method replacementMethod = typeProto.getMethodByVtableIndex(methodIndex);
         assert replacementMethod != null;
         while (true) {
-            String superType = typeProto.getSuperclass();
+            String superType = null;
+            try {
+                superType = typeProto.getSuperclass();
+            } catch (UnresolvedClassException ex) {
+                // It may cause by some reference classes does not add to classpath.
+                addAnalysisInfo("Unable to resolve super class: " + ex.getMessage());
+            }
             if (superType == null) {
                 break;
             }

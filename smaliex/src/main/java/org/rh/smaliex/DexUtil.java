@@ -389,9 +389,10 @@ public class DexUtil {
                 ClassDef prev = availableClasses.get(classDef.getType());
                 if (prev == null) {
                     availableClasses.put(classDef.getType(), classDef);
-                } else {
-                    LLog.v("Duplicated class " + prev.getType());
                 }
+                //else {
+                //    LLog.v("Duplicated class " + prev.getType());
+                //}
             }
             if (additional) {
                 if (additionalDexFiles == null) {
@@ -503,7 +504,7 @@ public class DexUtil {
                         @Override
                         public Iterable<? extends Instruction> getInstructions() {
                             MethodAnalyzer ma = new MethodAnalyzer(
-                                    mClassPath, mCurrentMethod, null, true);
+                                    mClassPath, mCurrentMethod, null, false);
                             if (!ma.analysisInfo.isEmpty()) {
                                 StringBuilder sb = new StringBuilder(256);
                                 sb.append("Analysis info of ").append(mCurrentMethod.getDefiningClass())
