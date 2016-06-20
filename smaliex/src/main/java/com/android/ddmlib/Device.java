@@ -18,7 +18,6 @@ package com.android.ddmlib;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -28,9 +27,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-
+import com.android.annotations.NonNull;
+import com.android.annotations.Nullable;
 import com.android.ddmlib.AdbHelper.AdbCommandRejectedException;
 import com.android.ddmlib.AdbHelper.ShellCommandUnresponsiveException;
 import com.android.ddmlib.AdbHelper.TimeoutException;
@@ -56,11 +54,6 @@ public final class Device {
     private static final String LOG_TAG = "Device";
     private static final char SEPARATOR = '-';
 
-    /**
-     * Socket for the connection monitoring client connection/disconnection.
-     */
-    private SocketChannel mSocketChannel;
-
     /** Cached list of hardware characteristics */
     private Set<String> mHardwareCharacteristics;
 
@@ -69,7 +62,7 @@ public final class Device {
     public boolean logError = true;
 
     /** Returns the serial number of the device. */
-    @Nonnull
+    @NonNull
     public String getSerialNumber() {
         return mSerialNumber;
     }
@@ -181,7 +174,8 @@ public final class Device {
      * @return a {@link Future} which can be used to retrieve value of property. Future#get() can
      *         return null if property can not be retrieved.
      */
-    public @Nonnull Future<String> getSystemProperty(@Nonnull String name) {
+    public @NonNull
+    Future<String> getSystemProperty(@NonNull String name) {
         return mPropFetcher.getProperty(name);
     }
 
@@ -189,7 +183,7 @@ public final class Device {
     // However, since we only support the "watch" feature, we can determine that by simply
     // reading the build characteristics property.
     /** Returns whether this device supports the given hardware feature. */
-    public boolean supportsFeature(@Nonnull HardwareFeature feature) {
+    public boolean supportsFeature(@NonNull HardwareFeature feature) {
         if (mHardwareCharacteristics == null) {
             try {
                 String characteristics = getSystemProperty(PROP_BUILD_CHARACTERISTICS).get();
@@ -372,21 +366,6 @@ public final class Device {
     }
 
     /**
-     * Sets the client monitoring socket.
-     * @param socketChannel the sockets
-     */
-    void setClientMonitoringSocket(SocketChannel socketChannel) {
-        mSocketChannel = socketChannel;
-    }
-
-    /**
-     * Returns the client monitoring socket.
-     */
-    SocketChannel getClientMonitoringSocket() {
-        return mSocketChannel;
-    }
-
-    /**
      * Push a single file.
      * @param local the local filepath.
      * @param remote The remote filepath.
@@ -500,7 +479,7 @@ public final class Device {
      * first ABI being the most preferred.
      * @return the list of ABIs.
      */
-    @Nonnull
+    @NonNull
     public List<String> getAbis() {
         List<String> abis = new ArrayList<>(2);
         String abi = getProperty(PROP_DEVICE_CPU_ABI);
@@ -565,7 +544,8 @@ public final class Device {
         OFFLINE("offline"),
         ONLINE("device"),
         RECOVERY("recovery"),
-        UNAUTHORIZED("unauthorized");
+        UNAUTHORIZED("unauthorized"),
+        DISCONNECTED("disconnected");
 
         private final String mState;
 

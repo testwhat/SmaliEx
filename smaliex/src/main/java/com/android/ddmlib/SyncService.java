@@ -59,26 +59,26 @@ public class SyncService implements java.io.Closeable {
          * Sent when the transfer starts
          * @param totalWork the total amount of work.
          */
-        public void start(int totalWork);
+        void start(int totalWork);
         /**
          * Sent when the transfer is finished or interrupted.
          */
-        public void stop();
+        void stop();
         /**
          * Sent to query for possible cancellation.
          * @return true if the transfer should be stopped.
          */
-        public boolean isCanceled();
+        boolean isCanceled();
         /**
          * Sent when a sub task is started.
          * @param name the name of the sub task.
          */
-        public void startSubTask(String name);
+        void startSubTask(String name);
         /**
          * Sent when some progress have been made.
          * @param work the amount of work done.
          */
-        public void advance(int work);
+        void advance(int work);
     }
 
     /**
@@ -356,6 +356,7 @@ public class SyncService implements java.io.Closeable {
         byte[] msg;
 
         final int timeOut = DdmPreferences.getTimeOut();
+        File f = new File(localPath);
 
         try {
             byte[] remotePathContent = remotePath.getBytes(AdbHelper.DEFAULT_ENCODING);
@@ -363,8 +364,6 @@ public class SyncService implements java.io.Closeable {
             if (remotePathContent.length > REMOTE_PATH_MAX_LENGTH) {
                 throw new SyncException(SyncError.REMOTE_PATH_LENGTH);
             }
-
-            File f = new File(localPath);
 
             // create the stream to read the file
             fis = new FileInputStream(f);
@@ -413,7 +412,7 @@ public class SyncService implements java.io.Closeable {
         }
 
         // create the DONE message
-        long time = System.currentTimeMillis() / 1000;
+        long time = f.lastModified() / 1000;
         msg = createReq(ID_DONE, (int)time);
 
         // and send it.
