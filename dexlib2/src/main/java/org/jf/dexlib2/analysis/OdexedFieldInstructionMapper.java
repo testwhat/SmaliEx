@@ -230,7 +230,7 @@ public class OdexedFieldInstructionMapper {
         deodexedOpcode = opcodeMap[opcodeType][opcodeSubType][1][typeIndex];
 
         if (correctOdexedOpcode != odexedOpcode
-                && odexedOpcode.getMinApi() < Opcode.LOLLIPOP) {
+                && odexedOpcode.getMinApi() < Opcode.API_L) {
             throw new AnalysisException(
                     String.format("Incorrect field type \"%s\" for %s"
                             + " (correctOdexedOpcode=%s odexedOpcode=%s)", fieldType,

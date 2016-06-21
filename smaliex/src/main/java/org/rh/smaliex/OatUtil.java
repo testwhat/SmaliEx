@@ -53,13 +53,18 @@ import org.rh.smaliex.reader.Oat;
 
 public class OatUtil {
 
+    public static Opcodes getOpcodes(Oat oat) {
+        int key = oat.getArtVersion() << Opcodes.OFFSET_OAT_VERSION | oat.guessApiLevel();
+        return DexUtil.getOpcodes(key);
+    }
+
     public static List<DexBackedDexFile> getDexFiles(
             File file, int apiLevel, List<String> outputNames) {
         List<DexBackedDexFile> dexFiles = new ArrayList<>();
         if (MiscUtil.isElf(file)) {
             try (Elf e = new Elf(file)) {
                 Oat oat = getOat(e);
-                Opcodes opc = DexUtil.getOpcodes(apiLevel > 0 ? apiLevel : oat.guessApiLevel());
+                Opcodes opc = apiLevel > 0 ? DexUtil.getOpcodes(apiLevel) : getOpcodes(oat);
                 for (int i = 0; i < oat.mDexFiles.length; i++) {
                     Oat.DexFile df = oat.mDexFiles[i];
                     dexFiles.add(readDex(df, df.mHeader.file_size_, opc));
@@ -95,7 +100,7 @@ public class OatUtil {
                 inputFile.getAbsoluteFile().getParent(), folderName);
         baksmaliOptions options = new baksmaliOptions();
         Opcodes opc = DexUtil.getOpcodes(apiLevel);
-        options.apiLevel = opc.apiLevel;
+        options.apiLevel = opc.version.api;
         options.allowOdex = true;
         options.jobs = 4;
 
@@ -275,7 +280,7 @@ public class OatUtil {
 
     public static DexFile[] getOdexFromOat(Oat oat, Opcodes opcodes) throws IOException {
         if (opcodes == null) {
-            opcodes = DexUtil.getOpcodes(oat.guessApiLevel());
+            opcodes = getOpcodes(oat);
         }
         DexFile[] dexFiles = new DexFile[oat.mOatDexFiles.length];
         for (int i = 0; i < oat.mOatDexFiles.length; i++) {
@@ -293,7 +298,7 @@ public class OatUtil {
 
     private static void convertToDex(Oat oat, File outputFolder,
             String bootClassPath, boolean isBoot) throws IOException {
-        final Opcodes opcodes = DexUtil.getOpcodes(oat.guessApiLevel());
+        final Opcodes opcodes = getOpcodes(oat);
         if (bootClassPath == null || !new File(bootClassPath).exists()) {
             throw new IOException("Invalid bootclasspath: " + bootClassPath);
         }
@@ -337,7 +342,7 @@ public class OatUtil {
 
     public static void convertToDexJar(Oat oat, File outputFolder,
             String bootClassPath, String noClassJarFolder, boolean isBoot) throws IOException {
-        final Opcodes opcodes = DexUtil.getOpcodes(oat.guessApiLevel());
+        final Opcodes opcodes = getOpcodes(oat);
         LLog.v("Use bootclasspath " + bootClassPath);
         final ODexRewriter deOpt = DexUtil.getODexRewriter(bootClassPath, opcodes);
         HashMap<String, ArrayList<Oat.DexFile>> dexFileGroup = new HashMap<>();

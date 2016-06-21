@@ -31,28 +31,70 @@
 
 package org.jf.dexlib2;
 
-import com.google.common.collect.Maps;
-
-import javax.annotation.Nullable;
 import java.util.HashMap;
 
+import javax.annotation.Nullable;
+
+import com.google.common.collect.Maps;
+
 public class Opcodes {
+    public static final int OFFSET_OAT_VERSION = 16;
+    public final Version version;
     private final Opcode[] opcodesByValue;
     private final HashMap<String, Opcode> opcodesByName;
-    public final int apiLevel;
+
+    public static class Version {
+        public final int api;
+        public final int oat;
+
+        public Version(int apiLevel, int oatVersion) {
+            api = apiLevel;
+            if (oatVersion == 0) {
+                switch (apiLevel) {
+                    case Opcode.API_L:
+                        oat = 39;
+                        break;
+                    case Opcode.API_L_MR1:
+                        oat = 45;
+                        break;
+                    case Opcode.API_M:
+                        oat = 64;
+                        break;
+                    case Opcode.API_N:
+                        oat = 79;
+                        break;
+                    default:
+                        oat = oatVersion;
+                }
+            } else {
+                oat = oatVersion;
+            }
+        }
+
+        public Version(int api) {
+            this(api, 0);
+        }
+
+        @Override
+        public String toString() {
+            return "apiLevel=" + api + " oatVersion=" + oat;
+        }
+    }
 
     public Opcodes(int api) {
         this(api, false);
     }
 
     public Opcodes(int api, boolean experimental) {
-        apiLevel = api;
+        int apiLevel = api & ((1 << OFFSET_OAT_VERSION) - 1);
+        int oatVersion = api >> OFFSET_OAT_VERSION;
+        version = new Version(apiLevel, oatVersion);
         opcodesByValue = new Opcode[256];
         opcodesByName = Maps.newHashMap();
 
         for (Opcode opcode: Opcode.values()) {
             if (!opcode.format.isPayloadFormat) {
-                if (api <= opcode.getMaxApi() && api >= opcode.getMinApi() &&
+                if (apiLevel <= opcode.getMaxApi() && apiLevel >= opcode.getMinApi() &&
                         (experimental || !opcode.isExperimental())) {
                     opcodesByValue[opcode.value] = opcode;
                     opcodesByName.put(opcode.name.toLowerCase(), opcode);

@@ -31,22 +31,6 @@
 
 package org.jf.dexlib2.analysis;
 
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-
-import org.jf.dexlib2.DexFileFactory;
-import org.jf.dexlib2.analysis.reflection.ReflectionClassDef;
-import org.jf.dexlib2.iface.ClassDef;
-import org.jf.dexlib2.iface.DexFile;
-import org.jf.dexlib2.immutable.ImmutableDexFile;
-import org.jf.util.ExceptionWithContext;
-
-import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
@@ -55,12 +39,30 @@ import java.util.HashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import javax.annotation.Nonnull;
+
+import org.jf.dexlib2.DexFileFactory;
+import org.jf.dexlib2.Opcodes;
+import org.jf.dexlib2.analysis.reflection.ReflectionClassDef;
+import org.jf.dexlib2.iface.ClassDef;
+import org.jf.dexlib2.iface.DexFile;
+import org.jf.dexlib2.immutable.ImmutableDexFile;
+import org.jf.util.ExceptionWithContext;
+
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+
 public class ClassPath {
     @Nonnull private final TypeProto unknownClass;
     @Nonnull private HashMap<String, ClassDef> availableClasses = Maps.newHashMap();
     private boolean checkPackagePrivateAccess;
     ArrayList<DexFile> additionalDexFiles;
-    public final int apiLevel;
+    public final Opcodes.Version version;
 
     /**
      * Creates a new ClassPath instance that can load classes from the given dex files
@@ -78,7 +80,7 @@ public class ClassPath {
      * @param api API level
      */
     public ClassPath(@Nonnull Iterable<DexFile> classPath, int api) {
-        this(Lists.newArrayList(classPath), api == 17, api);
+        this(Lists.newArrayList(classPath), api == 17, new Opcodes.Version(api));
     }
 
     /**
@@ -87,14 +89,15 @@ public class ClassPath {
      * @param classPath An iterable of DexFile objects. When loading a class, these dex files will be searched in order
      * @param checkPackagePrivateAccess Whether checkPackagePrivateAccess is needed, enabled for ONLY early API 17 by default
      */
-    public ClassPath(@Nonnull Iterable<DexFile> classPath, boolean checkPackagePrivateAccess, int api) {
+    public ClassPath(@Nonnull Iterable<DexFile> classPath, boolean checkPackagePrivateAccess,
+                     Opcodes.Version version) {
         // add fallbacks for certain special classes that must be present
         Iterable<DexFile> dexFiles = Iterables.concat(classPath, Lists.newArrayList(getBasicClasses()));
 
         unknownClass = new UnknownClassProto(this);
         loadedClasses.put(unknownClass.getType(), unknownClass);
         this.checkPackagePrivateAccess = checkPackagePrivateAccess;
-        this.apiLevel = api;
+        this.version = version;
 
         loadPrimitiveType("Z");
         loadPrimitiveType("B");
@@ -159,7 +162,7 @@ public class ClassPath {
     }
 
     private final CacheLoader<String, TypeProto> classLoader = new CacheLoader<String, TypeProto>() {
-        @Override public TypeProto load(String type) throws Exception {
+        @Override public TypeProto load(@Nonnull String type) throws Exception {
             if (type.charAt(0) == '[') {
                 return new ArrayProto(ClassPath.this, type);
             } else {
@@ -202,10 +205,11 @@ public class ClassPath {
         for (String classPathEntry: classPath) {
             try {
                 dexFiles.add(loadClassPathEntry(classPathDirs, classPathEntry, api, experimental));
-            } catch (ExceptionWithContext e){}
+            } catch (ExceptionWithContext ignored) {
+            }
         }
         dexFiles.add(dexFile);
-        return new ClassPath(dexFiles, checkPackagePrivateAccess, api);
+        return new ClassPath(dexFiles, checkPackagePrivateAccess, new Opcodes.Version(api));
     }
 
     private static final Pattern dalvikCacheOdexPattern = Pattern.compile("@([^@]+)@classes.dex$");

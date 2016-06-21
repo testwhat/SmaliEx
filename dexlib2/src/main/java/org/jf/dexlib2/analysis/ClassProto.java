@@ -82,7 +82,7 @@ public class ClassProto implements TypeProto {
         }
         this.classPath = classPath;
         this.type = type;
-        fieldOffsetCalculator = classPath.apiLevel < Opcode.LOLLIPOP
+        fieldOffsetCalculator = classPath.version.api < Opcode.API_L
                 ? new DalvikIFieldSupplier(this) : new ArtIFieldSupplier(this);
         instanceFieldsSupplier = Suppliers.memoize(fieldOffsetCalculator);
     }
@@ -379,16 +379,17 @@ public class ClassProto implements TypeProto {
 
     public void dump() {
         fieldOffsetCalculator.debugOffset(null, getInstanceFields());
-        debugVtable(null, getVtable());
+        debugVtable(null);
     }
 
-    void debugVtable(String className, List<Method> vtable) {
+    void debugVtable(String className) {
         final String type = getClassDef().getType();
         if (className != null && !type.equals(className)) {
             return;
         }
         System.out.println("## Vtable of " + type);
 
+        List<Method> vtable = getVtable();
         for (int i = 0; i < vtable.size(); i++) {
             Method m = vtable.get(i);
             System.out.println("#" + i + " " + m.getName() + " " + m.getReturnType());
@@ -467,7 +468,7 @@ public class ClassProto implements TypeProto {
         }
 
         void debugFieldsOrder(String className, List<Field> fields) {
-            if (className != null && classProto.type.equals(className)) {
+            if (className != null && className.equals(classProto.type)) {
                 System.out.println(" ===== " + classProto.type + " " + fields.size() + " =====");
                 for (int i = 0; i < fields.size(); i++) {
                     Field f = fields.get(i);
@@ -478,19 +479,19 @@ public class ClassProto implements TypeProto {
     }
 
     static class ArtIFieldSupplier extends FieldOffsetCalculator {
-        final Comparator<Field> fieldComparator;
+        final Comparator<Field> fieldComparator; // art/runtime/class_linker.cc LinkFieldsComparator
 
         ArtIFieldSupplier(ClassProto clsProto) {
             super(clsProto);
             // art/runtime/class_linker.cc LinkFields
             // art/compiler/dex/dex_to_dex_compiler.cc
             initialFieldOffset = 0; // MemberOffset field_offset(0);
-            fieldComparator = classProto.classPath.apiLevel <= Opcode.LOLLIPOP
-                    ? new FieldComparatorL50() : new FieldComparatorLatest();
+            fieldComparator = createFieldComparator(classProto.classPath.version.oat);
         }
 
         SparseArray<FieldReference> getForApiLevelBelow23(ArrayList<Field> fields,
                 int fieldOffset, SparseArray<FieldReference> instanceFields) {
+            // https://android.googlesource.com/platform/art/+/android-5.1.1_r37/runtime/class_linker.cc#5425
             final int numFields = fields.size();
             int currentField = 0;
             for (; currentField < numFields; currentField++) {
@@ -562,13 +563,14 @@ public class ClassProto implements TypeProto {
                     instanceFields.append(superFields.keyAt(i), superFields.valueAt(i));
                 }
             }
-            if (classProto.classPath.apiLevel <= Opcode.LOLLIPOP_MR1) {
+            //debugFieldsOrder("name", fields);
+            if (classProto.classPath.version.api <= Opcode.API_L_MR1) {
                 return getForApiLevelBelow23(fields, fieldOffset, instanceFields);
             }
 
             // References should be at the front.
-            GapContainer gaps = new GapContainer(classProto.classPath.apiLevel > Opcode.M
-                    ? new FieldGapCreator() : new FieldGapCreatorM());
+            GapContainer gaps = new GapContainer(
+                    createFieldGapCreator(classProto.classPath.version.oat));
             int currentField = 0;
             for (; currentField < fieldCount; currentField++) {
                 Field f = fields.get(0);
@@ -597,8 +599,9 @@ public class ClassProto implements TypeProto {
             shuffleForward(4, data);
             shuffleForward(2, data);
             shuffleForward(1, data);
+            //debugOffset("", instanceFields);
+            //classProto.debugVtable("");
             assert fields.isEmpty();
-            //debugFieldsOrder(null, fields);
             // See runtime/mirror/class.h
             classProto.objectSize = data.fieldOffset; // not for IsVariableSize (String and Array)
             return instanceFields;
@@ -660,6 +663,10 @@ public class ClassProto implements TypeProto {
 
         interface IFieldGapCreator {
             FieldGap create(int offset, int size);
+        }
+
+        static IFieldGapCreator createFieldGapCreator(int oatVersion) {
+            return oatVersion >= 67 ? new FieldGapCreator() : new FieldGapCreatorM();
         }
 
         static class FieldGapCreator implements IFieldGapCreator {
@@ -743,29 +750,33 @@ public class ClassProto implements TypeProto {
             }
         }
 
+        static Comparator<Field> createFieldComparator(int oatVersion) {
+            return oatVersion <= 39 ? new FieldComparatorL50() : new FieldComparator();
+        }
+
         final static class FieldComparatorL50 implements Comparator<Field> {
-            // art/runtime/class_linker.cc LinkFieldsComparator
-            //5161  bool operator()(mirror::ArtField* field1, mirror::ArtField* field2)
-            //5162      NO_THREAD_SAFETY_ANALYSIS {
-            //5163    // First come reference fields, then 64-bit, and finally 32-bit
-            //5164    Primitive::Type type1 = field1->GetTypeAsPrimitiveType();
-            //5165    Primitive::Type type2 = field2->GetTypeAsPrimitiveType();
-            //5166    if (type1 != type2) {
-            //5167      bool is_primitive1 = type1 != Primitive::kPrimNot;
-            //5168      bool is_primitive2 = type2 != Primitive::kPrimNot;
-            //5169      bool is64bit1 = is_primitive1 && (type1 == Primitive::kPrimLong ||
-            //5170                                        type1 == Primitive::kPrimDouble);
-            //5171      bool is64bit2 = is_primitive2 && (type2 == Primitive::kPrimLong ||
-            //5172                                        type2 == Primitive::kPrimDouble);
-            //5173      int order1 = !is_primitive1 ? 0 : (is64bit1 ? 1 : 2);
-            //5174      int order2 = !is_primitive2 ? 0 : (is64bit2 ? 1 : 2);
-            //5175      if (order1 != order2) {
-            //5176        return order1 < order2;
-            //5177      }
-            //5178    }
-            //5179    // same basic group? then sort by string.
-            //5180    return strcmp(field1->GetName(), field2->GetName()) < 0;
-            //5181  }
+            // https://android.googlesource.com/platform/art/+/android-5.0.2_r3/runtime/class_linker.cc#4933
+            //  bool operator()(mirror::ArtField* field1, mirror::ArtField* field2)
+            //      NO_THREAD_SAFETY_ANALYSIS {
+            //    // First come reference fields, then 64-bit, and finally 32-bit
+            //    Primitive::Type type1 = field1->GetTypeAsPrimitiveType();
+            //    Primitive::Type type2 = field2->GetTypeAsPrimitiveType();
+            //    if (type1 != type2) {
+            //      bool is_primitive1 = type1 != Primitive::kPrimNot;
+            //      bool is_primitive2 = type2 != Primitive::kPrimNot;
+            //      bool is64bit1 = is_primitive1 && (type1 == Primitive::kPrimLong ||
+            //                                        type1 == Primitive::kPrimDouble);
+            //      bool is64bit2 = is_primitive2 && (type2 == Primitive::kPrimLong ||
+            //                                        type2 == Primitive::kPrimDouble);
+            //      int order1 = !is_primitive1 ? 0 : (is64bit1 ? 1 : 2);
+            //      int order2 = !is_primitive2 ? 0 : (is64bit2 ? 1 : 2);
+            //      if (order1 != order2) {
+            //        return order1 < order2;
+            //      }
+            //    }
+            //    // same basic group? then sort by string.
+            //    return strcmp(field1->GetName(), field2->GetName()) < 0;
+            //  }
             @Override
             public int compare(Field f1, Field f2) {
                 int type1 = getTypeAsPrimitiveType(f1);
@@ -785,39 +796,40 @@ public class ClassProto implements TypeProto {
             }
         }
 
-        final static class FieldComparatorLatest implements Comparator<Field>  {
+        final static class FieldComparator implements Comparator<Field>  {
             // art/runtime/class_linker.cc LinkFieldsComparator
             // https://android-review.googlesource.com/#/c/114281/
             // https://android-review.googlesource.com/#/c/114814/
-            //5362  bool operator()(mirror::ArtField* field1, mirror::ArtField* field2)
-            //5363      NO_THREAD_SAFETY_ANALYSIS {
-            //5364    // First come reference fields, then 64-bit, and finally 32-bit
-            //5365    Primitive::Type type1 = field1->GetTypeAsPrimitiveType();
-            //5366    Primitive::Type type2 = field2->GetTypeAsPrimitiveType();
-            //5367    if (type1 != type2) {
-            //5368      if (type1 == Primitive::kPrimNot) {
-            //5369        // Reference always goes first.
-            //5370        return true;
-            //5371      }
-            //5372      if (type2 == Primitive::kPrimNot) {
-            //5373        // Reference always goes first.
-            //5374        return false;
-            //5375      }
-            //5376      size_t size1 = Primitive::ComponentSize(type1);
-            //5377      size_t size2 = Primitive::ComponentSize(type2);
-            //5378      if (size1 != size2) {
-            //5379        // Larger primitive types go first.
-            //5380        return size1 > size2;
-            //5381      }
-            //5382      // Primitive types differ but sizes match. Arbitrarily order by primitive type.
-            //5383      return type1 < type2;
-            //5384    }
-            //5385    // Same basic group? Then sort by dex field index. This is guaranteed to be sorted
-            //5386    // by name and for equal names by type id index.
-            //5387    // NOTE: This works also for proxies. Their static fields are assigned appropriate indexes.
-            //5388    return field1->GetDexFieldIndex() < field2->GetDexFieldIndex();
-            //5389  }
-            //5390};
+            // https://android.googlesource.com/platform/art/+/android-5.1.1_r37/runtime/class_linker.cc#5362
+            //  bool operator()(mirror::ArtField* field1, mirror::ArtField* field2)
+            //      NO_THREAD_SAFETY_ANALYSIS {
+            //    // First come reference fields, then 64-bit, and finally 32-bit
+            //    Primitive::Type type1 = field1->GetTypeAsPrimitiveType();
+            //    Primitive::Type type2 = field2->GetTypeAsPrimitiveType();
+            //    if (type1 != type2) {
+            //      if (type1 == Primitive::kPrimNot) {
+            //        // Reference always goes first.
+            //        return true;
+            //      }
+            //      if (type2 == Primitive::kPrimNot) {
+            //        // Reference always goes first.
+            //        return false;
+            //      }
+            //      size_t size1 = Primitive::ComponentSize(type1);
+            //      size_t size2 = Primitive::ComponentSize(type2);
+            //      if (size1 != size2) {
+            //        // Larger primitive types go first.
+            //        return size1 > size2;
+            //      }
+            //      // Primitive types differ but sizes match. Arbitrarily order by primitive type.
+            //      return type1 < type2;
+            //    }
+            //    // Same basic group? Then sort by dex field index. This is guaranteed to be sorted
+            //    // by name and for equal names by type id index.
+            //    // NOTE: This works also for proxies. Their static fields are assigned appropriate indexes.
+            //    return field1->GetDexFieldIndex() < field2->GetDexFieldIndex();
+            //  }
+            //};
             @Override
             public int compare(Field f1, Field f2) {
                 int type1 = getTypeAsPrimitiveType(f1);

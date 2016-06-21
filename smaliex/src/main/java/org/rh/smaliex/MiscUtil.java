@@ -144,9 +144,10 @@ public class MiscUtil {
         return readBytes(input, input.available());
     }
 
-    static boolean checkFourBytes(File file, long fourBytes) {
+    static boolean checkFourBytes(File file, int offset, long fourBytes) {
         long n = 0;
         try (RandomAccessFile raf = new RandomAccessFile(file, "r")) {
+            raf.skipBytes(offset);
             n = raf.readInt();
         } catch (IOException ex) {
             LLog.ex(ex);
@@ -155,14 +156,14 @@ public class MiscUtil {
     }
 
     public static boolean isZip(File file) {
-        return checkFourBytes(file, 0x504B0304);
+        return checkFourBytes(file, 0, 0x504B0304);
     }
 
     public static boolean isDex(File file) {
-        return checkFourBytes(file, 0x6465780A);
+        return checkFourBytes(file, 0, 0x6465780A);
     }
 
     public static boolean isElf(File file) {
-        return checkFourBytes(file, 0x7F454C46);
+        return checkFourBytes(file, 0, 0x7F454C46);
     }
 }

@@ -48,7 +48,7 @@ public class Main {
 
     public static void mainImpl(String[] args) throws IOException {
         String outputFolder = null;
-        int apiLevel = org.jf.dexlib2.Opcode.LOLLIPOP_MR1;
+        int apiLevel = org.jf.dexlib2.Opcode.API_L_MR1;
         if (args.length > 2) {
             String opt = args[0];
             while (opt.length() > 1 && opt.charAt(0) == '-') {

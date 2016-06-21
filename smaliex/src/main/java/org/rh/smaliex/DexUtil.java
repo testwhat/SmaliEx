@@ -34,6 +34,7 @@ import java.util.zip.ZipFile;
 import javax.annotation.Nonnull;
 
 import org.jf.baksmali.Adaptors.ClassDefinition;
+import org.jf.dexlib2.Opcode;
 import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.analysis.AnalysisException;
 import org.jf.dexlib2.analysis.ClassPath;
@@ -129,8 +130,11 @@ public class DexUtil {
         File outputFolder = new File(outFolder == null ? MiscUtil.workingDir() : outFolder);
         MiscUtil.mkdirs(outputFolder);
 
-        Opcodes opcodes = getOpcodes(apiLevel);
         File input = new File(odex);
+        if (MiscUtil.checkFourBytes(input, 4, 0x30333700) && apiLevel < Opcode.API_N) {
+            LLog.i("The input has dex version 037, suggest to use api level " + Opcode.API_N);
+        }
+        Opcodes opcodes = getOpcodes(apiLevel);
         DexFile odexFile = loadSingleDex(input, opcodes);
         ODexRewriter rewriter = getODexRewriter(bootClassPath, opcodes);
         if (LLog.VERBOSE) {
@@ -151,7 +155,7 @@ public class DexUtil {
         for (File f : MiscUtil.getFiles(path, ext)) {
             dexFiles.addAll(loadMultiDex(f, opcodes));
         }
-        return new ClassPath(dexFiles, opcodes.apiLevel);
+        return new ClassPath(dexFiles, false, opcodes.version);
     }
 
     // If return false, the dex may be customized format or encrypted.
@@ -302,7 +306,7 @@ public class DexUtil {
             java.io.Writer outWriter) {
         org.jf.baksmali.baksmaliOptions options = new org.jf.baksmali.baksmaliOptions();
         org.jf.dexlib2.iface.ClassDef classDef = classPath.getClassDef(type);
-        options.apiLevel = classPath.apiLevel;
+        options.apiLevel = classPath.version.api;
         options.allowOdex = true;
         options.classPath = classPath;
 
@@ -331,7 +335,7 @@ public class DexUtil {
     }
 
     public static ODexRewriter getODexRewriter(String bootClassPathFolder, Opcodes opcodes) {
-        String key = bootClassPathFolder + " " + opcodes.apiLevel;
+        String key = bootClassPathFolder + " " + opcodes.version.api;
         ODexRewriter rewriter = getCache(rewriterCache, key);
         if (rewriter == null) {
             rewriter = new ODexRewriter(new ODexRewriterModule(bootClassPathFolder, opcodes));
@@ -355,7 +359,10 @@ public class DexUtil {
                 return org.jf.dexlib2.immutable.ImmutableDexFile.of(super.rewriteDexFile(dexFile));
             } catch (Exception e) {
                 LLog.i("Failed to re-construct dex " + e);
-                //LLog.ex(e);
+                if (e instanceof NullPointerException
+                        || e instanceof ArrayIndexOutOfBoundsException) {
+                    LLog.ex(e);
+                }
             }
             return new FailedDexFile();
         }
