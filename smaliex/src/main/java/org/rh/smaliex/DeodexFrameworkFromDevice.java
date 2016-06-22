@@ -224,6 +224,7 @@ public class DeodexFrameworkFromDevice {
                 return booJars;
             }
             String[] bootJars = {
+                    "core-oj.jar",
                     "core-libart.jar",
                     "conscrypt.jar",
                     "okhttp.jar",

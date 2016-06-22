@@ -170,7 +170,8 @@ public class MethodAnalyzer {
         // override AnalyzedInstruction and provide custom implementations of some of
         // the methods, so that we don't have to handle the case this special case of
         // instruction being null, in the main class.
-        startOfMethod = new AnalyzedInstruction(this, null, -1, totalRegisters) {
+        startOfMethod = new AnalyzedInstruction(this,
+                AnalyzedInstruction.START_INSTR, -1, totalRegisters) {
             public boolean setsRegister() {
                 return false;
             }
@@ -199,6 +200,7 @@ public class MethodAnalyzer {
         analyze();
     }
 
+    @Nonnull
     public ClassPath getClassPath() {
         return classPath;
     }
@@ -1426,7 +1428,6 @@ public class MethodAnalyzer {
     static boolean canNarrowAfterInstanceOf(AnalyzedInstruction analyzedInstanceOfInstruction,
                                             AnalyzedInstruction analyzedIfInstruction, ClassPath classPath) {
         Instruction ifInstruction = analyzedIfInstruction.instruction;
-        assert analyzedIfInstruction.instruction != null;
         if (((Instruction21t)ifInstruction).getRegisterA() == analyzedInstanceOfInstruction.getDestinationRegister()) {
             Reference reference = ((Instruction22c)analyzedInstanceOfInstruction.getInstruction()).getReference();
             RegisterType registerType = RegisterType.getRegisterType(classPath, (TypeReference)reference);
@@ -1464,8 +1465,7 @@ public class MethodAnalyzer {
         int instructionIndex = analyzedInstruction.getInstructionIndex();
         if (instructionIndex > 0) {
             AnalyzedInstruction prevAnalyzedInstruction = analyzedInstructions.valueAt(instructionIndex - 1);
-            if (prevAnalyzedInstruction.instruction != null &&
-                    prevAnalyzedInstruction.instruction.getOpcode() == Opcode.INSTANCE_OF) {
+            if (prevAnalyzedInstruction.instruction.getOpcode() == Opcode.INSTANCE_OF) {
                 if (canNarrowAfterInstanceOf(prevAnalyzedInstruction, analyzedInstruction, classPath)) {
                     // Propagate the original type to the failing branch, and the new type to the successful branch
                     int narrowingRegister = ((Instruction22c)prevAnalyzedInstruction.instruction).getRegisterB();
@@ -2068,6 +2068,7 @@ public class MethodAnalyzer {
 
     private static class TraceRegisterParam {
         RegisterType type;
+        int tries;
         final int[] tracingRegs;
         final RegisterType[] instanceOfType;
 
@@ -2183,18 +2184,21 @@ public class MethodAnalyzer {
                     String elementType = arrayProto.getImmediateElementType();
                     type = RegisterType.getRegisterType(
                             RegisterType.REFERENCE, classPath.getClass(elementType));
+                    param.tries++;
                     break;
                 case INSTANCE_OF: // instance-of a, b, type
                     // if b is type c, then a is true
                     RegisterType insOfType = getReferenceType((Instruction22c) twoRegInstr);
                     if (param.containsReg(regB)) {
                         type = insOfType;
+                        param.tries++;
                     }
                     param.setInstanceOfType(regB, insOfType);
                     break;
                 default:
                     if (isMoveFrom(twoRegInstr.getOpcode())) {
                         type = aInstr.getPostInstructionRegisterType(regB);
+                        param.tries++;
                         if (!verifyType(type, unaInstr, fieldOffset, methodOffset)) {
                             type = findTypeByLocal(aInstr, regB);
                             if (!verifyType(type, unaInstr, fieldOffset, methodOffset)) {
@@ -2241,9 +2245,6 @@ public class MethodAnalyzer {
                 + " " + toString(unaInstr) + " reg=" + toRegString(reg) + "(" + reg + ")"
                 + " fo=" + fieldOffset + " mo=" + methodOffset);
 
-        TraceRegisterParam regTracer = new TraceRegisterParam(totalRegisters);
-        regTracer.setTracingReg(reg);
-
         RegisterType type = findTypeByLocal(unaInstr, reg);
         if (type != RegisterType.NULL_TYPE) {
             if (debug) {
@@ -2256,6 +2257,9 @@ public class MethodAnalyzer {
                 return type;
             }
         }
+
+        TraceRegisterParam regTracer = new TraceRegisterParam(totalRegisters);
+        regTracer.setTracingReg(reg);
 
         for (int i = unaInstr.instructionIndex - 1; i >= 0; i--) {
             AnalyzedInstruction aInstr = analyzedInstructions.valueAt(i);
@@ -2318,6 +2322,21 @@ public class MethodAnalyzer {
                 }
             }
         }
+
+        if (regTracer.tries == 0) {
+            ArrayList<TypeScope> scopes = localTypes.get(reg);
+            if (scopes != null) {
+                for (TypeScope scope : scopes) {
+                    if (verifyType(scope.type, unaInstr, fieldOffset, methodOffset)) {
+                        type = scope.type;
+                        if (debug) {
+                            println("  @@2 use behind local type " + type);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
         if (debug) {
             println("<<findRegisterType " + type);
         }
@@ -2352,7 +2371,6 @@ public class MethodAnalyzer {
             }
             if (objectRegisterType == RegisterType.NULL_TYPE) {
                 addAnalysisInfo("Cannot find type " + toString(analyzedInstruction));
-
             }
         }
 
@@ -2392,7 +2410,6 @@ public class MethodAnalyzer {
                     if (line > 0) {
                         addAnalysisInfo("Near .line " + line);
                     }
-
                 }
             }
         }

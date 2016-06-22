@@ -33,24 +33,32 @@ import org.rh.smaliex.LLog;
 public class Oat {
     public final static String SECTION_RODATA = ".rodata";
 
+    // https://android.googlesource.com/platform/art/+/android-5.0.2_r3/runtime/oat.cc#26
     public final static int VERSION_L_50 = 39;
+    // https://android.googlesource.com/platform/art/+/android-5.1.1_r37/runtime/oat.cc#26
     public final static int VERSION_L_MR1_51 = 45;
+    // https://android.googlesource.com/platform/art/+/android-6.0.1_r46/runtime/oat.h#35
     public final static int VERSION_M_60 = 64;
-    public final static int VERSION_N = 75;
+    public final static int VERSION_N = 79;
 
     // /art/runtime/instruction_set.h
-    public final static int kNone = 0;
-    public final static int kArm = 1;
-    public final static int kArm64 = 2;
-    public final static int kThumb2 = 3;
-    public final static int kX86 = 4;
-    public final static int kX86_64 = 5;
-    public final static int kMips = 6;
-    public final static int kMips64 = 7;
+    @SuppressWarnings("unused")
+    public final static class InstructionSet {
+        public final static int kNone = 0;
+        public final static int kArm = 1;
+        public final static int kArm64 = 2;
+        public final static int kThumb2 = 3;
+        public final static int kX86 = 4;
+        public final static int kX86_64 = 5;
+        public final static int kMips = 6;
+        public final static int kMips64 = 7;
+    }
 
-    // InstructionSetFeatures
-    public final static int kHwDiv = 0;
-    public final static int kHwLpae = 1;
+    @SuppressWarnings("unused")
+    public final static class InstructionSetFeatures {
+        public final static int kHwDiv = 0;
+        public final static int kHwLpae = 1;
+    }
 
     // /art/runtime/oat.h
     public static class Header {
@@ -62,7 +70,9 @@ public class Oat {
         @DumpFormat(hex = true)
         final int adler32_checksum_;
 
+        @DumpFormat(enumClass = InstructionSet.class)
         final int instruction_set_;
+        @DumpFormat(enumClass = InstructionSetFeatures.class)
         final int instruction_set_features_;
         final int dex_file_count_;
         final int executable_offset_;
@@ -84,7 +94,7 @@ public class Oat {
         @DumpFormat(type = DumpFormat.TYPE_CHAR, isString = true)
         final char[] key_value_store_;
 
-        int artVersion = 64;
+        int artVersion = VERSION_M_60;
 
         public Header(DataReader r) throws IOException {
             r.readBytes(magic_);
@@ -161,12 +171,14 @@ public class Oat {
             public Header(DataReader r) throws IOException {
                 r.readBytes(magic_);
                 if (magic_[0] != 'd' || magic_[1] != 'e' || magic_[2] != 'x') {
-                    LLog.e(String.format("Invalid dex magic %c%c%c", magic_[0], magic_[1], magic_[2]));
+                    LLog.e(String.format("Invalid dex magic %c%c%c",
+                            magic_[0], magic_[1], magic_[2]));
                 }
                 r.readBytes(version_);
                 checksum_= r.readInt();
-                if (version_[0] != '0' || version_[1] != '3' || version_[2] != '5') {
-                    LLog.e(String.format("Invalid dex version %c%c%c", magic_[0], magic_[1], magic_[2]));
+                if (version_[0] != '0' || version_[1] != '3' || version_[2] < '5') {
+                    LLog.e(String.format("Invalid dex version %c%c%c",
+                            version_[0], version_[1], version_[2]));
                 }
                 r.readBytes(signature_);
                 file_size_ = r.readInt();
@@ -319,13 +331,17 @@ public class Oat {
 
     public void dump() {
         try {
+            System.out.println("===== Oat header =====");
             dump(mHeader);
             System.out.println();
 
+            System.out.println("===== OatDex files =====");
             for (OatDexFile odf : mOatDexFiles) {
                 dump(odf);
                 System.out.println();
             }
+
+            System.out.println("===== Dex files =====");
             for (DexFile df : mDexFiles) {
                 dump(df.mHeader);
                 System.out.println();
@@ -359,7 +375,20 @@ public class Oat {
                     } else {
                         rawStr = new String((char[]) val);
                     }
-                    System.out.println(rawStr.replace((char) 0, ' '));
+                    System.out.println(rawStr.trim());
+                } else if (fmt.enumClass() != DumpFormat.class) {
+                    Field[] enumDefines = fmt.enumClass().getDeclaredFields();
+                    boolean matched = false;
+                    for (Field f : enumDefines) {
+                        if (val.equals(f.get(null))) {
+                            System.out.println(f.getName());
+                            matched = true;
+                            break;
+                        }
+                    }
+                    if (!matched) {
+                        System.out.println(val);
+                    }
                 } else {
                     if (type.isArray()) {
                         byte[] bytes = (byte[]) val;
@@ -375,9 +404,9 @@ public class Oat {
                 }
             } else {
                 if (type.isArray()) {
-                    Class<?> ctype = type.getComponentType();
+                    Class<?> compType = type.getComponentType();
                     int len = Array.getLength(val);
-                    System.out.println(ctype + "[" + len + "]");
+                    System.out.println(compType + "[" + len + "]");
                 } else {
                     System.out.println(val);
                 }
@@ -408,6 +437,7 @@ public class Oat {
         int type() default -1;
         boolean isString() default false;
         boolean hex() default false;
+        Class<?> enumClass() default DumpFormat.class;
     }
 
 // See compiler/oat_writer.h
