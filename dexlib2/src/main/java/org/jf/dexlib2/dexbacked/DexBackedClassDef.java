@@ -31,13 +31,18 @@
 
 package org.jf.dexlib2.dexbacked;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Iterables;
+import java.util.AbstractList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
+import org.jf.dexlib2.AccessFlags;
 import org.jf.dexlib2.base.reference.BaseTypeReference;
 import org.jf.dexlib2.dexbacked.raw.ClassDefItem;
 import org.jf.dexlib2.dexbacked.util.AnnotationsDirectory;
-import org.jf.dexlib2.dexbacked.util.FixedSizeSet;
 import org.jf.dexlib2.dexbacked.util.StaticInitialValueIterator;
 import org.jf.dexlib2.dexbacked.util.VariableSizeLookaheadIterator;
 import org.jf.dexlib2.iface.ClassDef;
@@ -46,12 +51,9 @@ import org.jf.dexlib2.iface.reference.MethodReference;
 import org.jf.dexlib2.immutable.reference.ImmutableFieldReference;
 import org.jf.dexlib2.immutable.reference.ImmutableMethodReference;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.util.AbstractList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Iterables;
 
 public class DexBackedClassDef extends BaseTypeReference implements ClassDef {
     @Nonnull public final DexBackedDexFile dexFile;
@@ -66,6 +68,8 @@ public class DexBackedClassDef extends BaseTypeReference implements ClassDef {
     private final int instanceFieldCount;
     private final int directMethodCount;
     private final int virtualMethodCount;
+
+    public final boolean isInterface;
 
     @Nullable private AnnotationsDirectory annotationsDirectory;
 
@@ -89,7 +93,7 @@ public class DexBackedClassDef extends BaseTypeReference implements ClassDef {
             virtualMethodCount = reader.readSmallUleb128();
             staticFieldsOffset = reader.getOffset();
         }
-
+        isInterface = (getAccessFlags() & AccessFlags.INTERFACE.getValue()) != 0;
     }
 
     @Nonnull

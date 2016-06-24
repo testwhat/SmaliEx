@@ -31,14 +31,17 @@
 
 package org.jf.dexlib2.util;
 
-import com.google.common.base.Predicate;
-import org.jf.dexlib2.AccessFlags;
-import org.jf.dexlib2.iface.Method;
-import org.jf.dexlib2.iface.reference.MethodReference;
+import java.util.Collection;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.util.Collection;
+
+import org.jf.dexlib2.AccessFlags;
+import org.jf.dexlib2.iface.Method;
+import org.jf.dexlib2.iface.MethodParameter;
+import org.jf.dexlib2.iface.reference.MethodReference;
+
+import com.google.common.base.Predicate;
 
 public final class MethodUtil {
     private static int directMask = AccessFlags.STATIC.getValue() | AccessFlags.PRIVATE.getValue() |
@@ -109,5 +112,29 @@ public final class MethodUtil {
         return sb.toString();
     }
 
-    private MethodUtil() {}
+    public static String toSourceStyleString(Method m) {
+        StringBuilder sb = new StringBuilder(64);
+        AccessFlags[] accessFlags = AccessFlags.getAccessFlagsForMethod(m.getAccessFlags());
+        for (AccessFlags accessFlag : accessFlags) {
+            sb.append(accessFlag.toString()).append(" ");
+        }
+        sb.append(TypeUtils.toFullString(m.getReturnType()))
+                .append(" ").append(m.getName()).append("(");
+        int origLen = sb.length();
+        for (MethodParameter param : m.getParameters()) {
+            String paramName = param.getName();
+            if (paramName == null) {
+                paramName = TypeUtils.isPrimitiveType(param.getType()) ? "val" : "obj";
+            }
+            sb.append(TypeUtils.toFullString(param.getType()))
+                    .append(" ").append(paramName).append(", ");
+        }
+        if (sb.length() > 1 && sb.length() > origLen) {
+            sb.setLength(sb.length() - 2);
+        }
+        return sb.append(")").toString();
+    }
+
+    private MethodUtil() {
+    }
 }

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 package org.rh.smaliex;
 
 import java.io.File;

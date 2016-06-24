@@ -33,8 +33,7 @@ package org.jf.dexlib2;
 
 import java.util.HashMap;
 
-public enum AccessFlags
-{
+public enum AccessFlags {
     PUBLIC(0x1, "public", true, true, true),
     PRIVATE(0x2, "private", true, true, true),
     PROTECTED(0x4, "protected", true, true, true),
@@ -53,13 +52,24 @@ public enum AccessFlags
     ANNOTATION(0x2000, "annotation", true, false, false),
     ENUM(0x4000, "enum", true, false, true),
     CONSTRUCTOR(0x10000, "constructor", false, true, false),
-    DECLARED_SYNCHRONIZED(0x20000, "declared-synchronized", false, true, false);
+    DECLARED_SYNCHRONIZED(0x20000, "declared-synchronized", false, true, false),
+    CLASS_IS_PROXY(0x40000, "class-is-proxy", true, false, false),
+    SKIP_ACCESS_CHECKS(0x80000, "skip-access-checks", false, true, false),
+    VERIFICATION_ATTEMPTED(0x80000, "verification-attempted", true, false, false), // runtime
+    FAST_NATIVE(0x80000, "fast-native", false, true, false),
+    COPIED(0x100000, "copied", false, true, false), // runtime
+    MIRANDA(0x200000, "miranda", false, true, false),
+    DEFAULT(0x400000, "default", false, true, false), // runtime
+    //DEFAULT_CONFLICT(0x800000, "default-conflict", false, true, false), // runtime
+    //COMPILE_DONT_BOTHER(0x1000000, "compile-dont-bother", false, true, false), // runtime
+    //MUST_COUNT_LOCKS(0x2000000, "must-count-locks", false, true, false), // runtime
+    ;
 
-    private int value;
-    private String accessFlagName;
-    private boolean validForClass;
-    private boolean validForMethod;
-    private boolean validForField;
+    final int value;
+    final String accessFlagName;
+    final boolean validForClass;
+    final boolean validForMethod;
+    final boolean validForField;
 
     //cache the array of all AccessFlags, because .values() allocates a new array for every call
     private final static AccessFlags[] allFlags;
@@ -70,13 +80,13 @@ public enum AccessFlags
         allFlags = AccessFlags.values();
 
         accessFlagsByName = new HashMap<String, AccessFlags>();
-        for (AccessFlags accessFlag: allFlags) {
+        for (AccessFlags accessFlag : allFlags) {
             accessFlagsByName.put(accessFlag.accessFlagName, accessFlag);
         }
     }
 
-    private AccessFlags(int value, String accessFlagName, boolean validForClass, boolean validForMethod,
-                        boolean validForField) {
+    AccessFlags(int value, String accessFlagName, boolean validForClass, boolean validForMethod,
+                boolean validForField) {
         this.value = value;
         this.accessFlagName = accessFlagName;
         this.validForClass = validForClass;
@@ -90,7 +100,7 @@ public enum AccessFlags
 
     public static AccessFlags[] getAccessFlagsForClass(int accessFlagValue) {
         int size = 0;
-        for (AccessFlags accessFlag: allFlags) {
+        for (AccessFlags accessFlag : allFlags) {
             if (accessFlag.validForClass && (accessFlagValue & accessFlag.value) != 0) {
                 size++;
             }
@@ -98,7 +108,7 @@ public enum AccessFlags
 
         AccessFlags[] accessFlags = new AccessFlags[size];
         int accessFlagsPosition = 0;
-        for (AccessFlags accessFlag: allFlags) {
+        for (AccessFlags accessFlag : allFlags) {
             if (accessFlag.validForClass && (accessFlagValue & accessFlag.value) != 0) {
                 accessFlags[accessFlagsPosition++] = accessFlag;
             }
@@ -108,12 +118,12 @@ public enum AccessFlags
 
     private static String formatAccessFlags(AccessFlags[] accessFlags) {
         int size = 0;
-        for (AccessFlags accessFlag: accessFlags) {
+        for (AccessFlags accessFlag : accessFlags) {
             size += accessFlag.toString().length() + 1;
         }
 
         StringBuilder sb = new StringBuilder(size);
-        for (AccessFlags accessFlag: accessFlags) {
+        for (AccessFlags accessFlag : accessFlags) {
             sb.append(accessFlag.toString());
             sb.append(" ");
         }
@@ -129,7 +139,7 @@ public enum AccessFlags
 
     public static AccessFlags[] getAccessFlagsForMethod(int accessFlagValue) {
         int size = 0;
-        for (AccessFlags accessFlag: allFlags) {
+        for (AccessFlags accessFlag : allFlags) {
             if (accessFlag.validForMethod && (accessFlagValue & accessFlag.value) != 0) {
                 size++;
             }
@@ -137,7 +147,7 @@ public enum AccessFlags
 
         AccessFlags[] accessFlags = new AccessFlags[size];
         int accessFlagsPosition = 0;
-        for (AccessFlags accessFlag: allFlags) {
+        for (AccessFlags accessFlag : allFlags) {
             if (accessFlag.validForMethod && (accessFlagValue & accessFlag.value) != 0) {
                 accessFlags[accessFlagsPosition++] = accessFlag;
             }
@@ -151,7 +161,7 @@ public enum AccessFlags
 
     public static AccessFlags[] getAccessFlagsForField(int accessFlagValue) {
         int size = 0;
-        for (AccessFlags accessFlag: allFlags) {
+        for (AccessFlags accessFlag : allFlags) {
             if (accessFlag.validForField && (accessFlagValue & accessFlag.value) != 0) {
                 size++;
             }
@@ -159,7 +169,7 @@ public enum AccessFlags
 
         AccessFlags[] accessFlags = new AccessFlags[size];
         int accessFlagsPosition = 0;
-        for (AccessFlags accessFlag: allFlags) {
+        for (AccessFlags accessFlag : allFlags) {
             if (accessFlag.validForField && (accessFlagValue & accessFlag.value) != 0) {
                 accessFlags[accessFlagsPosition++] = accessFlag;
             }

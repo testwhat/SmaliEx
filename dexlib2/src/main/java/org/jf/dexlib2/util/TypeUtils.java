@@ -31,9 +31,9 @@
 
 package org.jf.dexlib2.util;
 
-import org.jf.dexlib2.iface.reference.TypeReference;
-
 import javax.annotation.Nonnull;
+
+import org.jf.dexlib2.iface.reference.TypeReference;
 
 public final class TypeUtils {
     public static boolean isWideType(@Nonnull String type) {
@@ -49,5 +49,34 @@ public final class TypeUtils {
         return type.length() == 1;
     }
 
-    private TypeUtils() {}
+    public static String toFullString(String type) {
+        switch (type.charAt(0)) {
+            case 'V':
+                return "void";
+            case 'Z':
+                return "boolean";
+            case 'L':
+                return type.substring(1, type.length() - 1).replace("/", ".");
+            case 'C':
+                return "char";
+            case 'B':
+                return "byte";
+            case 'S':
+                return "short";
+            case 'I':
+                return "int";
+            case 'F':
+                return "float";
+            case 'J':
+                return "long";
+            case 'D':
+                return "double";
+            case '[':
+                return toFullString(type.substring(1)) + "[]";
+        }
+        return "void";
+    }
+
+    private TypeUtils() {
+    }
 }
