@@ -449,6 +449,7 @@ public class AnalyzedInstruction implements Comparable<AnalyzedInstruction> {
         return preRegisterMap[registerNumber];
     }
 
+    @Override
     public int compareTo(@Nonnull AnalyzedInstruction analyzedInstruction) {
         if (instructionIndex < analyzedInstruction.instructionIndex) {
             return -1;
