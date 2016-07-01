@@ -46,6 +46,9 @@ public class NumberUtils {
 
     private static final DecimalFormat format = new DecimalFormat("0.####################E0");
 
+    private NumberUtils() {
+    }
+
     public static boolean isLikelyFloat(int value) {
         // Check for some common named float values
         // We don't check for Float.MIN_VALUE, which has an integer representation of 1

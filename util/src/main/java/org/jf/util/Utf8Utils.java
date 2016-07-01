@@ -31,6 +31,9 @@ import javax.annotation.Nullable;
  * Constants of type <code>CONSTANT_Utf8_info</code>.
  */
 public final class Utf8Utils {
+    private Utf8Utils() {
+    }
+
     /**
      * Converts a string into its Java-style UTF-8 form. Java-style UTF-8
      * differs from normal UTF-8 in the handling of character '\0' and

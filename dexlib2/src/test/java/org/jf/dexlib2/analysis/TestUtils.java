@@ -40,6 +40,9 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 public class TestUtils {
+    private TestUtils() {
+    }
+
     public static ClassDef makeClassDef(@Nonnull String classType, @Nullable String superType, String... interfaces) {
         return new ImmutableClassDef(classType, 0, superType, ImmutableSet.copyOf(interfaces),
                 null, null, null, null, null, null);

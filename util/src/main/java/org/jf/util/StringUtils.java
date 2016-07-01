@@ -35,6 +35,9 @@ import java.io.IOException;
 import java.io.Writer;
 
 public class StringUtils {
+    private StringUtils() {
+    }
+
     public static void writeEscapedChar(Writer writer, char c) throws IOException {
         if ((c >= ' ') && (c < 0x7f)) {
             if ((c == '\'') || (c == '\"') || (c == '\\')) {

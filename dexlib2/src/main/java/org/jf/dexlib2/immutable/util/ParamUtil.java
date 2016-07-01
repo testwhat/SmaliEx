@@ -37,6 +37,9 @@ import javax.annotation.Nonnull;
 import java.util.Iterator;
 
 public class ParamUtil {
+    private ParamUtil() {
+    }
+
     private static int findTypeEnd(@Nonnull String str, int index) {
         char c = str.charAt(index);
         switch (c) {

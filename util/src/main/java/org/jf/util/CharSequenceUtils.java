@@ -40,6 +40,9 @@ import java.util.List;
 public class CharSequenceUtils {
     private static final Function<Object, String> TO_STRING = Functions.toStringFunction();
 
+    private CharSequenceUtils() {
+    }
+
     public static int listHashCode(List<? extends CharSequence> list) {
         return Lists.transform(list, TO_STRING).hashCode();
     }

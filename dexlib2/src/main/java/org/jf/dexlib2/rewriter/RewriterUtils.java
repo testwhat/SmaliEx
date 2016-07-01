@@ -39,6 +39,9 @@ import javax.annotation.Nullable;
 import java.util.*;
 
 public class RewriterUtils {
+    private RewriterUtils() {
+    }
+
     @Nullable
     public static <T> T rewriteNullable(@Nonnull Rewriter<T> rewriter, @Nullable T value) {
         return value==null?null:rewriter.rewrite(value);

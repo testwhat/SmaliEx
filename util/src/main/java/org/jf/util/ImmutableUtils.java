@@ -39,6 +39,9 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 public class ImmutableUtils {
+    private ImmutableUtils() {
+    }
+
     @Nonnull public static <T> ImmutableList<T> nullToEmptyList(@Nullable ImmutableList<T> list) {
         if (list == null) {
             return ImmutableList.of();

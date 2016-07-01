@@ -34,6 +34,9 @@ import com.android.ddmlib.SyncService.SyncException;
 
 public class AdbUtil {
 
+    private AdbUtil() {
+    }
+
     public static abstract class DeviceListener implements AndroidDebugBridge.IDeviceChangeListener {
         //public void deviceChanged(Device device, int changeMask) {
         //}

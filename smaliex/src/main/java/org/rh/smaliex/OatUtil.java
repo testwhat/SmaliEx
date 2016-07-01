@@ -41,6 +41,9 @@ import org.rh.smaliex.reader.Oat;
 
 public class OatUtil {
 
+    private OatUtil() {
+    }
+
     public static Opcodes getOpcodes(Oat oat) {
         int key = oat.getArtVersion() << Opcodes.OFFSET_OAT_VERSION | oat.guessApiLevel();
         return DexUtil.getOpcodes(key);

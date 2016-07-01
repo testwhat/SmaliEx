@@ -38,6 +38,9 @@ import java.util.regex.Pattern;
 public class TextUtils {
     private static String newline = System.getProperty("line.separator");
 
+    private TextUtils() {
+    }
+
     @Nonnull
     public static String normalizeNewlines(@Nonnull String source) {
         return normalizeNewlines(source, newline);

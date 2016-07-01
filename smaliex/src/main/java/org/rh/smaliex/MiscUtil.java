@@ -23,6 +23,9 @@ import java.io.RandomAccessFile;
 
 public class MiscUtil {
 
+    private MiscUtil() {
+    }
+
     public static File changeExt(File f, String targetExt) {
         String outPath = f.getAbsolutePath();
         if (!outPath.endsWith(targetExt)) {

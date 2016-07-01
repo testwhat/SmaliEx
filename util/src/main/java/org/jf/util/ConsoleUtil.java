@@ -33,6 +33,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class ConsoleUtil {
+    private ConsoleUtil() {
+    }
+
     /**
      * Attempt to find the width of the console. If it can't get the width, return a default of 80
      * @return The current console width

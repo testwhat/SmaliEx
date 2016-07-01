@@ -56,6 +56,9 @@ public class DexUtil {
     private static final ConcurrentHashMap<Integer, SoftReference<Opcodes>> opCodesCache =
             new ConcurrentHashMap<>();
 
+    private DexUtil() {
+    }
+
     public static Opcodes getOpcodes(int apiLevel) {
         Opcodes opcodes = getCache(opCodesCache, apiLevel);
         if (opcodes == null) {

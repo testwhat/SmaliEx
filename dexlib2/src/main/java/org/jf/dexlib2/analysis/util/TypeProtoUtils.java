@@ -40,6 +40,9 @@ import java.util.Iterator;
 import java.util.NoSuchElementException;
 
 public class TypeProtoUtils {
+    private TypeProtoUtils() {
+    }
+
     /**
      * Get the chain of superclasses of the given class. The first element will be the immediate superclass followed by
      * it's superclass, etc. up to java.lang.Object.

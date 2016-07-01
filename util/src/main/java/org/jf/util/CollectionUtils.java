@@ -40,6 +40,9 @@ import javax.annotation.Nonnull;
 import java.util.*;
 
 public class CollectionUtils {
+    private CollectionUtils() {
+    }
+
     public static <T> int listHashCode(@Nonnull Iterable<T> iterable) {
         int hashCode = 1;
         for (T item: iterable) {
