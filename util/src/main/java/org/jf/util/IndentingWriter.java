@@ -233,7 +233,6 @@ public class IndentingWriter extends Writer {
     }
 
     public void printUnsignedIntAsDec(int value) throws IOException {
-        int bufferIndex = 15;
 
         if (value < 0) {
             printSignedLongAsDec(value & 0xFFFFFFFFL);

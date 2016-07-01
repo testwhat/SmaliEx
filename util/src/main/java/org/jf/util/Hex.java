@@ -278,7 +278,6 @@ public final class Hex {
         }
 
         StringBuffer sb = new StringBuffer(length * 4 + 6);
-        boolean bol = true;
         int col = 0;
 
         while (length > 0) {
