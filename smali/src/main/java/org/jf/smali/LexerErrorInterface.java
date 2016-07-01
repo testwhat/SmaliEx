@@ -32,6 +32,7 @@ import org.antlr.runtime.CharStream;
 import org.antlr.runtime.Lexer;
 import org.antlr.runtime.RecognizerSharedState;
 
+@FunctionalInterface
 public interface LexerErrorInterface {
     public int getNumberOfSyntaxErrors();
 

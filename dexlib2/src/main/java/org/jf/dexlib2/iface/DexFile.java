@@ -37,6 +37,7 @@ import java.util.Set;
 /**
  * This class is a high level representation of a dex file - essentially a set of class definitions.
  */
+@FunctionalInterface
 public interface DexFile {
     /**
      * Get a set of the classes defined in this dex file.

@@ -90,6 +90,7 @@ public final class AndroidDebugBridge {
      * Classes which implement this interface provide a method that deals
      * with {@link AndroidDebugBridge} changes.
      */
+    @FunctionalInterface
     public interface IDebugBridgeChangeListener {
         /**
          * Sent when a new {@link AndroidDebugBridge} is connected.

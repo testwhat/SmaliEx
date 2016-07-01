@@ -123,6 +123,7 @@ public class MutableMethodImplementation implements MethodImplementation {
         }
     }
 
+    @FunctionalInterface
     private interface Task {
         void perform();
     }

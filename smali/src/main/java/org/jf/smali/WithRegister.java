@@ -31,6 +31,7 @@
 
 package org.jf.smali;
 
+@FunctionalInterface
 public interface WithRegister {
     int getRegister();
 }

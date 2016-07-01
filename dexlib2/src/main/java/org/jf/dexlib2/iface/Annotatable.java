@@ -37,6 +37,7 @@ import java.util.Set;
 /**
  * This class represents an object that can have Annotations applied to it
  */
+@FunctionalInterface
 public interface Annotatable {
     /**
      * Gets a set of the annotations that are applied to this object.

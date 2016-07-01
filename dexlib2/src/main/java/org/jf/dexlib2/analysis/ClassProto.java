@@ -661,6 +661,7 @@ public class ClassProto implements TypeProto {
         final static int sizeof_uint16_t = 2;
         final static int sizeof_uint8_t = 1;
 
+        @FunctionalInterface
         interface IFieldGapCreator {
             FieldGap create(int offset, int size);
         }
