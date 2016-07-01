@@ -108,11 +108,10 @@ public class DumpVtables {
             System.exit(1);
         }
 
-        try {
+        try (FileOutputStream outStream = new FileOutputStream(outFile)) {
             DexBackedDexFile dexFile = DexFileFactory.loadDexFile(dexFileFile, apiLevel, experimental);
             Iterable<String> bootClassPaths = Splitter.on(":").split("core.jar:ext.jar:framework.jar:android.policy.jar:services.jar");
             ClassPath classPath = ClassPath.fromClassPath(bootClassPathDirs, bootClassPaths, dexFile, apiLevel, experimental);
-            FileOutputStream outStream = new FileOutputStream(outFile);
 
             for (ClassDef classDef: dexFile.getClasses()) {
                 ClassProto classProto = (ClassProto) classPath.getClass(classDef);
@@ -131,7 +130,6 @@ public class DumpVtables {
                 }
                 outStream.write("\n".getBytes());
             }
-            outStream.close();
         } catch (IOException ex) {
             System.out.println("IOException thrown when trying to open a dex file or write out vtables: " + ex);
         }
