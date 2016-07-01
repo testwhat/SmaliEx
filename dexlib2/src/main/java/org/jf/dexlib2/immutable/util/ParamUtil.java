@@ -63,27 +63,23 @@ public class ParamUtil {
 
     @Nonnull
     public static Iterable<ImmutableMethodParameter> parseParamString(@Nonnull final String params) {
-        return new Iterable<ImmutableMethodParameter>() {
-            @Override public Iterator<ImmutableMethodParameter> iterator() {
-                return new Iterator<ImmutableMethodParameter>() {
+        return () -> new Iterator<ImmutableMethodParameter>() {
 
-                    private int index = 0;
+            private int index = 0;
 
-                    @Override public boolean hasNext() {
-                        return index < params.length();
-                    }
+            @Override public boolean hasNext() {
+                return index < params.length();
+            }
 
-                    @Override public ImmutableMethodParameter next() {
-                        int end = findTypeEnd(params, index);
-                        String ret = params.substring(index, end);
-                        index = end;
-                        return new ImmutableMethodParameter(ret, null, null);
-                    }
+            @Override public ImmutableMethodParameter next() {
+                int end = findTypeEnd(params, index);
+                String ret = params.substring(index, end);
+                index = end;
+                return new ImmutableMethodParameter(ret, null, null);
+            }
 
-                    @Override public void remove() {
-                        throw new UnsupportedOperationException();
-                    }
-                };
+            @Override public void remove() {
+                throw new UnsupportedOperationException();
             }
         };
     }

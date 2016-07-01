@@ -79,10 +79,6 @@ public class MemoryDeferredOutputStream extends DeferredOutputStream {
 
     @Nonnull
     public static DeferredOutputStreamFactory getFactory(final int bufferSize) {
-        return new DeferredOutputStreamFactory() {
-            @Override public DeferredOutputStream makeDeferredOutputStream() {
-                return new MemoryDeferredOutputStream(bufferSize);
-            }
-        };
+        return () -> new MemoryDeferredOutputStream(bufferSize);
     }
 }

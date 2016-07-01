@@ -85,11 +85,7 @@ public class MutableMethodImplementation implements MethodImplementation {
             final MethodLocation location = instructionList.get(index);
             final Opcode opcode = instruction.getOpcode();
             if (opcode == Opcode.PACKED_SWITCH_PAYLOAD || opcode == Opcode.SPARSE_SWITCH_PAYLOAD) {
-                switchPayloadTasks.add(new Task() {
-                    @Override public void perform() {
-                        convertAndSetInstruction(location, codeAddressToIndex, instruction);
-                    }
-                });
+                switchPayloadTasks.add(() -> convertAndSetInstruction(location, codeAddressToIndex, instruction));
             } else {
                 convertAndSetInstruction(location, codeAddressToIndex, instruction);
             }

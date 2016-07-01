@@ -69,27 +69,22 @@ public class DexBackedMethodImplementation implements MethodImplementation {
 
         final int instructionsStartOffset = codeOffset + CodeItem.INSTRUCTION_START_OFFSET;
         final int endOffset = instructionsStartOffset + (instructionsSize*2);
-        return new Iterable<Instruction>() {
+        return () -> new VariableSizeLookaheadIterator<Instruction>(dexFile, instructionsStartOffset) {
             @Override
-            public Iterator<Instruction> iterator() {
-                return new VariableSizeLookaheadIterator<Instruction>(dexFile, instructionsStartOffset) {
-                    @Override
-                    protected Instruction readNextItem(@Nonnull DexReader reader) {
-                        if (reader.getOffset() >= endOffset) {
-                            return endOfData();
-                        }
+            protected Instruction readNextItem(@Nonnull DexReader reader) {
+                if (reader.getOffset() >= endOffset) {
+                    return endOfData();
+                }
 
-                        Instruction instruction = DexBackedInstruction.readFrom(reader);
+                Instruction instruction = DexBackedInstruction.readFrom(reader);
 
-                        // Does the instruction extend past the end of the method?
-                        int offset = reader.getOffset();
-                        if (offset > endOffset || offset < 0) {
-                            throw new ExceptionWithContext("The last instruction in the method is truncated "
-                                + "offset=" + offset + " endOffset=" + endOffset);
-                        }
-                        return instruction;
-                    }
-                };
+                // Does the instruction extend past the end of the method?
+                int offset = reader.getOffset();
+                if (offset > endOffset || offset < 0) {
+                    throw new ExceptionWithContext("The last instruction in the method is truncated "
+                        + "offset=" + offset + " endOffset=" + endOffset);
+                }
+                return instruction;
             }
         };
     }

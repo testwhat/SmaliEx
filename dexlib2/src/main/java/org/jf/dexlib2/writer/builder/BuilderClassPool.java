@@ -130,24 +130,18 @@ public class BuilderClassPool implements ClassSection<BuilderStringReference, Bu
         return builderClassDef.sourceFile;
     }
 
-    private static final Predicate<Field> HAS_INITIALIZER = new Predicate<Field>() {
-        @Override
-        public boolean apply(Field input) {
-            EncodedValue encodedValue = input.getInitialValue();
-            return encodedValue != null && !EncodedValueUtils.isDefaultValue(encodedValue);
-        }
+    private static final Predicate<Field> HAS_INITIALIZER = input -> {
+        EncodedValue encodedValue = input.getInitialValue();
+        return encodedValue != null && !EncodedValueUtils.isDefaultValue(encodedValue);
     };
 
     private static final Function<BuilderField, BuilderEncodedValue> GET_INITIAL_VALUE =
-            new Function<BuilderField, BuilderEncodedValue>() {
-                @Override
-                public BuilderEncodedValue apply(BuilderField input) {
-                    BuilderEncodedValue initialValue = input.getInitialValue();
-                    if (initialValue == null) {
-                        return BuilderEncodedValues.defaultValueForType(input.getType());
-                    }
-                    return initialValue;
+            input -> {
+                BuilderEncodedValue initialValue = input.getInitialValue();
+                if (initialValue == null) {
+                    return BuilderEncodedValues.defaultValueForType(input.getType());
                 }
+                return initialValue;
             };
 
     @Nullable @Override
@@ -231,20 +225,10 @@ public class BuilderClassPool implements ClassSection<BuilderStringReference, Bu
     }
 
     private static final Predicate<BuilderMethodParameter> HAS_PARAMETER_ANNOTATIONS =
-            new Predicate<BuilderMethodParameter>() {
-                @Override
-                public boolean apply(BuilderMethodParameter input) {
-                    return input.getAnnotations().size() > 0;
-                }
-            };
+            input -> input.getAnnotations().size() > 0;
 
     private static final Function<BuilderMethodParameter, BuilderAnnotationSet> PARAMETER_ANNOTATIONS =
-            new Function<BuilderMethodParameter, BuilderAnnotationSet>() {
-                @Override
-                public BuilderAnnotationSet apply(BuilderMethodParameter input) {
-                    return input.getAnnotations();
-                }
-            };
+            input -> input.getAnnotations();
 
     @Nullable @Override public List<? extends BuilderAnnotationSet> getParameterAnnotations(
             @Nonnull final BuilderMethod method) {

@@ -62,16 +62,13 @@ public class MiscUtil {
         for (int i = 0; i < extensions.length; i++) {
             extensions[i] = extensions[i].toLowerCase();
         }
-        return dir.listFiles(new FilenameFilter() {
-            @Override
-            public boolean accept(File dir, String name) {
-                for (String ext : extensions) {
-                    if (name.toLowerCase().endsWith(ext)) {
-                        return true;
-                    }
+        return dir.listFiles((dir1, name) -> {
+            for (String ext : extensions) {
+                if (name.toLowerCase().endsWith(ext)) {
+                    return true;
                 }
-                return false;
             }
+            return false;
         });
     }
 

@@ -145,11 +145,7 @@ public class baksmali {
         List<Future<Boolean>> tasks = Lists.newArrayList();
 
         for (final ClassDef classDef: classDefs) {
-            tasks.add(executor.submit(new Callable<Boolean>() {
-                @Override public Boolean call() throws Exception {
-                    return disassembleClass(classDef, fileNameHandler, options);
-                }
-            }));
+            tasks.add(executor.submit(() -> disassembleClass(classDef, fileNameHandler, options)));
         }
 
         boolean errorOccurred = false;

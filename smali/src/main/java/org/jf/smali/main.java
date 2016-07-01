@@ -232,13 +232,8 @@ public class main {
             final int finalApiLevel = apiLevel;
             final boolean finalExperimental = experimental;
             for (final File file : filesToProcess) {
-                tasks.add(executor.submit(new Callable<Boolean>() {
-                    @Override
-                    public Boolean call() throws Exception {
-                        return assembleSmaliFile(file, classes, finalVerboseErrors, finalPrintTokens,
-                                finalAllowOdex, finalApiLevel, finalExperimental);
-                    }
-                }));
+                tasks.add(executor.submit(() -> assembleSmaliFile(file, classes, finalVerboseErrors, finalPrintTokens,
+                        finalAllowOdex, finalApiLevel, finalExperimental)));
             }
 
             for (Future<Boolean> task : tasks) {
@@ -269,12 +264,7 @@ public class main {
             ClassPool clsPool = (ClassPool) dexPool.classSection;
             pools.add(dexPool);
 
-            Collections.sort(classes, new Comparator<BuilderClassDef>() {
-                @Override
-                public int compare(BuilderClassDef c1, BuilderClassDef c2) {
-                    return c1.getType().compareTo(c2.getType());
-                }
-            });
+            Collections.sort(classes, (c1, c2) -> c1.getType().compareTo(c2.getType()));
             for (BuilderClassDef classDef : classes) {
                 int numMethodIds = dexPool.methodSection.getItems().size();
                 int numFieldIds = dexPool.fieldSection.getItems().size();

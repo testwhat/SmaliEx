@@ -408,11 +408,7 @@ public class InstructionWriter<StringRef extends StringReference, TypeRef extend
         }
     }
 
-    private final Comparator<SwitchElement> switchElementComparator = new Comparator<SwitchElement>() {
-        @Override public int compare(SwitchElement element1, SwitchElement element2) {
-            return Ints.compare(element1.getKey(), element2.getKey());
-        }
-    };
+    private final Comparator<SwitchElement> switchElementComparator = (element1, element2) -> Ints.compare(element1.getKey(), element2.getKey());
 
     public void write(@Nonnull PackedSwitchPayload instruction) {
         try {

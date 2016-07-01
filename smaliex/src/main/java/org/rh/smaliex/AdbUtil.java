@@ -89,12 +89,7 @@ public class AdbUtil {
     }
 
     public static String shellSync(Device device, String cmd, final String[] result) {
-        final FutureTask<String> task = new FutureTask<>(new Callable<String>() {
-            @Override
-            public String call() throws Exception {
-                return result[0];
-            }
-        });
+        final FutureTask<String> task = new FutureTask<>(() -> result[0]);
         shell(device, cmd, new CollectingOutputReceiver() {
             @Override
             public void flush() {

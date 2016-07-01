@@ -85,23 +85,21 @@ public class RewriterUtils {
 
     public static <T> Iterable<T> rewriteIterable(@Nonnull final Rewriter<T> rewriter,
                                                   @Nonnull final Iterable<? extends T> iterable) {
-        return new Iterable<T>() {
-            @Override public Iterator<T> iterator() {
-                final Iterator<? extends T> iterator = iterable.iterator();
-                return new Iterator<T>() {
-                    @Override public boolean hasNext() {
-                        return iterator.hasNext();
-                    }
+        return () -> {
+            final Iterator<? extends T> iterator = iterable.iterator();
+            return new Iterator<T>() {
+                @Override public boolean hasNext() {
+                    return iterator.hasNext();
+                }
 
-                    @Override public T next() {
-                        return rewriteNullable(rewriter, iterator.next());
-                    }
+                @Override public T next() {
+                    return rewriteNullable(rewriter, iterator.next());
+                }
 
-                    @Override public void remove() {
-                        iterator.remove();
-                    }
-                };
-            }
+                @Override public void remove() {
+                    iterator.remove();
+                }
+            };
         };
     }
 

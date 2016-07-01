@@ -94,11 +94,9 @@ public class FileDeferredOutputStream extends DeferredOutputStream {
     @Nonnull
     public static DeferredOutputStreamFactory getFactory(@Nullable final File containingDirectory,
                                                          final int bufferSize) {
-        return new DeferredOutputStreamFactory() {
-            @Override public DeferredOutputStream makeDeferredOutputStream() throws IOException {
-                File tempFile = File.createTempFile("dexlibtmp", null, containingDirectory);
-                return new FileDeferredOutputStream(tempFile, bufferSize);
-            }
+        return () -> {
+            File tempFile = File.createTempFile("dexlibtmp", null, containingDirectory);
+            return new FileDeferredOutputStream(tempFile, bufferSize);
         };
     }
 }
