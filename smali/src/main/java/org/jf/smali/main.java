@@ -195,7 +195,7 @@ public class main {
         }
 
         try {
-            LinkedHashSet<File> filesToProcess = new LinkedHashSet<File>();
+            Set<File> filesToProcess = new LinkedHashSet<File>();
 
             for (String arg : remainingArgs) {
                 File argFile = new File(arg);
@@ -264,7 +264,7 @@ public class main {
             final int MAX_FIELD_ADDED_DURING_DEX_CREATION = 9;
             final int MAX_DEX_ID = 65536;
             int dexNum = 0;
-            ArrayList<DexPool> pools = new ArrayList<DexPool>();
+            List<DexPool> pools = new ArrayList<DexPool>();
             DexPool dexPool = DexPool.makeDexPool(apiLevel);
             ClassPool clsPool = (ClassPool) dexPool.classSection;
             pools.add(dexPool);

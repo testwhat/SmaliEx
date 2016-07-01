@@ -97,7 +97,7 @@ public class ClassPool implements ClassSection<CharSequence, CharSequence,
         typeListPool.intern(poolClassDef.getInterfaces());
         stringPool.internNullable(poolClassDef.getSourceFile());
 
-        HashSet<String> fields = new HashSet<String>();
+        Set<String> fields = new HashSet<String>();
         for (Field field: poolClassDef.getFields()) {
             String fieldDescriptor = ReferenceUtil.getShortFieldDescriptor(field);
             if (!fields.add(fieldDescriptor)) {
@@ -114,7 +114,7 @@ public class ClassPool implements ClassSection<CharSequence, CharSequence,
             annotationSetPool.intern(field.getAnnotations());
         }
 
-        HashSet<String> methods = new HashSet<String>();
+        Set<String> methods = new HashSet<String>();
         for (PoolMethod method: poolClassDef.getMethods()) {
             String methodDescriptor = ReferenceUtil.getMethodDescriptor(method, true);
             if (!methods.add(methodDescriptor)) {

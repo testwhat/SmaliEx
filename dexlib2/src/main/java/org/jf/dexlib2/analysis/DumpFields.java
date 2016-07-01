@@ -47,6 +47,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 
 public class DumpFields {
     private static final Options options;
@@ -70,7 +71,7 @@ public class DumpFields {
         String[] remainingArgs = commandLine.getArgs();
 
         Option[] parsedOptions = commandLine.getOptions();
-        ArrayList<String> bootClassPathDirs = Lists.newArrayList();
+        List<String> bootClassPathDirs = Lists.newArrayList();
         String outFile = "fields.txt";
         int apiLevel = 15;
         boolean experimental = false;

@@ -442,7 +442,7 @@ public class ClassProto implements TypeProto {
                 return;
             }
             System.out.println("## Field offset of " + classProto.type);
-            ArrayList<ClassProto> classHierarchy = new ArrayList<>();
+            List<ClassProto> classHierarchy = new ArrayList<>();
             ClassProto cp = classProto;
             for (String superclassType = cp.getSuperclass(); superclassType != null;
                     superclassType = cp.getSuperclass()) {
@@ -947,7 +947,7 @@ public class ClassProto implements TypeProto {
             // the same field offsets (which is needed for deodexing).
             // See dalvik/vm/oo/Class.c computeFieldOffsets()
 
-            ArrayList<Field> fields = Lists.newArrayList(
+            List<Field> fields = Lists.newArrayList(
                     classProto.getClassDef().getInstanceFields());
             Collections.sort(fields);
             final int fieldCount = fields.size();

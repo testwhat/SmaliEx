@@ -31,6 +31,7 @@ package org.jf.util;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 
 public class PathUtil {
     private PathUtil() {
@@ -55,8 +56,8 @@ public class PathUtil {
     }
 
     static String getRelativeFileInternal(File canonicalBaseFile, File canonicalFileToRelativize) {
-        ArrayList<String> basePath = getPathComponents(canonicalBaseFile);
-        ArrayList<String> pathToRelativize = getPathComponents(canonicalFileToRelativize);
+        List<String> basePath = getPathComponents(canonicalBaseFile);
+        List<String> pathToRelativize = getPathComponents(canonicalFileToRelativize);
 
         //if the roots aren't the same (i.e. different drives on a windows machine), we can't construct a relative
         //path from one to the other, so just return the canonical file

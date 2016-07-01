@@ -68,7 +68,7 @@ public class DumpVtables {
         String[] remainingArgs = commandLine.getArgs();
 
         Option[] parsedOptions = commandLine.getOptions();
-        ArrayList<String> bootClassPathDirs = Lists.newArrayList();
+        List<String> bootClassPathDirs = Lists.newArrayList();
         String outFile = "vtables.txt";
         int apiLevel = 15;
         boolean experimental = false;

@@ -2023,7 +2023,7 @@ public class MethodAnalyzer {
 
     @Nonnull
     private RegisterType getLastRegisterType(int reg) {
-        ArrayList<TypeScope> scopes = localTypes.get(reg);
+        List<TypeScope> scopes = localTypes.get(reg);
         if (scopes != null) {
             return scopes.get(scopes.size() - 1).type;
         }
