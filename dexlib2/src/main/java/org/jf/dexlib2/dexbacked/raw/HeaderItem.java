@@ -47,7 +47,7 @@ public class HeaderItem {
      *
      * They are: "dex\n035\0" and "dex\n037\0".
      */
-    public static final byte[][] MAGIC_VALUES= new byte[][] {
+    private static final byte[][] MAGIC_VALUES= new byte[][] {
             new byte[]{0x64, 0x65, 0x78, 0x0a, 0x30, 0x33, 0x35, 0x00},
             new byte[]{0x64, 0x65, 0x78, 0x0a, 0x30, 0x33, 0x37, 0x00}};
 

@@ -36,7 +36,7 @@ import org.jf.dexlib2.dexbacked.BaseDexBuffer;
 public class OdexHeaderItem {
     public static final int ITEM_SIZE = 40;
 
-    public static final byte[][] MAGIC_VALUES= new byte[][] {
+    private static final byte[][] MAGIC_VALUES= new byte[][] {
             new byte[] {0x64, 0x65, 0x79, 0x0A, 0x30, 0x33, 0x35, 0x00}, // "dey\n035\0"
             new byte[] {0x64, 0x65, 0x79, 0x0A, 0x30, 0x33, 0x36, 0x00}  // "dey\n036\0"
     };

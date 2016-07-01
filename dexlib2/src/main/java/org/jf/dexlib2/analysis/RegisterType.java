@@ -128,7 +128,7 @@ public class RegisterType {
     // incomming code path. There is no register type that can hold either an Integer or a Reference.
     public static final byte CONFLICTED = 19;
 
-    public static final String[] CATEGORY_NAMES = new String[] {
+    private static final String[] CATEGORY_NAMES = new String[] {
             "Unknown",
             "Uninit",
             "Null",
