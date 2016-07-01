@@ -375,7 +375,7 @@ public class MethodDefinition {
     }
 
     public List<MethodItem> getMethodItems() {
-        ArrayList<MethodItem> methodItems = new ArrayList<MethodItem>();
+        ArrayList<MethodItem> methodItems = new ArrayList<>();
 
         if ((classDef.options.registerInfo != 0) || (classDef.options.deodex && needsAnalyzed())) {
             addAnalyzedInstructionMethodItems(methodItems);
@@ -589,8 +589,8 @@ public class MethodDefinition {
     }
 
     private void setLabelSequentialNumbers() {
-        HashMap<String, Integer> nextLabelSequenceByType = new HashMap<String, Integer>();
-        ArrayList<LabelMethodItem> sortedLabels = new ArrayList<LabelMethodItem>(labelCache.getLabels());
+        HashMap<String, Integer> nextLabelSequenceByType = new HashMap<>();
+        ArrayList<LabelMethodItem> sortedLabels = new ArrayList<>(labelCache.getLabels());
 
         //sort the labels by their location in the method
         Collections.sort(sortedLabels);
@@ -614,7 +614,7 @@ public class MethodDefinition {
     }
 
     public static class LabelCache {
-        protected HashMap<LabelMethodItem, LabelMethodItem> labels = new HashMap<LabelMethodItem, LabelMethodItem>();
+        protected HashMap<LabelMethodItem, LabelMethodItem> labels = new HashMap<>();
 
         public LabelCache() {
         }

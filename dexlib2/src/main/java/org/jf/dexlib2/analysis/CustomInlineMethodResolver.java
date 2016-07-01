@@ -56,7 +56,7 @@ public class CustomInlineMethodResolver extends InlineMethodResolver {
         this.classPath = classPath;
 
         StringReader reader = new StringReader(inlineTable);
-        List<String> lines = new ArrayList<String>();
+        List<String> lines = new ArrayList<>();
 
         BufferedReader br = new BufferedReader(reader);
 

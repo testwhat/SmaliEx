@@ -106,7 +106,7 @@ public class PathUtil {
     }
 
     private static ArrayList<String> getPathComponents(File file) {
-        ArrayList<String> path = new ArrayList<String>();
+        ArrayList<String> path = new ArrayList<>();
 
         while (file != null) {
             File parentFile = file.getParentFile();

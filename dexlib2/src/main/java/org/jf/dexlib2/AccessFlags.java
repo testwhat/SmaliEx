@@ -79,7 +79,7 @@ public enum AccessFlags {
     static {
         allFlags = AccessFlags.values();
 
-        accessFlagsByName = new HashMap<String, AccessFlags>();
+        accessFlagsByName = new HashMap<>();
         for (AccessFlags accessFlag : allFlags) {
             accessFlagsByName.put(accessFlag.accessFlagName, accessFlag);
         }

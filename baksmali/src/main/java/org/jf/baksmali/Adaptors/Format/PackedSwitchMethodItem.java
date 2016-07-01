@@ -52,7 +52,7 @@ public class PackedSwitchMethodItem extends InstructionMethodItem<PackedSwitchPa
 
         int baseCodeAddress = methodDef.getPackedSwitchBaseAddress(codeAddress);
 
-        targets = new ArrayList<PackedSwitchTarget>();
+        targets = new ArrayList<>();
 
         boolean first = true;
         int firstKey = 0;

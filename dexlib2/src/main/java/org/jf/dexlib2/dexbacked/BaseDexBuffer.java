@@ -108,7 +108,7 @@ public class BaseDexBuffer {
 
     @Nonnull
     public BaseDexReader readerAt(int offset) {
-        return new BaseDexReader<BaseDexBuffer>(this, offset);
+        return new BaseDexReader<>(this, offset);
     }
 
     @Nonnull
