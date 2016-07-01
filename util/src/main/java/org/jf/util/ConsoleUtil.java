@@ -82,7 +82,7 @@ public class ConsoleUtil {
     }
 
     private static String attemptCommand(String[] command) {
-        StringBuffer buffer = null;
+        StringBuilder buffer = null;
 
         try {
 
@@ -93,7 +93,7 @@ public class ConsoleUtil {
 
             while ((line = reader.readLine()) != null) {
                 if (buffer == null) {
-                    buffer = new StringBuffer();
+                    buffer = new StringBuilder();
                 }
 
                 buffer.append(line);
