@@ -83,7 +83,8 @@ public class DexBackedMethod extends BaseMethodReference implements Method {
         int methodIndexDiff = reader.readLargeUleb128();
         this.methodIndex = methodIndexDiff + previousMethodIndex;
         int methodAccessFlags = reader.readSmallUleb128();
-        if (classDef.isInterface && (methodAccessFlags & AccessFlags.ABSTRACT.getValue()) == 0) {
+        if ((methodAccessFlags & AccessFlags.CONSTRUCTOR.getValue()) == 0 &&
+                classDef.isInterface && (methodAccessFlags & AccessFlags.ABSTRACT.getValue()) == 0) {
             methodAccessFlags |= AccessFlags.DEFAULT.getValue();
         }
         this.accessFlags = methodAccessFlags;

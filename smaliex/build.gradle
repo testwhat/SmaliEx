@@ -24,7 +24,7 @@ task fatJar(type: Jar, dependsOn: jar) {
     from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
 
     manifest {
-        attributes("Main-Class": "org.rh.smaliex.Main")
+        attributes('Main-Class': 'org.rh.smaliex.Main')
     }
 }
 tasks.getByPath('build').dependsOn(fatJar)

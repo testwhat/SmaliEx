@@ -36,9 +36,21 @@ import javax.annotation.Nonnull;
 import org.jf.dexlib2.iface.reference.TypeReference;
 
 public final class TypeUtils {
+    public final static char PRIM_VOID = 'V';
+    public final static char PRIM_BOOLEAN = 'Z';
+    public final static char PRIM_BYTE = 'B';
+    public final static char PRIM_CHAR = 'C';
+    public final static char PRIM_SHORT = 'S';
+    public final static char PRIM_INT = 'I';
+    public final static char PRIM_FLOAT = 'F';
+    public final static char PRIM_LONG = 'J';
+    public final static char PRIM_DOUBLE = 'D';
+    public final static char TYPE_ARRAY = '[';
+    public final static char TYPE_OBJECT = 'L';
+
     public static boolean isWideType(@Nonnull String type) {
         char c = type.charAt(0);
-        return c == 'J' || c == 'D';
+        return c == PRIM_LONG || c == PRIM_DOUBLE;
     }
 
     public static boolean isWideType(@Nonnull TypeReference type) {
@@ -51,27 +63,27 @@ public final class TypeUtils {
 
     public static String toFullString(String type) {
         switch (type.charAt(0)) {
-            case 'V':
+            case PRIM_VOID:
                 return "void";
-            case 'Z':
+            case PRIM_BOOLEAN:
                 return "boolean";
-            case 'L':
+            case TYPE_OBJECT:
                 return type.substring(1, type.length() - 1).replace("/", ".");
-            case 'C':
+            case PRIM_CHAR:
                 return "char";
-            case 'B':
+            case PRIM_BYTE:
                 return "byte";
-            case 'S':
+            case PRIM_SHORT:
                 return "short";
-            case 'I':
+            case PRIM_INT:
                 return "int";
-            case 'F':
+            case PRIM_FLOAT:
                 return "float";
-            case 'J':
+            case PRIM_LONG:
                 return "long";
-            case 'D':
+            case PRIM_DOUBLE:
                 return "double";
-            case '[':
+            case TYPE_ARRAY:
                 return toFullString(type.substring(1)) + "[]";
         }
         return "void";

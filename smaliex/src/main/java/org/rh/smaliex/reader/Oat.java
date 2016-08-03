@@ -358,6 +358,7 @@ public class Oat {
                     || !field.getName().endsWith("_")) {
                 continue;
             }
+            field.setAccessible(true);
             Class<?> type = field.getType();
             System.out.print(field.getName() + " = ");
             Object val = field.get(obj);
@@ -391,13 +392,13 @@ public class Oat {
                 } else {
                     if (type.isArray()) {
                         byte[] bytes = (byte[]) val;
-                        String sf = fmt.hex() ? "%02X" : "%d ";
+                        String sf = fmt.hex() ? "0x%02X" : "%d ";
                         for (byte b : bytes) {
                             System.out.printf(sf, b);
                         }
                         System.out.println();
                     } else {
-                        String sf = fmt.hex() ? "%X\n" : "%d\n";
+                        String sf = fmt.hex() ? "0x%X\n" : "%d\n";
                         System.out.printf(sf, val);
                     }
                 }

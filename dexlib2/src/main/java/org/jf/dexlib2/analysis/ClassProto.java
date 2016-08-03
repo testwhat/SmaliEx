@@ -51,6 +51,8 @@ import org.jf.dexlib2.iface.Method;
 import org.jf.dexlib2.iface.reference.FieldReference;
 import org.jf.dexlib2.iface.reference.MethodReference;
 import org.jf.dexlib2.immutable.ImmutableMethod;
+import org.jf.dexlib2.util.MethodUtil;
+import org.jf.dexlib2.util.TypeUtils;
 import org.jf.util.ExceptionWithContext;
 import org.jf.util.SparseArray;
 
@@ -69,21 +71,24 @@ import com.google.common.collect.Maps;
 public class ClassProto implements TypeProto {
     @Nonnull protected final ClassPath classPath;
     @Nonnull protected final String type;
-    @Nonnull private final Supplier<SparseArray<FieldReference>> instanceFieldsSupplier;
     @Nonnull private final FieldOffsetCalculator fieldOffsetCalculator;
+    @Nonnull private final Supplier<SparseArray<FieldReference>> instanceFieldsSupplier;
+    @Nonnull private final Supplier<List<Method>> vtableSupplier;
 
     protected boolean vtableFullyResolved = true;
     protected boolean interfacesFullyResolved = true;
     protected int objectSize;
 
     public ClassProto(@Nonnull ClassPath classPath, @Nonnull String type) {
-        if (type.charAt(0) != TYPE_OBJECT) {
+        if (type.charAt(0) != TypeUtils.TYPE_OBJECT) {
             throw new ExceptionWithContext("Cannot construct ClassProto for non reference type: %s", type);
         }
         this.classPath = classPath;
         this.type = type;
         fieldOffsetCalculator = classPath.version.api < Opcode.API_L
                 ? new DalvikIFieldSupplier(this) : new ArtIFieldSupplier(this);
+        vtableSupplier = classPath.version.api < Opcode.API_N
+                ? new VirtualTableSupplierLegacy(this) : new VirtualTableSupplierLatest(this);
         instanceFieldsSupplier = Suppliers.memoize(fieldOffsetCalculator);
     }
 
@@ -153,9 +158,10 @@ public class ClassProto implements TypeProto {
                                 }
 
                                 ClassProto interfaceProto = (ClassProto) classPath.getClass(interfaceType);
-                                for (String superInterface: interfaceProto.getInterfaces().keySet()) {
+                                for (String superInterface : interfaceProto.getInterfaces().keySet()) {
                                     if (!interfaces.containsKey(superInterface)) {
-                                        interfaces.put(superInterface, interfaceProto.getInterfaces().get(superInterface));
+                                        interfaces.put(superInterface,
+                                                interfaceProto.getInterfaces().get(superInterface));
                                     }
                                 }
                                 if (!interfaceProto.interfacesFullyResolved) {
@@ -388,41 +394,29 @@ public class ClassProto implements TypeProto {
             return;
         }
         System.out.println("## Vtable of " + type);
-
         List<Method> vtable = getVtable();
         for (int i = 0; i < vtable.size(); i++) {
             Method m = vtable.get(i);
-            System.out.println("#" + i + " " + m.getName() + " " + m.getReturnType());
+            System.out.println("#" + i + " " + m.getDefiningClass()
+                    + " : " + MethodUtil.toSourceStyleString(m));
         }
     }
 
-    final static char PRIM_VOID = 'V';
-    final static char PRIM_BOOLEAN = 'Z';
-    final static char PRIM_BYTE = 'B';
-    final static char PRIM_CHAR = 'C';
-    final static char PRIM_SHORT = 'S';
-    final static char PRIM_INT = 'I';
-    final static char PRIM_FLOAT = 'F';
-    final static char PRIM_LONG = 'J';
-    final static char PRIM_DOUBLE = 'D';
-    final static char TYPE_ARRAY = '[';
-    final static char TYPE_OBJECT = 'L';
+    private final static byte REFERENCE = 0;
+    private final static byte WIDE = 1;
+    private final static byte OTHER = 2;
 
-    final static byte REFERENCE = 0;
-    final static byte WIDE = 1;
-    final static byte OTHER = 2;
-
-    static byte getFieldWidthType(@Nonnull FieldReference field) {
+    private static byte getFieldWidthType(@Nonnull FieldReference field) {
         return getFieldWidthType(field.getType().charAt(0));
     }
 
-    static byte getFieldWidthType(char typeChar) {
+    private static byte getFieldWidthType(char typeChar) {
         switch (typeChar) {
-        case TYPE_ARRAY:
-        case TYPE_OBJECT:
+        case TypeUtils.TYPE_ARRAY:
+        case TypeUtils.TYPE_OBJECT:
             return REFERENCE;
-        case PRIM_LONG:
-        case PRIM_DOUBLE:
+        case TypeUtils.PRIM_LONG:
+        case TypeUtils.PRIM_DOUBLE:
             return WIDE;
         default:
             return OTHER;
@@ -478,7 +472,7 @@ public class ClassProto implements TypeProto {
         }
     }
 
-    static class ArtIFieldSupplier extends FieldOffsetCalculator {
+    private static class ArtIFieldSupplier extends FieldOffsetCalculator {
         final Comparator<Field> fieldComparator; // art/runtime/class_linker.cc LinkFieldsComparator
 
         ArtIFieldSupplier(ClassProto clsProto) {
@@ -933,9 +927,9 @@ public class ClassProto implements TypeProto {
         }
     }
 
-    static class DalvikIFieldSupplier extends FieldOffsetCalculator {
+    private static class DalvikIFieldSupplier extends FieldOffsetCalculator {
 
-        public DalvikIFieldSupplier(ClassProto clsProto) {
+        DalvikIFieldSupplier(ClassProto clsProto) {
             super(clsProto);
             initialFieldOffset = 8; // OFFSETOF_MEMBER(DataObject, instanceData)
         }
@@ -1109,60 +1103,111 @@ public class ClassProto implements TypeProto {
         return fieldOffset + 4;
     }
 
-    @Nonnull List<Method> getVtable() {
-        return vtableSupplier.get();
-    }
+    // TODO: check the case when we have a package private method that overrides an interface method
+    abstract static class VirtualTableSupplier implements Supplier<List<Method>> {
+        final ClassProto classProto;
 
-    //TODO: check the case when we have a package private method that overrides an interface method
-    @Nonnull private final Supplier<List<Method>> vtableSupplier = Suppliers.memoize(new Supplier<List<Method>>() {
-        @Override public List<Method> get() {
+        VirtualTableSupplier(ClassProto cProto) {
+            classProto = cProto;
+        }
+
+        abstract List<Method> getVirtualTable(List<Method> vtable);
+
+        @Override
+        public List<Method> get() {
             List<Method> vtable = Lists.newArrayList();
 
             //copy the virtual methods from the superclass
             String superclassType;
             try {
-                superclassType = getSuperclass();
+                superclassType = classProto.getSuperclass();
             } catch (UnresolvedClassException ex) {
-                vtable.addAll(((ClassProto)classPath.getClass("Ljava/lang/Object;")).getVtable());
-                vtableFullyResolved = false;
+                vtable.addAll(((ClassProto) classProto.classPath.getClass("Ljava/lang/Object;")).getVtable());
+                classProto.vtableFullyResolved = false;
                 return vtable;
             }
 
             if (superclassType != null) {
-                ClassProto superclass = (ClassProto) classPath.getClass(superclassType);
+                ClassProto superclass = (ClassProto) classProto.classPath.getClass(superclassType);
                 vtable.addAll(superclass.getVtable());
 
-                // if the superclass's vtable wasn't fully resolved, then we can't know where the new methods added by this
-                // class should start, so we just propagate what we can from the parent and hope for the best.
+                // If the superclass's vtable wasn't fully resolved, then we can't know where the
+                // new methods added by this class should start, so we just propagate what we can
+                // from the parent and hope for the best.
                 if (!superclass.vtableFullyResolved) {
-                    vtableFullyResolved = false;
+                    classProto.vtableFullyResolved = false;
                     return vtable;
                 }
             }
 
-            //iterate over the virtual methods in the current class, and only add them when we don't already have the
-            //method (i.e. if it was implemented by the superclass)
-            if (!isInterface()) {
-                addToVtable(getClassDef().getVirtualMethods(), vtable, true);
-
-                // assume that interface method is implemented in the current class, when adding it to vtable
-                // otherwise it looks like that method is invoked on an interface, which fails Dalvik's optimization checks
-                for (ClassDef interfaceDef: getDirectInterfaces()) {
-                    List<Method> interfaceMethods = Lists.newArrayList();
-                    for (Method interfaceMethod: interfaceDef.getVirtualMethods()) {
-                        ImmutableMethod method = new ImmutableMethod(
-                                type,
-                                interfaceMethod.getName(),
-                                interfaceMethod.getParameters(),
-                                interfaceMethod.getReturnType(),
-                                interfaceMethod.getAccessFlags(),
-                                interfaceMethod.getAnnotations(),
-                                interfaceMethod.getImplementation());
-                        interfaceMethods.add(method);
-                    }
-                    addToVtable(interfaceMethods, vtable, false);
-                }
+            // Iterate over the virtual methods in the current class, and only add them when
+            // we don't already have the method (i.e. if it was implemented by the superclass).
+            if (!classProto.isInterface()) {
+                return getVirtualTable(vtable);
             }
+            return vtable;
+        }
+
+        static boolean canAccess(@Nonnull TypeProto type, @Nonnull Method virtualMethod) {
+            if (!methodIsPackagePrivate(virtualMethod.getAccessFlags())) {
+                return true;
+            }
+
+            String otherPackage = getPackage(virtualMethod.getDefiningClass());
+            String ourPackage = getPackage(type.getType());
+            return otherPackage.equals(ourPackage);
+        }
+
+        @Nonnull
+        static String getPackage(@Nonnull String classType) {
+            int lastSlash = classType.lastIndexOf('/');
+            if (lastSlash < 0) {
+                return "";
+            }
+            return classType.substring(1, lastSlash);
+        }
+
+        static boolean methodSignaturesMatch(@Nonnull Method a, @Nonnull Method b) {
+            return (a.getName().equals(b.getName()) &&
+                    a.getReturnType().equals(b.getReturnType()) &&
+                    a.getParameters().equals(b.getParameters()));
+        }
+
+        static boolean methodIsPackagePrivate(int accessFlags) {
+            return (accessFlags & (AccessFlags.PRIVATE.getValue() |
+                    AccessFlags.PROTECTED.getValue() |
+                    AccessFlags.PUBLIC.getValue())) == 0;
+        }
+    }
+
+    private static class VirtualTableSupplierLegacy extends VirtualTableSupplier {
+        VirtualTableSupplierLegacy(ClassProto classProto) {
+            super(classProto);
+        }
+
+        @Override
+        public List<Method> getVirtualTable(List<Method> vtable) {
+            addToVtable(classProto.getClassDef().getVirtualMethods(), vtable, true);
+
+            // Assume that interface method is implemented in the current class, when adding
+            // it to vtable otherwise it looks like that method is invoked on an interface,
+            // which fails Dalvik's optimization checks.
+            for (ClassDef interfaceDef: classProto.getDirectInterfaces()) {
+                List<Method> interfaceMethods = Lists.newArrayList();
+                for (Method interfaceMethod: interfaceDef.getVirtualMethods()) {
+                    ImmutableMethod method = new ImmutableMethod(
+                            classProto.type,
+                            interfaceMethod.getName(),
+                            interfaceMethod.getParameters(),
+                            interfaceMethod.getReturnType(),
+                            interfaceMethod.getAccessFlags(),
+                            interfaceMethod.getAnnotations(),
+                            interfaceMethod.getImplementation());
+                    interfaceMethods.add(method);
+                }
+                addToVtable(interfaceMethods, vtable, false);
+            }
+
             return vtable;
         }
 
@@ -1171,11 +1216,13 @@ public class ClassProto implements TypeProto {
             List<? extends Method> methods = Lists.newArrayList(localMethods);
             Collections.sort(methods);
 
-            outer: for (Method virtualMethod: methods) {
-                for (int i=0; i<vtable.size(); i++) {
+            outer:
+            for (Method virtualMethod : methods) {
+                for (int i = 0; i < vtable.size(); i++) {
                     Method superMethod = vtable.get(i);
                     if (methodSignaturesMatch(superMethod, virtualMethod)) {
-                        if (!classPath.shouldCheckPackagePrivateAccess() || canAccess(superMethod)) {
+                        if (!classProto.classPath.checkPackagePrivateAccess
+                                || canAccess(classProto, superMethod)) {
                             if (replaceExisting) {
                                 vtable.set(i, virtualMethod);
                             }
@@ -1183,40 +1230,101 @@ public class ClassProto implements TypeProto {
                         }
                     }
                 }
-                // we didn't find an equivalent method, so add it as a new entry
+                // We didn't find an equivalent method, so add it as a new entry.
                 vtable.add(virtualMethod);
             }
         }
+    }
 
-        private boolean methodSignaturesMatch(@Nonnull Method a, @Nonnull Method b) {
-            return (a.getName().equals(b.getName()) &&
-                    a.getReturnType().equals(b.getReturnType()) &&
-                    a.getParameters().equals(b.getParameters()));
+    private static class VirtualTableSupplierLatest extends VirtualTableSupplier {
+        VirtualTableSupplierLatest(ClassProto classProto) {
+            super(classProto);
         }
 
-        private boolean canAccess(@Nonnull Method virtualMethod) {
-            if (!methodIsPackagePrivate(virtualMethod.getAccessFlags())) {
-                return true;
+        @Override
+        public List<Method> getVirtualTable(List<Method> vtable) {
+            addToVtable(Lists.newArrayList(classProto.getClassDef().getVirtualMethods()),
+                    vtable, true, false);
+
+            for (ClassDef interfaceDef : classProto.getDirectInterfaces()) {
+                List<Method> interfaceMethods = Lists.newArrayList();
+                List<Method> defaultMethods = null;
+
+                for (Method interfaceMethod : interfaceDef.getVirtualMethods()) {
+                    ImmutableMethod method = new ImmutableMethod(
+                            interfaceMethod.getDefiningClass(),
+                            interfaceMethod.getName(),
+                            interfaceMethod.getParameters(),
+                            interfaceMethod.getReturnType(),
+                            interfaceMethod.getAccessFlags(),
+                            interfaceMethod.getAnnotations(),
+                            interfaceMethod.getImplementation());
+                    if (MethodUtil.isDefault(interfaceMethod)) {
+                        if (defaultMethods == null) {
+                            defaultMethods = Lists.newArrayList();
+                        }
+                        defaultMethods.add(method);
+                    } else {
+                        interfaceMethods.add(method);
+                    }
+                }
+                if (defaultMethods != null) {
+                    addToVtable(defaultMethods, vtable, true, true);
+                }
+                addToVtable(interfaceMethods, vtable, false, false);
             }
 
-            String otherPackage = getPackage(virtualMethod.getDefiningClass());
-            String ourPackage = getPackage(getClassDef().getType());
-            return otherPackage.equals(ourPackage);
+            return vtable;
         }
 
-        @Nonnull
-        private String getPackage(@Nonnull String classType) {
-            int lastSlash = classType.lastIndexOf('/');
-            if (lastSlash < 0) {
-                return "";
+        private void addToVtable(@Nonnull List<Method> localMethods,
+                                 @Nonnull List<Method> vtable, boolean replaceExisting,
+                                 boolean arrangeDefaultMethod) {
+            Collections.sort(localMethods);
+
+            outer:
+            for (Method virtualMethod : localMethods) {
+                for (int i = 0; i < vtable.size(); i++) {
+                    Method superMethod = vtable.get(i);
+                    if (methodSignaturesMatch(superMethod, virtualMethod)) {
+                        if (!classProto.classPath.checkPackagePrivateAccess
+                                || canAccess(classProto, superMethod)) {
+                            if (replaceExisting) {
+                                if (arrangeDefaultMethod) {
+                                    TypeProto interfaceImpl = classProto.classPath.getClass(
+                                            virtualMethod.getDefiningClass());
+                                    if (!interfaceImpl.implementsInterface(
+                                            superMethod.getDefiningClass())) {
+                                        // The current vtable has included the overridden default
+                                        // method, so if we meet the method from parent interface,
+                                        // just skip it.
+                                        continue outer;
+                                    }
+                                }
+                                vtable.set(i, virtualMethod);
+
+                                // Workaround to simulate for N bug (maybe) which
+                                // adds duplicate default method.
+                                if ((arrangeDefaultMethod || MethodUtil.isAbstract(virtualMethod))
+                                        && !virtualMethod.getDefiningClass().equals(
+                                        superMethod.getDefiningClass())) {
+                                    System.out.println(
+                                            "#addred# " + MethodUtil.toSourceStyleString(virtualMethod));
+                                    vtable.add(virtualMethod);
+                                }
+                            }
+                            continue outer;
+                        }
+                    }
+                }
+                // We didn't find an equivalent method, so add it as a new entry.
+                vtable.add(virtualMethod);
             }
-            return classType.substring(1, lastSlash);
         }
+    }
 
-        private boolean methodIsPackagePrivate(int accessFlags) {
-            return (accessFlags & (AccessFlags.PRIVATE.getValue() |
-                    AccessFlags.PROTECTED.getValue() |
-                    AccessFlags.PUBLIC.getValue())) == 0;
-        }
-    });
+    @Nonnull
+    List<Method> getVtable() {
+        return vtableSupplier.get();
+    }
 }

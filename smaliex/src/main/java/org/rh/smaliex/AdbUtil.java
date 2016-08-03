@@ -149,7 +149,7 @@ public class AdbUtil {
         }
     }
 
-    final static boolean[] state = new boolean[2];
+    private final static boolean[] state = new boolean[2];
 
     public static void runOneTimeAction(final OneTimeAction action) {
         final int RUNNING = 0;
@@ -185,7 +185,7 @@ public class AdbUtil {
             synchronized (state) {
                 try {
                     state.wait(1000);
-                } catch (InterruptedException ex) {
+                } catch (InterruptedException ignored) {
                 }
                 if (!state[DONE] && !state[RUNNING]) {
                     LLog.i("Waiting device countdown " + checkDeviceCount);
@@ -197,7 +197,7 @@ public class AdbUtil {
                 if (!state[DONE]) {
                     try {
                         state.wait();
-                    } catch (InterruptedException ex) {
+                    } catch (InterruptedException ignored) {
                     }
                 }
             }

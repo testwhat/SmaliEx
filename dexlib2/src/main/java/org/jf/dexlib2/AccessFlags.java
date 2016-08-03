@@ -52,7 +52,7 @@ public enum AccessFlags {
     ANNOTATION(0x2000, "annotation", true, false, false),
     ENUM(0x4000, "enum", true, false, true),
     CONSTRUCTOR(0x10000, "constructor", false, true, false),
-    DECLARED_SYNCHRONIZED(0x20000, "declared-synchronized", false, true, false),
+    DECLARED_SYNCHRONIZED(0x20000, "synchronized", false, true, false),
     CLASS_IS_PROXY(0x40000, "class-is-proxy", true, false, false),
     SKIP_ACCESS_CHECKS(0x80000, "skip-access-checks", false, true, false),
     VERIFICATION_ATTEMPTED(0x80000, "verification-attempted", true, false, false), // runtime

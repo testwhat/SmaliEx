@@ -50,8 +50,8 @@ import org.jf.dexlib2.rewriter.RewriterModule;
 import org.jf.dexlib2.rewriter.Rewriters;
 
 public class DexUtil {
-    public static final int API_LEVEL = 19;
-    public static Opcodes DEFAULT_OPCODES;
+    private static Opcodes DEFAULT_OPCODES;
+    static final int API_LEVEL = 19;
 
     private static final ConcurrentHashMap<Integer, SoftReference<Opcodes>> opCodesCache =
             new ConcurrentHashMap<>();
@@ -397,11 +397,11 @@ public class DexUtil {
         private Method mCurrentMethod;
         private String mFailInfoLocation;
 
-        public ODexRewriterModule(String bootClassPath, Opcodes opcodes, String ext) {
+        ODexRewriterModule(String bootClassPath, Opcodes opcodes, String ext) {
             mClassPath = getClassPath(bootClassPath, opcodes, ext);
         }
 
-        public ODexRewriterModule(String bootClassPath, Opcodes opcodes) {
+        ODexRewriterModule(String bootClassPath, Opcodes opcodes) {
             this(bootClassPath, opcodes, ".dex;.jar");
         }
 
@@ -443,7 +443,8 @@ public class DexUtil {
         void handleAnalysisException(AnalysisException ae) {
             LLog.e("Analysis error in class=" + mCurrentMethod.getDefiningClass()
                     + " method=" + mCurrentMethod.getName() + "\n" + ae.getContext());
-            StackTraceElement[] stacks = ae.getStackTrace();
+            StackTraceElement[] stacks = ae.getCause() == null
+                    ? ae.getStackTrace() : ae.getCause().getStackTrace();
             if (LLog.VERBOSE || stacks.length < 10) {
                 LLog.ex(ae);
             } else {

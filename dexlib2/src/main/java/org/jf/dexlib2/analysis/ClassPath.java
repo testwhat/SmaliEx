@@ -60,7 +60,7 @@ import com.google.common.collect.Maps;
 public class ClassPath {
     @Nonnull private final TypeProto unknownClass;
     @Nonnull private HashMap<String, ClassDef> availableClasses = Maps.newHashMap();
-    private boolean checkPackagePrivateAccess;
+    public final boolean checkPackagePrivateAccess;
     ArrayList<DexFile> additionalDexFiles;
     public final Opcodes.Version version;
 
@@ -185,10 +185,6 @@ public class ClassPath {
     @Nonnull
     public TypeProto getUnknownClass() {
         return unknownClass;
-    }
-
-    public boolean shouldCheckPackagePrivateAccess() {
-        return checkPackagePrivateAccess;
     }
 
     @Nonnull

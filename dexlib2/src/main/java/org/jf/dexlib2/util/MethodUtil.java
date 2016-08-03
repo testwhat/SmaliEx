@@ -63,6 +63,14 @@ public final class MethodUtil {
         return (method.getAccessFlags() & directMask) != 0;
     }
 
+    public static boolean isAbstract(@Nonnull Method method) {
+        return AccessFlags.ABSTRACT.isSet(method.getAccessFlags());
+    }
+
+    public static boolean isDefault(@Nonnull Method method) {
+        return AccessFlags.DEFAULT.isSet(method.getAccessFlags());
+    }
+
     public static boolean isStatic(@Nonnull Method method) {
         return AccessFlags.STATIC.isSet(method.getAccessFlags());
     }
@@ -124,7 +132,8 @@ public final class MethodUtil {
         for (MethodParameter param : m.getParameters()) {
             String paramName = param.getName();
             if (paramName == null) {
-                paramName = TypeUtils.isPrimitiveType(param.getType()) ? "val" : "obj";
+                paramName = TypeUtils.isPrimitiveType(param.getType()) ? "val"
+                        : param.getType().charAt(0) == TypeUtils.TYPE_ARRAY ? "arr" : "obj";
             }
             sb.append(TypeUtils.toFullString(param.getType()))
                     .append(" ").append(paramName).append(", ");
