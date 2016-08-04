@@ -31,6 +31,7 @@
 
 package org.jf.dexlib2.writer.pool;
 
+import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.ValueType;
 import org.jf.dexlib2.iface.Annotation;
 import org.jf.dexlib2.iface.AnnotationElement;
@@ -41,7 +42,6 @@ import org.jf.dexlib2.iface.value.*;
 import org.jf.dexlib2.writer.DexWriter;
 import org.jf.dexlib2.writer.io.DexDataStore;
 import org.jf.dexlib2.writer.io.FileDataStore;
-import org.jf.dexlib2.writer.pool.ProtoPool.Key;
 import org.jf.util.ExceptionWithContext;
 
 import javax.annotation.Nonnull;
@@ -50,17 +50,15 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.Set;
 
-public class DexPool extends DexWriter<CharSequence, StringReference, CharSequence, TypeReference, Key,
-        FieldReference, MethodReference, PoolClassDef,
+public class DexPool extends DexWriter<CharSequence, StringReference, CharSequence, TypeReference,
+        MethodProtoReference, FieldReference, MethodReference, PoolClassDef,
         Annotation, Set<? extends Annotation>,
         TypeListPool.Key<? extends Collection<? extends CharSequence>>, Field, PoolMethod,
         EncodedValue, AnnotationElement> {
 
-    public static DexPool makeDexPool() {
-        return makeDexPool(15);
-    }
 
-    public static DexPool makeDexPool(int api) {
+    @Nonnull
+    public static DexPool makeDexPool(@Nonnull Opcodes opcodes) {
         StringPool stringPool = new StringPool();
         TypePool typePool = new TypePool(stringPool);
         FieldPool fieldPool = new FieldPool(stringPool, typePool);
@@ -72,19 +70,20 @@ public class DexPool extends DexWriter<CharSequence, StringReference, CharSequen
         ClassPool classPool = new ClassPool(stringPool, typePool, fieldPool, methodPool, annotationSetPool,
                 typeListPool);
 
-        return new DexPool(api, stringPool, typePool, protoPool, fieldPool, methodPool, classPool, typeListPool,
+        return new DexPool(opcodes, stringPool, typePool, protoPool, fieldPool, methodPool, classPool, typeListPool,
                 annotationPool, annotationSetPool);
     }
 
-    private DexPool(int api, StringPool stringPool, TypePool typePool, ProtoPool protoPool, FieldPool fieldPool,
-                    MethodPool methodPool, ClassPool classPool, TypeListPool typeListPool,
-                    AnnotationPool annotationPool, AnnotationSetPool annotationSetPool) {
-        super(api, stringPool, typePool, protoPool, fieldPool, methodPool,
+    protected DexPool(Opcodes opcodes, StringPool stringPool, TypePool typePool, ProtoPool protoPool,
+                      FieldPool fieldPool, MethodPool methodPool, ClassPool classPool, TypeListPool typeListPool,
+                      AnnotationPool annotationPool, AnnotationSetPool annotationSetPool) {
+        super(opcodes, stringPool, typePool, protoPool, fieldPool, methodPool,
                 classPool, typeListPool, annotationPool, annotationSetPool);
     }
 
-    public static void writeTo(@Nonnull DexDataStore dataStore, @Nonnull org.jf.dexlib2.iface.DexFile input) throws IOException {
-        DexPool dexPool = makeDexPool();
+    public static void writeTo(@Nonnull DexDataStore dataStore, @Nonnull org.jf.dexlib2.iface.DexFile input)
+            throws IOException {
+        DexPool dexPool = makeDexPool(input.getOpcodes());
         for (ClassDef classDef: input.getClasses()) {
             ((ClassPool)dexPool.classSection).intern(classDef);
         }
@@ -92,7 +91,7 @@ public class DexPool extends DexWriter<CharSequence, StringReference, CharSequen
     }
 
     public static void writeTo(@Nonnull String path, @Nonnull org.jf.dexlib2.iface.DexFile input) throws IOException {
-        DexPool dexPool = makeDexPool();
+        DexPool dexPool = makeDexPool(input.getOpcodes());
         for (ClassDef classDef: input.getClasses()) {
             ((ClassPool)dexPool.classSection).intern(classDef);
         }

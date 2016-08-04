@@ -31,11 +31,10 @@
 
 package org.jf.dexlib2;
 
-import java.util.HashMap;
+import com.google.common.collect.Maps;
 
 import javax.annotation.Nullable;
-
-import com.google.common.collect.Maps;
+import java.util.HashMap;
 
 public class Opcodes {
     public static final int OFFSET_OAT_VERSION = 16;

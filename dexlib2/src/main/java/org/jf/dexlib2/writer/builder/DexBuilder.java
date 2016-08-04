@@ -34,8 +34,8 @@ package org.jf.dexlib2.writer.builder;
 import com.google.common.base.Function;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.ValueType;
 import org.jf.dexlib2.iface.Annotation;
 import org.jf.dexlib2.iface.MethodImplementation;
@@ -49,30 +49,24 @@ import org.jf.util.ExceptionWithContext;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.io.IOException;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
 public class DexBuilder extends DexWriter<BuilderStringReference, BuilderStringReference, BuilderTypeReference,
-        BuilderTypeReference, BuilderProtoReference, BuilderFieldReference, BuilderMethodReference,
+        BuilderTypeReference, BuilderMethodProtoReference, BuilderFieldReference, BuilderMethodReference,
         BuilderClassDef, BuilderAnnotation, BuilderAnnotationSet, BuilderTypeList, BuilderField, BuilderMethod,
         BuilderEncodedValue, BuilderAnnotationElement> {
 
-    private final BuilderContext context;
+    @Nonnull private final BuilderContext context;
 
-    public static DexBuilder makeDexBuilder() {
+    @Nonnull public static DexBuilder makeDexBuilder(@Nonnull Opcodes opcodes) {
         BuilderContext context = new BuilderContext();
-        return new DexBuilder(15, context);
+        return new DexBuilder(opcodes, context);
     }
 
-    public static DexBuilder makeDexBuilder(int api) {
-        BuilderContext context = new BuilderContext();
-        return new DexBuilder(api, context);
-    }
-
-    private DexBuilder(int api, @Nonnull BuilderContext context) {
-        super(api, context.stringPool, context.typePool, context.protoPool,
+    private DexBuilder(@Nonnull Opcodes opcodes, @Nonnull BuilderContext context) {
+        super(opcodes, context.stringPool, context.typePool, context.protoPool,
                 context.fieldPool, context.methodPool, context.classPool, context.typeListPool, context.annotationPool,
                 context.annotationSetPool);
         this.context = context;
@@ -170,6 +164,10 @@ public class DexBuilder extends DexWriter<BuilderStringReference, BuilderStringR
         return context.methodPool.internMethod(method);
     }
 
+    @Nonnull public BuilderMethodProtoReference internMethodProtoReference(@Nonnull MethodProtoReference methodProto) {
+        return context.protoPool.internMethodProto(methodProto);
+    }
+
     @Nonnull public BuilderReference internReference(@Nonnull Reference reference) {
         if (reference instanceof StringReference) {
             return internStringReference(((StringReference)reference).getString());
@@ -182,6 +180,9 @@ public class DexBuilder extends DexWriter<BuilderStringReference, BuilderStringR
         }
         if (reference instanceof FieldReference) {
             return internFieldReference((FieldReference)reference);
+        }
+        if (reference instanceof MethodProtoReference) {
+            return internMethodProtoReference((MethodProtoReference) reference);
         }
         throw new IllegalArgumentException("Could not determine type of reference");
     }
