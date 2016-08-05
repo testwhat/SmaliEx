@@ -34,6 +34,7 @@ package org.jf.dexlib2;
 import java.util.HashMap;
 
 public enum AccessFlags {
+    // See /art/runtime/modifiers.h
     PUBLIC(0x1, "public", true, true, true),
     PRIVATE(0x2, "private", true, true, true),
     PROTECTED(0x4, "protected", true, true, true),
@@ -71,7 +72,12 @@ public enum AccessFlags {
     final boolean validForMethod;
     final boolean validForField;
 
-    //cache the array of all AccessFlags, because .values() allocates a new array for every call
+    public final static int JAVA_FLAGS_MASK = 0xffff;
+    // See /art/runtime/dex_file_verifier.cc CheckMethodAccessFlags
+    public final static int VALID_METHOD_FLAGS_MASK = JAVA_FLAGS_MASK
+            | CONSTRUCTOR.value | DECLARED_SYNCHRONIZED.value;
+
+    // Cache the array of all AccessFlags, because .values() allocates a new array for every call
     private final static AccessFlags[] allFlags;
 
     private static HashMap<String, AccessFlags> accessFlagsByName;
@@ -183,6 +189,10 @@ public enum AccessFlags {
 
     public static AccessFlags getAccessFlag(String accessFlag) {
         return accessFlagsByName.get(accessFlag);
+    }
+
+    public static boolean canBeDefaultMethod(int accessFlag) {
+        return (accessFlag & (SYNTHETIC.value | CONSTRUCTOR.value | ABSTRACT.value)) == 0;
     }
 
     public int getValue() {
