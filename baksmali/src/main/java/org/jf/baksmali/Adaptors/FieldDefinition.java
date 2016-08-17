@@ -78,7 +78,7 @@ public class FieldDefinition {
         writer.write('\n');
 
         Collection<? extends Annotation> annotations = field.getAnnotations();
-        if (annotations.size() > 0) {
+        if (!annotations.isEmpty()) {
             writer.indent(4);
 
             String containingClass = null;

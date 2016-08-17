@@ -144,7 +144,7 @@ public abstract class ImmutableConverter<ImmutableItem, Item> {
     @Nonnull
     public SortedSet<ImmutableItem> toSortedSet(@Nonnull Comparator<? super ImmutableItem> comparator,
                                                 @Nullable final SortedSet<? extends Item> sortedSet) {
-        if (sortedSet == null || sortedSet.size() == 0) {
+        if (sortedSet == null || sortedSet.isEmpty()) {
             return ImmutableSortedSet.of();
         }
 

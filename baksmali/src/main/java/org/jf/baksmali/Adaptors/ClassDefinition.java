@@ -148,7 +148,7 @@ public class ClassDefinition {
     private void writeInterfaces(IndentingWriter writer) throws IOException {
         List<String> interfaces = classDef.getInterfaces();
 
-        if (interfaces.size() != 0) {
+        if (!interfaces.isEmpty()) {
             writer.write('\n');
             writer.write("# interfaces\n");
             for (String interfaceName: interfaces) {
@@ -161,7 +161,7 @@ public class ClassDefinition {
 
     private void writeAnnotations(IndentingWriter writer) throws IOException {
         Collection<? extends Annotation> classAnnotations = classDef.getAnnotations();
-        if (classAnnotations.size() != 0) {
+        if (!classAnnotations.isEmpty()) {
             writer.write("\n\n");
             writer.write("# annotations\n");
 

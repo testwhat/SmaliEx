@@ -43,7 +43,7 @@ public class ArrayEncodedValueAdaptor {
                                @Nullable String containingClass) throws IOException {
         writer.write('{');
         Collection<? extends EncodedValue> values = arrayEncodedValue.getValue();
-        if (values.size() == 0) {
+        if (values.isEmpty()) {
             writer.write('}');
             return;
         }

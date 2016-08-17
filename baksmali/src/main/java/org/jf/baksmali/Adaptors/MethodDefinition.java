@@ -331,7 +331,7 @@ public class MethodDefinition {
             String parameterType = parameter.getType();
             String parameterName = parameter.getName();
             Collection<? extends Annotation> annotations = parameter.getAnnotations();
-            if ((options.outputDebugInfo && parameterName != null) || annotations.size() != 0) {
+            if ((options.outputDebugInfo && parameterName != null) || !annotations.isEmpty()) {
                 writer.write(".param p");
                 writer.printSignedIntAsDec(registerNumber);
 
@@ -342,7 +342,7 @@ public class MethodDefinition {
                 writer.write("    # ");
                 writer.write(parameterType);
                 writer.write("\n");
-                if (annotations.size() > 0) {
+                if (!annotations.isEmpty()) {
                     writer.indent(4);
 
                     String containingClass = null;
@@ -536,7 +536,7 @@ public class MethodDefinition {
 
     private void addTries(List<MethodItem> methodItems) {
         List<? extends TryBlock<? extends ExceptionHandler>> tryBlocks = methodImpl.getTryBlocks();
-        if (tryBlocks.size() == 0) {
+        if (tryBlocks.isEmpty()) {
             return;
         }
 

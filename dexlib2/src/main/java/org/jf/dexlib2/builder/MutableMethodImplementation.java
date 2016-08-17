@@ -935,7 +935,7 @@ public class MutableMethodImplementation implements MethodImplementation {
                                                                      @Nonnull int[] codeAddressToIndex,
                                                                      @Nonnull PackedSwitchPayload instruction) {
         List<? extends SwitchElement> switchElements = instruction.getSwitchElements();
-        if (switchElements.size() == 0) {
+        if (switchElements.isEmpty()) {
             return new BuilderPackedSwitchPayload(0, null);
         }
 
@@ -960,7 +960,7 @@ public class MutableMethodImplementation implements MethodImplementation {
                                                                      @Nonnull int[] codeAddressToIndex,
                                                                      @Nonnull SparseSwitchPayload instruction) {
         List<? extends SwitchElement> switchElements = instruction.getSwitchElements();
-        if (switchElements.size() == 0) {
+        if (switchElements.isEmpty()) {
             return new BuilderSparseSwitchPayload(null);
         }
 
