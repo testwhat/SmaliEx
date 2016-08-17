@@ -155,6 +155,7 @@ public abstract class AnnotationsDirectory {
             this.directoryOffset = directoryOffset;
         }
 
+        @Override
         public int getFieldAnnotationCount() {
             return dexFile.readSmallUint(directoryOffset + FIELD_COUNT_OFFSET);
         }
@@ -167,11 +168,13 @@ public abstract class AnnotationsDirectory {
             return dexFile.readSmallUint(directoryOffset + PARAMETER_COUNT_OFFSET);
         }
 
+        @Override
         @Nonnull
         public Set<? extends DexBackedAnnotation> getClassAnnotations() {
             return getAnnotations(dexFile, dexFile.readSmallUint(directoryOffset));
         }
 
+        @Override
         @Nonnull
         public AnnotationIterator getFieldAnnotationIterator() {
             int fieldAnnotationCount = getFieldAnnotationCount();
@@ -181,6 +184,7 @@ public abstract class AnnotationsDirectory {
             return new AnnotationIteratorImpl(directoryOffset + ANNOTATIONS_START_OFFSET, fieldAnnotationCount);
         }
 
+        @Override
         @Nonnull
         public AnnotationIterator getMethodAnnotationIterator() {
             int methodCount = getMethodAnnotationCount();
@@ -193,6 +197,7 @@ public abstract class AnnotationsDirectory {
             return new AnnotationIteratorImpl(methodAnnotationsOffset, methodCount);
         }
 
+        @Override
         @Nonnull
         public AnnotationIterator getParameterAnnotationIterator() {
             int parameterAnnotationCount = getParameterAnnotationCount();
@@ -220,6 +225,7 @@ public abstract class AnnotationsDirectory {
                 this.currentIndex = 0;
             }
 
+            @Override
             public int seekTo(int itemIndex) {
                 while (currentItemIndex < itemIndex && (currentIndex+1) < size) {
                     currentIndex++;
@@ -232,6 +238,7 @@ public abstract class AnnotationsDirectory {
                 return 0;
             }
 
+            @Override
             public void reset() {
                 this.currentItemIndex = dexFile.readSmallUint(startOffset);
                 this.currentIndex = 0;

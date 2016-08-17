@@ -46,6 +46,7 @@ public abstract class MethodItem implements Comparable<MethodItem> {
     //return an arbitrary double that determines how this item will be sorted with others at the same address
     public abstract double getSortOrder();
 
+    @Override
     public int compareTo(MethodItem methodItem) {
         int result = ((Integer) codeAddress).compareTo(methodItem.codeAddress);
 

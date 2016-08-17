@@ -88,6 +88,7 @@ public class baksmali {
                     this.prefix = prefix;
                 }
 
+                @Override
                 public void startElement(String uri, String localName,
                         String qName, Attributes attr) throws SAXException {
                     if (qName.equals("public")) {

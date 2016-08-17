@@ -120,10 +120,12 @@ class BuilderProtoPool
             this.returnType = returnType;
         }
 
+        @Override
         @Nonnull public List<? extends CharSequence> getParameterTypes() {
             return parameters;
         }
 
+        @Override
         @Nonnull public String getReturnType() {
             return returnType;
         }
