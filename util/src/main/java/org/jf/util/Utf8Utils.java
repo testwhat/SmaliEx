@@ -197,7 +197,7 @@ public final class Utf8Utils {
         }
         int outAt = 0;
 
-        int at = 0;
+        int at;
         for (at = start; utf16Length > 0; utf16Length--) {
             int v0 = bytes[at] & 0xFF;
             char out;

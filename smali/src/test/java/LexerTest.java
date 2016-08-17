@@ -135,7 +135,7 @@ public class LexerTest {
         String smaliFile = String.format("LexerTest%s%s.smali", File.separatorChar, test);
         String tokensFile = String.format("LexerTest%s%s.tokens", File.separatorChar, test);
 
-        expectedTokensTestGrammarLexer expectedTokensLexer = null;
+        expectedTokensTestGrammarLexer expectedTokensLexer;
         try {
             expectedTokensLexer = new expectedTokensTestGrammarLexer(new ANTLRInputStream(
                     LexerTest.class.getClassLoader().getResourceAsStream(tokensFile)));
