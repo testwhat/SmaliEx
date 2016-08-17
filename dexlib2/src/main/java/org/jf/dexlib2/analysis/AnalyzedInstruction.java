@@ -118,7 +118,7 @@ public class AnalyzedInstruction implements Comparable<AnalyzedInstruction> {
         }
     }
 
-    public static Instruction START_INSTR = new StartInstruction();
+    public static final Instruction START_INSTR = new StartInstruction();
 
     public AnalyzedInstruction(
             @Nonnull MethodAnalyzer methodAnalyzer, @Nonnull Instruction instruction,
