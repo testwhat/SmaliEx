@@ -461,14 +461,6 @@ Type = {PrimitiveType} | {ClassDescriptor} | {ArrayDescriptor}
         return newToken(INSTRUCTION_FORMAT21c_TYPE);
     }
 
-    "capture-variable" {  // e.g. 'capture-variable vB, <string id>'
-        return newToken(INSTRUCTION_FORMAT21c_LAMBDA);
-    }
-
-    "create-lambda" { // e.g. 'create-lambda vClosure, <method id>'
-        return newToken(INSTRUCTION_FORMAT21c_METHOD);
-    }
-
     "const/high16" {
         return newToken(INSTRUCTION_FORMAT21ih);
     }
@@ -500,13 +492,10 @@ Type = {PrimitiveType} | {ClassDescriptor} | {ArrayDescriptor}
         return newToken(INSTRUCTION_FORMAT22c_FIELD_ODEX);
     }
 
-    "instance-of" | "new-array"  | "unbox-lambda" {
+    "instance-of" | "new-array" {
         return newToken(INSTRUCTION_FORMAT22c_TYPE);
     }
 
-    "liberate-variable" {
-        return newToken(INSTRUCTION_FORMAT22c_STRING);
-    }
     "iget-quick" | "iget-wide-quick" | "iget-object-quick" | "iput-quick" | "iput-wide-quick" | "iput-object-quick" {
         return newToken(INSTRUCTION_FORMAT22cs_FIELD);
     }
@@ -524,7 +513,7 @@ Type = {PrimitiveType} | {ClassDescriptor} | {ArrayDescriptor}
         return newToken(INSTRUCTION_FORMAT22t);
     }
 
-    "move/from16" | "move-wide/from16" | "move-object/from16" | "box-lambda" {
+    "move/from16" | "move-wide/from16" | "move-object/from16" {
         return newToken(INSTRUCTION_FORMAT22x);
     }
 
@@ -536,10 +525,6 @@ Type = {PrimitiveType} | {ClassDescriptor} | {ArrayDescriptor}
     "sub-float" | "mul-float" | "div-float" | "rem-float" | "add-double" | "sub-double" | "mul-double" | "div-double" |
     "rem-double" {
         return newToken(INSTRUCTION_FORMAT23x);
-    }
-
-    "invoke-lambda" {  // e.g. invoke-lambda vClosure, {vD, vE, vF, vG} -- at most 4 params
-        return newToken(INSTRUCTION_FORMAT25x);
     }
 
     "goto/32" {

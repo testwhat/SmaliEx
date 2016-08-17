@@ -333,15 +333,6 @@ public enum Opcode {
     SPARSE_SWITCH_PAYLOAD(0x200, "sparse-switch-payload", ReferenceType.NONE, Format.SparseSwitchPayload, 0),
     ARRAY_PAYLOAD(0x300, "array-payload", ReferenceType.NONE, Format.ArrayPayload, 0),
 
-    // Reuse the deprecated f3-ff opcodes in Art:
-    INVOKE_LAMBDA(0xf3, "invoke-lambda", minApi(23), ReferenceType.NONE, Format.Format25x, Opcode.CAN_THROW | Opcode.CAN_CONTINUE | Opcode.SETS_RESULT | Opcode.EXPERIMENTAL),
-    // TODO: What about JUMBO support if the string ID is too large?
-    CAPTURE_VARIABLE(0xf5, "capture-variable", minApi(23), ReferenceType.STRING, Format.Format21c, Opcode.EXPERIMENTAL),
-    CREATE_LAMBDA(0xf6, "create-lambda", minApi(23), ReferenceType.METHOD, Format.Format21c, Opcode.SETS_REGISTER | Opcode.EXPERIMENTAL),
-    // TODO: do we need a capture/liberate wide?
-    LIBERATE_VARIABLE(0xf7, "liberate-variable", minApi(23), ReferenceType.STRING, Format.Format22c, Opcode.SETS_REGISTER | Opcode.EXPERIMENTAL),
-    BOX_LAMBDA(0xf8, "box-lambda", minApi(23), ReferenceType.NONE, Format.Format22x, Opcode.SETS_REGISTER | Opcode.EXPERIMENTAL),
-    UNBOX_LAMBDA(0xf9, "unbox-lambda", minApi(23), ReferenceType.TYPE, Format.Format22c, Opcode.SETS_REGISTER | Opcode.EXPERIMENTAL),
     INVOKE_POLYMORPHIC(0xfa, "invoke-polymorphic", minApi(26), ReferenceType.METHOD, ReferenceType.METHOD_PROTO, Format.Format45cc, Opcode.CAN_THROW | Opcode.CAN_CONTINUE | Opcode.SETS_RESULT),
     INVOKE_POLYMORPHIC_RANGE(0xfb, "invoke-polymorphic/range", minApi(26), ReferenceType.METHOD, ReferenceType.METHOD_PROTO, Format.Format4rcc, Opcode.CAN_THROW | Opcode.CAN_CONTINUE | Opcode.SETS_RESULT);
 
