@@ -6,8 +6,8 @@ Function concept:
 boot.oat -> extract optimized boot class dex files -> deoptimize to dex files  
 app.odex(oat) -> reference boot dex files to deoptimize
 
-Download latest version:  
-https://github.com/testwhat/SmaliEx/releases/tag/snapshot
+Latest build:  
+https://drone.io/github.com/testwhat/SmaliEx
 
 Build command:  
 gradlew -b smaliex/build.gradle dist
