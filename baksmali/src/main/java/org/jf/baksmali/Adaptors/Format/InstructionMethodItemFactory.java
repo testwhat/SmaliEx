@@ -61,7 +61,7 @@ public class InstructionMethodItemFactory {
             case SparseSwitchPayload:
                 return new SparseSwitchMethodItem(methodDef, codeAddress, (SparseSwitchPayload)instruction);
             default:
-                return new InstructionMethodItem<Instruction>(methodDef, codeAddress, instruction);
+                return new InstructionMethodItem<>(methodDef, codeAddress, instruction);
         }
     }
 }

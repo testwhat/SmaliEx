@@ -593,7 +593,7 @@ public abstract class DexWriter<
         encodedArraySectionOffset = writer.getPosition();
 
         HashMap<EncodedArrayKey<EncodedValue>, Integer> internedItems = Maps.newHashMap();
-        EncodedArrayKey<EncodedValue> key = new EncodedArrayKey<EncodedValue>();
+        EncodedArrayKey<EncodedValue> key = new EncodedArrayKey<>();
 
         for (ClassKey classKey: classSection.getSortedClasses()) {
             Collection <? extends EncodedValue> elements = classSection.getStaticInitializers(classKey);
@@ -606,7 +606,7 @@ public abstract class DexWriter<
                     int offset = writer.getPosition();
                     internedItems.put(key, offset);
                     classSection.setEncodedArrayOffset(classKey, offset);
-                    key = new EncodedArrayKey<EncodedValue>();
+                    key = new EncodedArrayKey<>();
 
                     numEncodedArrayItems++;
 
@@ -798,7 +798,7 @@ public abstract class DexWriter<
         ByteArrayOutputStream ehBuf = new ByteArrayOutputStream();
         debugSectionOffset = offsetWriter.getPosition();
         DebugWriter<StringKey, TypeKey> debugWriter =
-                new DebugWriter<StringKey, TypeKey>(stringSection, typeSection, offsetWriter);
+                new DebugWriter<>(stringSection, typeSection, offsetWriter);
 
         DexDataWriter codeWriter = new DexDataWriter(temp, 0);
 
@@ -844,7 +844,7 @@ public abstract class DexWriter<
                 int codeItemOffset = writeCodeItem(codeWriter, ehBuf, methodKey, tryBlocks, instructions, debugItemOffset);
 
                 if (codeItemOffset != -1) {
-                    codeOffsets.add(new CodeItemOffset<MethodKey>(methodKey, codeItemOffset));
+                    codeOffsets.add(new CodeItemOffset<>(methodKey, codeItemOffset));
                 }
             }
         }

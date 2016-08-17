@@ -60,8 +60,8 @@ public class baksmaliOptions {
     public List<String> bootClassPathEntries = Lists.newArrayList();
     public List<String> extraClassPathEntries = Lists.newArrayList();
 
-    public Map<String,String> resourceIdFileEntries = new HashMap<String,String>();
-    public Map<Integer,String> resourceIds = new HashMap<Integer,String>();
+    public Map<String,String> resourceIdFileEntries = new HashMap<>();
+    public Map<Integer,String> resourceIds = new HashMap<>();
 
     public boolean noParameterRegisters = false;
     public boolean useLocalsDirective = false;

@@ -50,7 +50,7 @@ public class LexerTest {
     private static final HashMap<String, Integer> tokenTypesByName;
 
     static {
-        tokenTypesByName = new HashMap<String, Integer>();
+        tokenTypesByName = new HashMap<>();
 
         for (int i=0; i<smaliParser.tokenNames.length; i++) {
             tokenTypesByName.put(smaliParser.tokenNames[i], i);

@@ -47,7 +47,7 @@ public class ArraySortedSet<T> implements SortedSet<T> {
     }
 
     public static <T> ArraySortedSet<T> of(@Nonnull Comparator<? super T> comparator, @Nonnull T[] arr) {
-        return new ArraySortedSet<T>(comparator, arr);
+        return new ArraySortedSet<>(comparator, arr);
     }
 
     @Override
