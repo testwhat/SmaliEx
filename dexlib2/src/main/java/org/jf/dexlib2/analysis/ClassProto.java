@@ -31,15 +31,14 @@
 
 package org.jf.dexlib2.analysis;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.TreeSet;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import com.google.common.base.Predicates;
+import com.google.common.base.Supplier;
+import com.google.common.base.Suppliers;
+import com.google.common.collect.FluentIterable;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 import org.jf.dexlib2.AccessFlags;
 import org.jf.dexlib2.Opcode;
@@ -56,13 +55,16 @@ import org.jf.dexlib2.util.TypeUtils;
 import org.jf.util.ExceptionWithContext;
 import org.jf.util.SparseArray;
 
-import com.google.common.base.Predicates;
-import com.google.common.base.Supplier;
-import com.google.common.base.Suppliers;
-import com.google.common.collect.FluentIterable;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * A class "prototype". This contains things like the interfaces, the superclass, the vtable and the instance fields
@@ -78,6 +80,8 @@ public class ClassProto implements TypeProto {
     protected boolean vtableFullyResolved = true;
     protected boolean interfacesFullyResolved = true;
     protected int objectSize;
+
+    protected Set<String> unresolvedInterfaces = null;
 
     public ClassProto(@Nonnull ClassPath classPath, @Nonnull String type) {
         if (type.charAt(0) != TypeUtils.TYPE_OBJECT) {
@@ -143,6 +147,7 @@ public class ClassProto implements TypeProto {
     private final Supplier<LinkedHashMap<String, ClassDef>> interfacesSupplier =
             Suppliers.memoize(new Supplier<LinkedHashMap<String, ClassDef>>() {
                 @Override public LinkedHashMap<String, ClassDef> get() {
+                    Set<String> unresolvedInterfaces = new HashSet<String>(0);
                     LinkedHashMap<String, ClassDef> interfaces = Maps.newLinkedHashMap();
 
                     try {
@@ -154,6 +159,7 @@ public class ClassProto implements TypeProto {
                                     interfaces.put(interfaceType, interfaceDef);
                                 } catch (UnresolvedClassException ex) {
                                     interfaces.put(interfaceType, null);
+                                    unresolvedInterfaces.add(interfaceType);
                                     interfacesFullyResolved = false;
                                 }
 
@@ -165,11 +171,13 @@ public class ClassProto implements TypeProto {
                                     }
                                 }
                                 if (!interfaceProto.interfacesFullyResolved) {
+                                    unresolvedInterfaces.addAll(interfaceProto.getUnresolvedInterfaces());
                                     interfacesFullyResolved = false;
                                 }
                             }
                         }
                     } catch (UnresolvedClassException ex) {
+                        unresolvedInterfaces.add(type);
                         interfacesFullyResolved = false;
                     }
 
@@ -180,8 +188,8 @@ public class ClassProto implements TypeProto {
                         interfaces.put(getType(), null);
                     }
 
+                    String superclass = getSuperclass();
                     try {
-                        String superclass = getSuperclass();
                         if (superclass != null) {
                             ClassProto superclassProto = (ClassProto) classPath.getClass(superclass);
                             for (String superclassInterface: superclassProto.getInterfaces().keySet()) {
@@ -190,16 +198,30 @@ public class ClassProto implements TypeProto {
                                 }
                             }
                             if (!superclassProto.interfacesFullyResolved) {
+                                unresolvedInterfaces.addAll(superclassProto.getUnresolvedInterfaces());
                                 interfacesFullyResolved = false;
                             }
                         }
                     } catch (UnresolvedClassException ex) {
+                        unresolvedInterfaces.add(superclass);
                         interfacesFullyResolved = false;
+                    }
+
+                    if (unresolvedInterfaces.size() > 0) {
+                        ClassProto.this.unresolvedInterfaces = unresolvedInterfaces;
                     }
 
                     return interfaces;
                 }
             });
+
+    @Nonnull
+    protected Set<String> getUnresolvedInterfaces() {
+        if (unresolvedInterfaces == null) {
+            return ImmutableSet.of();
+        }
+        return unresolvedInterfaces;
+    }
 
     /**
      * Gets the interfaces directly implemented by this class, or the interfaces they transitively implement.
@@ -215,7 +237,8 @@ public class ClassProto implements TypeProto {
                 FluentIterable.from(getInterfaces().values()).filter(Predicates.notNull());
 
         if (!interfacesFullyResolved) {
-            throw new UnresolvedClassException("Interfaces for class %s not fully resolved", getType());
+            throw new UnresolvedClassException("Interfaces for class %s not fully resolved: %s", getType(),
+                    String.join(",", getUnresolvedInterfaces()));
         }
 
         return directInterfaces;
