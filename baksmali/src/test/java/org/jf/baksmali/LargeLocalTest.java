@@ -1,18 +1,18 @@
 /*
- * Copyright 2015, Google Inc.
+ * Copyright 2016, Google Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met:
  *
- *     * Redistributions of source code must retain the above copyright
+ * Redistributions of source code must retain the above copyright
  * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
+ * Redistributions in binary form must reproduce the above
  * copyright notice, this list of conditions and the following disclaimer
  * in the documentation and/or other materials provided with the
  * distribution.
- *     * Neither the name of Google Inc. nor the names of its
+ * Neither the name of Google Inc. nor the names of its
  * contributors may be used to endorse or promote products derived from
  * this software without specific prior written permission.
  *
@@ -33,17 +33,22 @@ package org.jf.baksmali;
 
 import org.junit.Test;
 
-public class LambdaTest extends IdenticalRoundtripTest {
-
-    private baksmaliOptions createOptions() {
-        baksmaliOptions options = new baksmaliOptions();
-        options.apiLevel = 23;  // since we need at least level 23 for lambda opcodes
-        options.experimental = true; // since these opcodes aren't implemented in runtime yet);
-        return options;
+/**
+ * Test for a bug related to debug items that refer to a register that's outside the expected range for a method
+ */
+public class LargeLocalTest extends IdenticalRoundtripTest {
+    @Test
+    public void testLargeEndLocal() {
+        runTest("LargeEndLocal");
     }
 
     @Test
-    public void testHelloWorldLambda() {
-        runTest("HelloWorldLambda", createOptions());
+    public void testLargeRestartLocal() {
+        runTest("LargeRestartLocal");
+    }
+
+    @Test
+    public void testLargeStartLocal() {
+        runTest("LargeStartLocal");
     }
 }

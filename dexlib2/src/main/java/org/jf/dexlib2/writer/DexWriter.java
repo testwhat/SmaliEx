@@ -31,10 +31,26 @@
 
 package org.jf.dexlib2.writer;
 
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Ordering;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.zip.Adler32;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
 import org.jf.dexlib2.AccessFlags;
 import org.jf.dexlib2.Opcode;
 import org.jf.dexlib2.Opcodes;
@@ -43,7 +59,14 @@ import org.jf.dexlib2.base.BaseAnnotation;
 import org.jf.dexlib2.base.BaseAnnotationElement;
 import org.jf.dexlib2.builder.MutableMethodImplementation;
 import org.jf.dexlib2.builder.instruction.BuilderInstruction31c;
-import org.jf.dexlib2.dexbacked.raw.*;
+import org.jf.dexlib2.dexbacked.raw.ClassDefItem;
+import org.jf.dexlib2.dexbacked.raw.FieldIdItem;
+import org.jf.dexlib2.dexbacked.raw.HeaderItem;
+import org.jf.dexlib2.dexbacked.raw.ItemType;
+import org.jf.dexlib2.dexbacked.raw.MethodIdItem;
+import org.jf.dexlib2.dexbacked.raw.ProtoIdItem;
+import org.jf.dexlib2.dexbacked.raw.StringIdItem;
+import org.jf.dexlib2.dexbacked.raw.TypeIdItem;
 import org.jf.dexlib2.iface.Annotation;
 import org.jf.dexlib2.iface.ExceptionHandler;
 import org.jf.dexlib2.iface.TryBlock;
@@ -52,8 +75,39 @@ import org.jf.dexlib2.iface.debug.LineNumber;
 import org.jf.dexlib2.iface.instruction.Instruction;
 import org.jf.dexlib2.iface.instruction.OneRegisterInstruction;
 import org.jf.dexlib2.iface.instruction.ReferenceInstruction;
-import org.jf.dexlib2.iface.instruction.formats.*;
+import org.jf.dexlib2.iface.instruction.formats.ArrayPayload;
+import org.jf.dexlib2.iface.instruction.formats.Instruction10t;
+import org.jf.dexlib2.iface.instruction.formats.Instruction10x;
+import org.jf.dexlib2.iface.instruction.formats.Instruction11n;
+import org.jf.dexlib2.iface.instruction.formats.Instruction11x;
+import org.jf.dexlib2.iface.instruction.formats.Instruction12x;
+import org.jf.dexlib2.iface.instruction.formats.Instruction20bc;
+import org.jf.dexlib2.iface.instruction.formats.Instruction20t;
+import org.jf.dexlib2.iface.instruction.formats.Instruction21c;
+import org.jf.dexlib2.iface.instruction.formats.Instruction21ih;
+import org.jf.dexlib2.iface.instruction.formats.Instruction21lh;
+import org.jf.dexlib2.iface.instruction.formats.Instruction21s;
+import org.jf.dexlib2.iface.instruction.formats.Instruction21t;
+import org.jf.dexlib2.iface.instruction.formats.Instruction22b;
+import org.jf.dexlib2.iface.instruction.formats.Instruction22c;
+import org.jf.dexlib2.iface.instruction.formats.Instruction22s;
+import org.jf.dexlib2.iface.instruction.formats.Instruction22t;
+import org.jf.dexlib2.iface.instruction.formats.Instruction22x;
+import org.jf.dexlib2.iface.instruction.formats.Instruction23x;
+import org.jf.dexlib2.iface.instruction.formats.Instruction30t;
+import org.jf.dexlib2.iface.instruction.formats.Instruction31c;
+import org.jf.dexlib2.iface.instruction.formats.Instruction31i;
+import org.jf.dexlib2.iface.instruction.formats.Instruction31t;
+import org.jf.dexlib2.iface.instruction.formats.Instruction32x;
+import org.jf.dexlib2.iface.instruction.formats.Instruction35c;
+import org.jf.dexlib2.iface.instruction.formats.Instruction3rc;
+import org.jf.dexlib2.iface.instruction.formats.Instruction45cc;
+import org.jf.dexlib2.iface.instruction.formats.Instruction4rcc;
+import org.jf.dexlib2.iface.instruction.formats.Instruction51l;
+import org.jf.dexlib2.iface.instruction.formats.PackedSwitchPayload;
+import org.jf.dexlib2.iface.instruction.formats.SparseSwitchPayload;
 import org.jf.dexlib2.iface.reference.FieldReference;
+import org.jf.dexlib2.iface.reference.MethodProtoReference;
 import org.jf.dexlib2.iface.reference.MethodReference;
 import org.jf.dexlib2.iface.reference.StringReference;
 import org.jf.dexlib2.iface.reference.TypeReference;
@@ -68,23 +122,14 @@ import org.jf.dexlib2.writer.util.TryListBuilder;
 import org.jf.util.CollectionUtils;
 import org.jf.util.ExceptionWithContext;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.*;
-import java.util.Map.Entry;
-import java.util.zip.Adler32;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Ordering;
 
 public abstract class DexWriter<
         StringKey extends CharSequence, StringRef extends StringReference, TypeKey extends CharSequence,
-        TypeRef extends TypeReference, ProtoKey extends Comparable<ProtoKey>,
+        TypeRef extends TypeReference, ProtoRefKey extends MethodProtoReference,
         FieldRefKey extends FieldReference, MethodRefKey extends MethodReference,
         ClassKey extends Comparable<? super ClassKey>,
         AnnotationKey extends Annotation, AnnotationSetKey,
@@ -125,9 +170,10 @@ public abstract class DexWriter<
 
     protected final StringSection<StringKey, StringRef> stringSection;
     protected final TypeSection<StringKey, TypeKey, TypeRef> typeSection;
-    protected final ProtoSection<StringKey, TypeKey, ProtoKey, TypeListKey> protoSection;
+
+    protected final ProtoSection<StringKey, TypeKey, ProtoRefKey, TypeListKey> protoSection;
     public final FieldSection<StringKey, TypeKey, FieldRefKey, FieldKey> fieldSection;
-    public final MethodSection<StringKey, TypeKey, ProtoKey, MethodRefKey, MethodKey> methodSection;
+    public final MethodSection<StringKey, TypeKey, ProtoRefKey, MethodRefKey, MethodKey> methodSection;
     public final ClassSection<StringKey, TypeKey, TypeListKey, ClassKey, FieldKey, MethodKey, AnnotationSetKey,
             EncodedValue> classSection;
     
@@ -138,9 +184,9 @@ public abstract class DexWriter<
     protected DexWriter(Opcodes opcodes,
                         StringSection<StringKey, StringRef> stringSection,
                         TypeSection<StringKey, TypeKey, TypeRef> typeSection,
-                        ProtoSection<StringKey, TypeKey, ProtoKey, TypeListKey> protoSection,
+                        ProtoSection<StringKey, TypeKey, ProtoRefKey, TypeListKey> protoSection,
                         FieldSection<StringKey, TypeKey, FieldRefKey, FieldKey> fieldSection,
-                        MethodSection<StringKey, TypeKey, ProtoKey, MethodRefKey, MethodKey> methodSection,
+                        MethodSection<StringKey, TypeKey, ProtoRefKey, MethodRefKey, MethodKey> methodSection,
                         ClassSection<StringKey, TypeKey, TypeListKey, ClassKey, FieldKey, MethodKey, AnnotationSetKey,
                                 EncodedValue> classSection,
                         TypeListSection<TypeKey, TypeListKey> typeListSection,
@@ -347,12 +393,12 @@ public abstract class DexWriter<
         protoSectionOffset = writer.getPosition();
         int index = 0;
 
-        List<Map.Entry<? extends ProtoKey, Integer>> protoEntries = Lists.newArrayList(protoSection.getItems());
-        Collections.sort(protoEntries, DexWriter.<ProtoKey>comparableKeyComparator());
+        List<Map.Entry<? extends ProtoRefKey, Integer>> protoEntries = Lists.newArrayList(protoSection.getItems());
+        Collections.sort(protoEntries, DexWriter.<ProtoRefKey>comparableKeyComparator());
 
-        for (Map.Entry<? extends ProtoKey, Integer> entry: protoEntries) {
+        for (Map.Entry<? extends ProtoRefKey, Integer> entry: protoEntries) {
             entry.setValue(index++);
-            ProtoKey key = entry.getKey();
+            ProtoRefKey key = entry.getKey();
             writer.writeInt(stringSection.getItemIndex(protoSection.getShorty(key)));
             writer.writeInt(typeSection.getItemIndex(protoSection.getReturnType(key)));
             writer.writeInt(typeListSection.getNullableItemOffset(protoSection.getParameters(key)));
@@ -946,7 +992,7 @@ public abstract class DexWriter<
 
             InstructionWriter instructionWriter =
                     InstructionWriter.makeInstructionWriter(opcodes, writer, stringSection, typeSection, fieldSection,
-                            methodSection);
+                            methodSection, protoSection);
 
             writer.writeInt(codeUnitCount);
             for (Instruction instruction: instructions) {
@@ -1005,9 +1051,6 @@ public abstract class DexWriter<
                     case Format23x:
                         instructionWriter.write((Instruction23x)instruction);
                         break;
-                    case Format25x:
-                        instructionWriter.write((Instruction25x)instruction);
-                        break;
                     case Format30t:
                         instructionWriter.write((Instruction30t)instruction);
                         break;
@@ -1028,6 +1071,12 @@ public abstract class DexWriter<
                         break;
                     case Format3rc:
                         instructionWriter.write((Instruction3rc)instruction);
+                        break;
+                    case Format45cc:
+                        instructionWriter.write((Instruction45cc) instruction);
+                        break;
+                    case Format4rcc:
+                        instructionWriter.write((Instruction4rcc) instruction);
                         break;
                     case Format51l:
                         instructionWriter.write((Instruction51l)instruction);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Google Inc.
+ * Copyright 2016, Google Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,17 +31,11 @@
 
 package org.jf.dexlib2.iface.instruction;
 
-public interface OneFixedFourParameterRegisterInstruction extends VariableRegisterInstruction {
-    int getRegisterFixedC();
-    int getRegisterParameterD();
-    int getRegisterParameterE();
-    int getRegisterParameterF();
-    int getRegisterParameterG();
+import javax.annotation.Nonnull;
 
-    /** Returns the count of just the parameter register counts; in range of [0, 4] */
-    int getParameterRegisterCount();
+import org.jf.dexlib2.iface.reference.Reference;
 
-    /** Includes the total sum of both fixed and parameter register counts; at least 1 */
-    @Override
-    int getRegisterCount();
+public interface DualReferenceInstruction extends ReferenceInstruction {
+    @Nonnull Reference getReference2();
+    int getReferenceType2();
 }
