@@ -415,7 +415,7 @@ public class main {
         smaliParser parser = new smaliParser(tokens);
         parser.setVerboseErrors(verboseErrors);
         parser.setAllowOdex(allowOdex);
-        parser.setApiLevel(opcodes.version.api, experimental);
+        parser.setApiLevel(opcodes.version.api);
 
         smaliParser.smali_file_return result = parser.smali_file();
 
@@ -433,7 +433,7 @@ public class main {
         }
 
         smaliTreeWalker dexGen = new smaliTreeWalker(treeStream);
-        dexGen.setApiLevel(opcodes.version.api, experimental);
+        dexGen.setApiLevel(opcodes.version.api);
 
         dexGen.setVerboseErrors(verboseErrors);
         dexGen.setDexBuilder(DexBuilder.makeDexBuilder(opcodes));

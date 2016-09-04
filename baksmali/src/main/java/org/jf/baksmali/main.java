@@ -192,9 +192,6 @@ public class main {
                 case 'x':
                     options.deodex = true;
                     break;
-                case 'X':
-                    options.experimental = true;
-                    break;
                 case 'm':
                     options.noAccessorComments = true;
                     break;
@@ -256,8 +253,8 @@ public class main {
         }
 
         //Read in and parse the dex file
-        List<DexBackedDexFile> dexFiles = DexFileFactory.loadDexFiles(dexFileFile, options.dexEntry,
-                options.apiLevel, options.experimental);
+        List<DexBackedDexFile> dexFiles = DexFileFactory.loadDexFiles(
+                dexFileFile, options.dexEntry, options.apiLevel);
 
         for (int i = 0; i < dexFiles.size(); i++) {
             DexBackedDexFile dexFile = dexFiles.get(i);
@@ -276,8 +273,7 @@ public class main {
                 if (dexFile instanceof DexBackedOdexFile) {
                     options.bootClassPathEntries = ((DexBackedOdexFile) dexFile).getDependencies();
                 } else {
-                    options.bootClassPathEntries = getDefaultBootClassPathForApi(options.apiLevel,
-                            options.experimental);
+                    options.bootClassPathEntries = getDefaultBootClassPathForApi(options.apiLevel);
                 }
             }
 
@@ -297,7 +293,7 @@ public class main {
                     dumpFileName = commandLine.getOptionValue(inputDexFileName
                             + (i > 0 ? (i + 1) : "") + ".dump");
                 }
-                dump.dump(dexFile, dumpFileName, options.apiLevel, options.experimental);
+                dump.dump(dexFile, dumpFileName, options.apiLevel);
             }
 
             if (errorOccurred) {
@@ -513,7 +509,7 @@ public class main {
     }
 
     @Nonnull
-    private static List<String> getDefaultBootClassPathForApi(int apiLevel, boolean experimental) {
+    private static List<String> getDefaultBootClassPathForApi(int apiLevel) {
         if (apiLevel < 9) {
             return Lists.newArrayList(
                     "/system/framework/core.jar",

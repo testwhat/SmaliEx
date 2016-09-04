@@ -71,7 +71,6 @@ public class baksmaliOptions {
     public boolean noAccessorComments = false;
     public boolean allowOdex = false;
     public boolean deodex = false;
-    public boolean experimental = false;
     public boolean ignoreErrors = false;
     public boolean checkPackagePrivateAccess = false;
     public boolean useImplicitReferences = false;

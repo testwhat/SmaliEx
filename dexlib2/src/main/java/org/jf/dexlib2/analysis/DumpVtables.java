@@ -71,7 +71,6 @@ public class DumpVtables {
         ArrayList<String> bootClassPathDirs = Lists.newArrayList();
         String outFile = "vtables.txt";
         int apiLevel = 15;
-        boolean experimental = false;
 
         for (int i=0; i<parsedOptions.length; i++) {
             Option option = parsedOptions[i];
@@ -86,9 +85,6 @@ public class DumpVtables {
                     break;
                 case 'a':
                     apiLevel = Integer.parseInt(commandLine.getOptionValue("a"));
-                    break;
-                case 'X':
-                    experimental = true;
                     break;
                 default:
                     assert false;
@@ -109,9 +105,9 @@ public class DumpVtables {
         }
 
         try (FileOutputStream outStream = new FileOutputStream(outFile)) {
-            DexBackedDexFile dexFile = DexFileFactory.loadDexFile(dexFileFile, apiLevel, experimental);
+            DexBackedDexFile dexFile = DexFileFactory.loadDexFile(dexFileFile, apiLevel);
             Iterable<String> bootClassPaths = Splitter.on(":").split("core.jar:ext.jar:framework.jar:android.policy.jar:services.jar");
-            ClassPath classPath = ClassPath.fromClassPath(bootClassPathDirs, bootClassPaths, dexFile, apiLevel, experimental);
+            ClassPath classPath = ClassPath.fromClassPath(bootClassPathDirs, bootClassPaths, dexFile, apiLevel);
 
             for (ClassDef classDef: dexFile.getClasses()) {
                 ClassProto classProto = (ClassProto) classPath.getClass(classDef);

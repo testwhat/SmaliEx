@@ -46,39 +46,23 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 public final class DexFileFactory {
+
     @Nonnull
-    public static DexBackedDexFile loadDexFile(String path, int api)
+    public static DexBackedDexFile loadDexFile(File dexFile, int api)
             throws IOException {
-        return loadDexFile(path, api, false);
+        return loadDexFile(dexFile, "classes.dex", api);
     }
 
     @Nonnull
-    public static DexBackedDexFile loadDexFile(String path, int api, boolean experimental)
-            throws IOException {
-        return loadDexFile(new File(path), "classes.dex", new Opcodes(api, experimental));
-    }
-
-    @Nonnull
-    public static DexBackedDexFile loadDexFile(File dexFile, int api) throws IOException {
-        return loadDexFile(dexFile, api, false);
-    }
-
-    @Nonnull
-    public static DexBackedDexFile loadDexFile(File dexFile, int api, boolean experimental)
-            throws IOException {
-        return loadDexFile(dexFile, "classes.dex", new Opcodes(api, experimental));
-    }
-
-    @Nonnull
-    public static DexBackedDexFile loadDexFile(File dexFile, String dexEntry, int api,
-            boolean experimental) throws IOException {
-        return loadDexFile(dexFile, dexEntry, new Opcodes(api, experimental));
+    public static DexBackedDexFile loadDexFile(
+            File dexFile, String dexEntry, int api) throws IOException {
+        return loadDexFile(dexFile, dexEntry, Opcodes.forApi(api));
     }
 
     @Nonnull
     public static List<DexBackedDexFile> loadDexFiles(
-            File dexFile, String dexEntry, int api, boolean experimental) throws IOException {
-        return loadDexFiles(dexFile, dexEntry, new Opcodes(api, experimental));
+            File dexFile, String dexEntry, int api) throws IOException {
+        return loadDexFiles(dexFile, dexEntry, Opcodes.forApi(api));
     }
 
     @Nonnull

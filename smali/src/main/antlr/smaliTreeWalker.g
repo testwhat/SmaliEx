@@ -78,15 +78,15 @@ import java.util.*;
   public String classType;
   private boolean verboseErrors = false;
   private int apiLevel = 15;
-  private Opcodes opcodes = new Opcodes(apiLevel, false);
+  private Opcodes opcodes = Opcodes.forApi(apiLevel);
   private DexBuilder dexBuilder;
 
   public void setDexBuilder(DexBuilder dexBuilder) {
       this.dexBuilder = dexBuilder;
   }
 
-  public void setApiLevel(int apiLevel, boolean experimental) {
-      this.opcodes = new Opcodes(apiLevel, experimental);
+  public void setApiLevel(int apiLevel) {
+      this.opcodes = Opcodes.forApi(apiLevel);
       this.apiLevel = apiLevel;
   }
 

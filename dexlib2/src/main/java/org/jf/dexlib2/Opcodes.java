@@ -86,10 +86,6 @@ public class Opcodes {
     }
 
     public Opcodes(int api) {
-        this(api, false);
-    }
-
-    public Opcodes(int api, boolean experimental) {
         int apiLevel = api & ((1 << OFFSET_OAT_VERSION) - 1);
         int oatVersion = api >> OFFSET_OAT_VERSION;
         version = new Version(apiLevel, oatVersion);
@@ -98,8 +94,7 @@ public class Opcodes {
 
         for (Opcode opcode: Opcode.values()) {
             if (!opcode.format.isPayloadFormat) {
-                if (apiLevel <= opcode.getMaxApi() && apiLevel >= opcode.getMinApi() &&
-                        (experimental || !opcode.isExperimental())) {
+                if (apiLevel <= opcode.getMaxApi() && apiLevel >= opcode.getMinApi()) {
                     opcodesByValue[opcode.value] = opcode;
                     opcodesByName.put(opcode.name.toLowerCase(), opcode);
                 }

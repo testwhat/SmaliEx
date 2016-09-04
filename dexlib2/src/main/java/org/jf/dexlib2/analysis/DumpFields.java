@@ -73,7 +73,6 @@ public class DumpFields {
         ArrayList<String> bootClassPathDirs = Lists.newArrayList();
         String outFile = "fields.txt";
         int apiLevel = 15;
-        boolean experimental = false;
 
         for (int i=0; i<parsedOptions.length; i++) {
             Option option = parsedOptions[i];
@@ -88,9 +87,6 @@ public class DumpFields {
                     break;
                 case 'a':
                     apiLevel = Integer.parseInt(commandLine.getOptionValue("a"));
-                    break;
-                case 'X':
-                    experimental = true;
                     break;
                 default:
                     assert false;
@@ -111,9 +107,9 @@ public class DumpFields {
         }
 
         try (FileOutputStream outStream = new FileOutputStream(outFile)) {
-            DexBackedDexFile dexFile = DexFileFactory.loadDexFile(dexFileFile, apiLevel, experimental);
+            DexBackedDexFile dexFile = DexFileFactory.loadDexFile(dexFileFile, apiLevel);
             Iterable<String> bootClassPaths = Splitter.on(":").split("core.jar:ext.jar:framework.jar:android.policy.jar:services.jar");
-            ClassPath classPath = ClassPath.fromClassPath(bootClassPathDirs, bootClassPaths, dexFile, apiLevel, experimental);
+            ClassPath classPath = ClassPath.fromClassPath(bootClassPathDirs, bootClassPaths, dexFile, apiLevel);
 
             for (ClassDef classDef: dexFile.getClasses()) {
                 ClassProto classProto = (ClassProto) classPath.getClass(classDef);
