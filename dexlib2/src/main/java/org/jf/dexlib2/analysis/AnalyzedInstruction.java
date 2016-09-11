@@ -395,7 +395,8 @@ public class AnalyzedInstruction implements Comparable<AnalyzedInstruction> {
             return getPreInstructionRegisterType(registerNumber).equals(preInstructionDestRegisterType);
         }
 
-        if (instruction.getOpcode() == Opcode.IF_EQZ || instruction.getOpcode() == Opcode.IF_NEZ) {
+        if (getPredecessorCount() == 1 && (instruction.getOpcode() == Opcode.IF_EQZ ||
+                instruction.getOpcode() == Opcode.IF_NEZ)) {
             AnalyzedInstruction previousInstruction = getPreviousInstruction();
             if (previousInstruction != null &&
                     previousInstruction.instruction.getOpcode() == Opcode.INSTANCE_OF &&
