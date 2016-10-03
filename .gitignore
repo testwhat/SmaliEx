@@ -9,6 +9,7 @@
 /smaliex-bin/*
 /util/build
 /smalidea/build
+/build
 *.iml
 *.ipr
 *.iws

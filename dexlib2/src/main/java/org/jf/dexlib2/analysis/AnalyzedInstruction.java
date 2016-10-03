@@ -66,7 +66,7 @@ public class AnalyzedInstruction implements Comparable<AnalyzedInstruction> {
     /**
      * The actual instruction
      */
-    @Nullable
+    @Nonnull
     protected Instruction instruction;
 
     /**
@@ -77,21 +77,25 @@ public class AnalyzedInstruction implements Comparable<AnalyzedInstruction> {
     /**
      * Instructions that can pass on execution to this one during normal execution
      */
+    @Nonnull
     protected final TreeSet<AnalyzedInstruction> predecessors = new TreeSet<AnalyzedInstruction>();
 
     /**
      * Instructions that can execution could pass on to next during normal execution
      */
+    @Nonnull
     protected final LinkedList<AnalyzedInstruction> successors = new LinkedList<AnalyzedInstruction>();
 
     /**
      * This contains the register types *before* the instruction has executed
      */
+    @Nonnull
     protected final RegisterType[] preRegisterMap;
 
     /**
      * This contains the register types *after* the instruction has executed
      */
+    @Nonnull
     protected final RegisterType[] postRegisterMap;
 
     /**
@@ -106,8 +110,8 @@ public class AnalyzedInstruction implements Comparable<AnalyzedInstruction> {
      */
     protected final Instruction originalInstruction;
 
-    public AnalyzedInstruction(MethodAnalyzer methodAnalyzer, Instruction instruction, int instructionIndex,
-                               int registerCount) {
+    public AnalyzedInstruction(@Nonnull MethodAnalyzer methodAnalyzer, @Nonnull Instruction instruction,
+                               int instructionIndex, int registerCount) {
         this.methodAnalyzer = methodAnalyzer;
         this.instruction = instruction;
         this.originalInstruction = instruction;
@@ -162,18 +166,17 @@ public class AnalyzedInstruction implements Comparable<AnalyzedInstruction> {
         instruction = originalInstruction;
     }
 
-    public int getSuccessorCount() {
-        return successors.size();
-    }
-
-    public List<AnalyzedInstruction> getSuccesors() {
+    @Nonnull
+    public List<AnalyzedInstruction> getSuccessors() {
         return Collections.unmodifiableList(successors);
     }
 
+    @Nonnull
     public Instruction getInstruction() {
         return instruction;
     }
 
+    @Nonnull
     public Instruction getOriginalInstruction() {
         return originalInstruction;
     }
@@ -196,11 +199,7 @@ public class AnalyzedInstruction implements Comparable<AnalyzedInstruction> {
         if (predecessors.size() == 0) {
             return false;
         }
-
-        if (predecessors.first().instructionIndex == -1) {
-            return true;
-        }
-        return false;
+        return predecessors.first().instructionIndex == -1;
     }
 
     /*
@@ -249,6 +248,7 @@ public class AnalyzedInstruction implements Comparable<AnalyzedInstruction> {
      * @param registerNumber the register number
      * @return The register type resulting from merging the post-instruction register types from all predecessors
      */
+    @Nonnull
     protected RegisterType getMergedPreRegisterTypeFromPredecessors(int registerNumber) {
         RegisterType mergedRegisterType = null;
         for (AnalyzedInstruction predecessor: predecessors) {
@@ -260,6 +260,10 @@ public class AnalyzedInstruction implements Comparable<AnalyzedInstruction> {
                     mergedRegisterType = predecessorRegisterType.merge(mergedRegisterType);
                 }
             }
+        }
+        if (mergedRegisterType == null) {
+            // This is a start-of-method or unreachable instruction.
+            throw new IllegalStateException();
         }
         return mergedRegisterType;
     }
@@ -287,10 +291,10 @@ public class AnalyzedInstruction implements Comparable<AnalyzedInstruction> {
      *
      * This is used to set the register type for only one branch from a conditional jump.
      *
-     * @param predecessor Which predecessor is being overriden
-     * @param registerNumber The register number of the register being overriden
+     * @param predecessor Which predecessor is being overridden
+     * @param registerNumber The register number of the register being overridden
      * @param registerType The overridden register type
-     * @param verifiedInstructions
+     * @param verifiedInstructions A bit vector of instructions that have been verified
      *
      * @return true if the post-instruction register type for this instruction changed as a result of this override
      */
@@ -321,7 +325,7 @@ public class AnalyzedInstruction implements Comparable<AnalyzedInstruction> {
     }
 
     protected boolean isInvokeInit() {
-        if (instruction == null || !instruction.getOpcode().canInitializeReference()) {
+        if (!instruction.getOpcode().canInitializeReference()) {
             return false;
         }
 
@@ -376,10 +380,10 @@ public class AnalyzedInstruction implements Comparable<AnalyzedInstruction> {
             return false;
         }
 
-        if (instruction.getOpcode() == Opcode.IF_EQZ || instruction.getOpcode() == Opcode.IF_NEZ) {
+        if (getPredecessorCount() == 1 && (instruction.getOpcode() == Opcode.IF_EQZ ||
+                instruction.getOpcode() == Opcode.IF_NEZ)) {
             AnalyzedInstruction previousInstruction = getPreviousInstruction();
             if (previousInstruction != null &&
-                    previousInstruction.instruction != null &&
                     previousInstruction.instruction.getOpcode() == Opcode.INSTANCE_OF &&
                     registerNumber == ((Instruction22c)previousInstruction.instruction).getRegisterB() &&
                     MethodAnalyzer.canNarrowAfterInstanceOf(previousInstruction, this, methodAnalyzer.getClassPath())) {
@@ -433,7 +437,7 @@ public class AnalyzedInstruction implements Comparable<AnalyzedInstruction> {
         return preRegisterMap[registerNumber];
     }
 
-    public int compareTo(AnalyzedInstruction analyzedInstruction) {
+    public int compareTo(@Nonnull AnalyzedInstruction analyzedInstruction) {
         if (instructionIndex < analyzedInstruction.instructionIndex) {
             return -1;
         } else if (instructionIndex == analyzedInstruction.instructionIndex) {

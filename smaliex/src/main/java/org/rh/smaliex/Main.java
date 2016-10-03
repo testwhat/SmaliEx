@@ -34,7 +34,7 @@ import java.io.IOException;
 public class Main {
 
     static void printUsage() {
-        System.out.println("Easy oat2dex 0.87");
+        System.out.println("Easy oat2dex 0.88");
         System.out.println("Usage:");
         System.out.println(" java -jar oat2dex.jar [options] <action>");
         System.out.println("[options]");
@@ -59,7 +59,7 @@ public class Main {
 
     public static void mainImpl(String[] args) throws IOException {
         String outputFolder = null;
-        int apiLevel = org.jf.dexlib2.VersionMap.LOLLIPOP_MR1;
+        int apiLevel = DexUtil.DEFAULT_API_LEVEL;
         if (args.length > 2) {
             String opt = args[0];
             while (opt.length() > 1 && opt.charAt(0) == '-') {

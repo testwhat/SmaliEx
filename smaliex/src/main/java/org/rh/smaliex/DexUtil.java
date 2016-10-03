@@ -73,6 +73,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 public class DexUtil {
+    public static int DEFAULT_API_LEVEL = 20;
     public static Opcodes DEFAULT_OPCODES;
 
     private static final ConcurrentHashMap<Integer, SoftReference<Opcodes>> opCodesCache =
@@ -80,7 +81,7 @@ public class DexUtil {
 
     public static Opcodes getOpcodes(int apiLevel) {
         if (apiLevel <= 0) {
-            apiLevel = VersionMap.DEFAULT;
+            apiLevel = DEFAULT_API_LEVEL;
         }
         Opcodes opcodes = getCache(opCodesCache, apiLevel);
         if (opcodes == null) {
@@ -93,7 +94,7 @@ public class DexUtil {
     public static Opcodes getDefaultOpCodes(Opcodes opc) {
         if (opc == null) {
             if (DEFAULT_OPCODES == null) {
-                DEFAULT_OPCODES = getOpcodes(VersionMap.DEFAULT);
+                DEFAULT_OPCODES = Opcodes.getDefault();
             }
             opc = DEFAULT_OPCODES;
         }
@@ -321,7 +322,7 @@ public class DexUtil {
 
     public static void writeSmaliContent(String type, ClassPath classPath,
             java.io.Writer outWriter) {
-        org.jf.baksmali.baksmaliOptions options = new org.jf.baksmali.baksmaliOptions();
+        org.jf.baksmali.BaksmaliOptions options = new org.jf.baksmali.BaksmaliOptions();
         org.jf.dexlib2.iface.ClassDef classDef = classPath.getClassDef(type);
         options.apiLevel = VersionMap.mapArtVersionToApi(classPath.oatVersion);
         options.allowOdex = true;
@@ -372,7 +373,7 @@ public class DexUtil {
                 addDex(dexFile, false);
             }
             if (availableClasses.get("Ljava/lang/Class;") == null) {
-                DexFile basicClasses = new ImmutableDexFile(getOpcodes(VersionMap.DEFAULT),
+                DexFile basicClasses = new ImmutableDexFile(getOpcodes(DEFAULT_API_LEVEL),
                         ImmutableSet.of(
                                 new ReflectionClassDef(Class.class),
                                 new ReflectionClassDef(Cloneable.class),

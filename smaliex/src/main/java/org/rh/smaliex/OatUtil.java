@@ -41,9 +41,8 @@ import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
 import java.util.zip.ZipEntry;
 
-import org.jf.baksmali.baksmaliOptions;
+import org.jf.baksmali.BaksmaliOptions;
 import org.jf.dexlib2.Opcodes;
-import org.jf.dexlib2.VersionMap;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile;
 import org.jf.dexlib2.iface.DexFile;
 import org.jf.dexlib2.writer.pool.DexPool;
@@ -74,7 +73,7 @@ public class OatUtil {
                 LLog.ex(ex);
             }
         } else {
-            Opcodes opc = DexUtil.getOpcodes(apiLevel > 0 ? apiLevel : VersionMap.DEFAULT);
+            Opcodes opc = DexUtil.getOpcodes(apiLevel > 0 ? apiLevel : DexUtil.DEFAULT_API_LEVEL);
             dexFiles = DexUtil.loadMultiDex(file, opc);
             if (outputNames != null) {
                 String dexName = "classes";
@@ -94,11 +93,10 @@ public class OatUtil {
         String folderName = MiscUtil.getFilenamePrefix(inputFile.getName());
         String outputBaseFolder = MiscUtil.path(
                 inputFile.getAbsoluteFile().getParent(), folderName);
-        baksmaliOptions options = new baksmaliOptions();
+        BaksmaliOptions options = new BaksmaliOptions();
         Opcodes opc = DexUtil.getOpcodes(apiLevel);
         options.apiLevel = opc.api;
         options.allowOdex = true;
-        options.jobs = 4;
 
         List<String> outSubFolders = new ArrayList<>();
         List<DexBackedDexFile> dexFiles = getDexFiles(inputFile, apiLevel, outSubFolders);
@@ -111,9 +109,9 @@ public class OatUtil {
         }
 
         for (int i = 0; i < dexFiles.size(); i++) {
-            options.outputDirectory = outSubFolders.get(i);
-            org.jf.baksmali.baksmali.disassembleDexFile(dexFiles.get(i), options);
-            LLog.i("Output to " + options.outputDirectory);
+            File outputDirectory = new File(outSubFolders.get(i));
+            org.jf.baksmali.Baksmali.disassembleDexFile(dexFiles.get(i), outputDirectory, 4, options);
+            LLog.i("Output to " + outputDirectory);
         }
         LLog.i("All done");
     }
