@@ -80,12 +80,14 @@ public class DumpCommand extends DexInputCommand {
         String input = inputList.get(0);
         loadDexFile(input, Opcodes.getDefault());
 
-        try {
-            dump(dexFile, System.out, apiLevel);
-        } catch (IOException ex) {
-            System.err.println("There was an error while dumping the dex file");
-            ex.printStackTrace(System.err);
-        }
+        dexFile.forEachDexBackedDexFile(df -> {
+            try {
+                dump(df, System.out, apiLevel);
+            } catch (IOException ex) {
+                System.err.println("There was an error while dumping the dex file");
+                ex.printStackTrace(System.err);
+            }
+        });
     }
 
     /**

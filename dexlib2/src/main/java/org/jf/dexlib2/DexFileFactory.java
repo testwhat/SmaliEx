@@ -142,11 +142,7 @@ public final class DexFileFactory {
         throw new UnsupportedFileTypeException("%s is not an apk, dex, odex or oat file.", file.getPath());
     }
 
-    @Nonnull
-    public static List<DexBackedDexFile> loadDexFiles(
-            @Nonnull File dexFile, @Nullable String dexEntry, int api) throws IOException {
-        return loadDexFiles(dexFile, dexEntry, Opcodes.forApi(api));
-    }
+
 
     @Nonnull
     public static List<DexBackedDexFile> loadDexFiles(

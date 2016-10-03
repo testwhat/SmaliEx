@@ -38,6 +38,8 @@ import javax.annotation.Nullable;
 import java.util.List;
 import java.util.Set;
 
+import com.google.common.collect.Iterables;
+
 /**
  * This class represents a class definition.
  *
@@ -163,4 +165,20 @@ public interface ClassDef extends TypeReference, Annotatable {
      * @return An iterable of the methods that are defined by this class.
      */
     @Nonnull Iterable<? extends Method> getMethods();
+
+    default int getDirectMethodCount() {
+        return Iterables.size(getDirectMethods());
+    }
+
+    default int getVirtualMethodCount() {
+        return Iterables.size(getVirtualMethods());
+    }
+
+    default int getStaticFieldCount() {
+        return Iterables.size(getStaticFields());
+    }
+
+    default int getInstanceFieldCount()  {
+        return Iterables.size(getInstanceFields());
+    }
 }

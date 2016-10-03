@@ -38,6 +38,7 @@ import com.beust.jcommander.ParametersDelegate;
 import org.jf.baksmali.AnalysisArguments.CheckPackagePrivateArgument;
 import org.jf.dexlib2.analysis.CustomInlineMethodResolver;
 import org.jf.dexlib2.analysis.InlineMethodResolver;
+import org.jf.dexlib2.dexbacked.DexBackedDexFile;
 import org.jf.dexlib2.dexbacked.DexBackedOdexFile;
 import org.jf.util.jcommander.ExtendedParameter;
 import org.jf.util.jcommander.ExtendedParameters;
@@ -72,10 +73,11 @@ public class DeodexCommand extends DisassembleCommand {
 
         options.deodex = true;
 
-        if (dexFile instanceof DexBackedOdexFile) {
+        DexBackedDexFile df = dexFile.getFirstDexBackedDexFile();
+        if (df instanceof DexBackedOdexFile) {
             if (inlineTable == null) {
                 options.inlineResolver = InlineMethodResolver.createInlineMethodResolver(
-                        ((DexBackedOdexFile)dexFile).getOdexVersion());
+                        ((DexBackedOdexFile)df).getOdexVersion());
             } else {
                 File inlineTableFile = new File(inlineTable);
                 if (!inlineTableFile.exists()) {

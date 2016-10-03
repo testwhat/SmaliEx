@@ -31,6 +31,8 @@
 
 package org.jf.smali;
 
+import static org.jf.dexlib2.dexbacked.MultiDex.getDexFileName;
+
 import com.google.common.collect.Lists;
 import org.antlr.runtime.CommonTokenStream;
 import org.antlr.runtime.Token;
@@ -38,6 +40,9 @@ import org.antlr.runtime.TokenSource;
 import org.antlr.runtime.tree.CommonTree;
 import org.antlr.runtime.tree.CommonTreeNodeStream;
 import org.jf.dexlib2.Opcodes;
+import org.jf.dexlib2.dexbacked.MultiDex;
+import org.jf.dexlib2.iface.ClassDef;
+import org.jf.dexlib2.writer.builder.BuilderClassDef;
 import org.jf.dexlib2.writer.builder.DexBuilder;
 import org.jf.dexlib2.writer.io.FileDataStore;
 
@@ -46,7 +51,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -91,18 +98,19 @@ public class Smali {
 
         boolean errors = false;
 
-        final DexBuilder dexBuilder = DexBuilder.makeDexBuilder(
-                Opcodes.forApi(options.apiLevel));
+        final Opcodes opcodes = Opcodes.forApi(options.apiLevel);
+        final MultiDex multiDex = new MultiDex(opcodes);
+        final List<ClassDef> classes = Collections.synchronizedList(
+                new ArrayList<>(filesToProcessSet.size()));
+
+        //final DexBuilder dexBuilder = DexBuilder.makeDexBuilder(
+        //        Opcodes.forApi(options.apiLevel));
 
         ExecutorService executor = Executors.newFixedThreadPool(options.jobs);
         List<Future<Boolean>> tasks = Lists.newArrayList();
 
         for (final File file: filesToProcessSet) {
-            tasks.add(executor.submit(new Callable<Boolean>() {
-                @Override public Boolean call() throws Exception {
-                    return assembleSmaliFile(file, dexBuilder, options);
-                }
-            }));
+            tasks.add(executor.submit(() -> assembleSmaliFile(file, classes, opcodes, options)));
         }
 
         for (Future<Boolean> task: tasks) {
@@ -128,7 +136,9 @@ public class Smali {
             return false;
         }
 
-        dexBuilder.writeTo(new FileDataStore(new File(options.outputDexFile)));
+        //dexBuilder.writeTo(new FileDataStore(new File(options.outputDexFile)));
+        multiDex.writeClassesTo(classes, dexNum -> new FileDataStore(
+                new File(options.outputDexFile, getDexFileName(dexNum))));
 
         return true;
     }
@@ -146,8 +156,9 @@ public class Smali {
         }
     }
 
-    private static boolean assembleSmaliFile(File smaliFile, DexBuilder dexBuilder, SmaliOptions options)
-            throws Exception {
+    private static boolean assembleSmaliFile(
+            File smaliFile, List<ClassDef> classes,
+            Opcodes opcodes, SmaliOptions options) throws Exception {
         CommonTokenStream tokens;
 
         LexerErrorInterface lexer;
@@ -198,8 +209,10 @@ public class Smali {
         dexGen.setApiLevel(options.apiLevel);
 
         dexGen.setVerboseErrors(options.verboseErrors);
-        dexGen.setDexBuilder(dexBuilder);
-        dexGen.smali_file();
+        //dexGen.setDexBuilder(dexBuilder);
+        dexGen.setDexBuilder(DexBuilder.makeDexBuilder(opcodes));
+
+        classes.add(dexGen.smali_file());
 
         return dexGen.getNumberOfSyntaxErrors() == 0;
     }

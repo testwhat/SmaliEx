@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import org.jf.dexlib2.DexFileFactory;
 import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile;
+import org.jf.dexlib2.dexbacked.MultiDex;
 import org.jf.util.jcommander.Command;
 import org.jf.util.jcommander.ExtendedParameter;
 
@@ -60,7 +61,7 @@ public abstract class DexInputCommand extends Command {
 
     protected File inputFile;
     protected String inputEntry;
-    protected DexBackedDexFile dexFile;
+    protected MultiDex dexFile;
 
     public DexInputCommand(@Nonnull List<JCommander> commandAncestors) {
         super(commandAncestors);
@@ -122,22 +123,24 @@ public abstract class DexInputCommand extends Command {
         }
 
         if (!Strings.isNullOrEmpty(dexEntry)) {
-            boolean exactMatch = false;
-            if (dexEntry.length() > 2 && dexEntry.charAt(0) == '"' && dexEntry.charAt(dexEntry.length() - 1) == '"') {
-                dexEntry = dexEntry.substring(1, dexEntry.length() - 1);
-                exactMatch = true;
-            }
+            //boolean exactMatch = false;
+            //if (dexEntry.length() > 2 && dexEntry.charAt(0) == '"' && dexEntry.charAt(dexEntry.length() - 1) == '"') {
+            //    dexEntry = dexEntry.substring(1, dexEntry.length() - 1);
+            //    exactMatch = true;
+            //}
 
             inputEntry = dexEntry;
 
             try {
-                dexFile = DexFileFactory.loadDexEntry(file, dexEntry, exactMatch, opcodes);
+                //dexFile = DexFileFactory.loadDexEntry(file, dexEntry, exactMatch, opcodes);
+                dexFile = new MultiDex(DexFileFactory.loadDexFiles(file, dexEntry, opcodes));
             } catch (IOException ex) {
                 throw new RuntimeException(ex);
             }
         } else {
             try {
-                dexFile = DexFileFactory.loadDexFile(file, opcodes);
+                //dexFile = DexFileFactory.loadDexFile(file, opcodes);
+                dexFile = new MultiDex(DexFileFactory.loadDexFiles(file, null, opcodes));
             } catch (IOException ex) {
                 throw new RuntimeException(ex);
             }
