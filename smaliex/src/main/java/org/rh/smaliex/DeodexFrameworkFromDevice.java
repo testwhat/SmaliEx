@@ -16,12 +16,12 @@
 
 package org.rh.smaliex;
 
-import java.io.File;
-import java.io.IOException;
+import com.android.ddmlib.Device;
 
 import org.rh.smaliex.reader.Elf;
 
-import com.android.ddmlib.Device;
+import java.io.File;
+import java.io.IOException;
 
 public class DeodexFrameworkFromDevice {
     static boolean TEST_MODE = false;

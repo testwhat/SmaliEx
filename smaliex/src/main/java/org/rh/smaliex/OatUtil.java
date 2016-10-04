@@ -26,6 +26,7 @@ import org.rh.smaliex.reader.DataReader;
 import org.rh.smaliex.reader.Elf;
 import org.rh.smaliex.reader.Oat;
 
+import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -38,8 +39,6 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
 import java.util.zip.ZipEntry;
-
-import javax.annotation.Nonnull;
 
 public class OatUtil {
 

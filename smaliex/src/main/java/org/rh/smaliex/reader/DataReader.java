@@ -16,15 +16,15 @@
 
 package org.rh.smaliex.reader;
 
+import org.rh.smaliex.LLog;
+
+import javax.annotation.Nonnull;
 import java.io.Closeable;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.channels.FileChannel;
-import javax.annotation.Nonnull;
-
-import org.rh.smaliex.LLog;
 
 public class DataReader implements Closeable {
 

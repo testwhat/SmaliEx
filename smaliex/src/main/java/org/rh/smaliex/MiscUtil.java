@@ -16,11 +16,10 @@
 
 package org.rh.smaliex;
 
+import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-
-import javax.annotation.Nonnull;
 
 public class MiscUtil {
 

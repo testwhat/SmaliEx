@@ -31,9 +31,8 @@
 
 package org.jf.smali;
 
-import static org.jf.dexlib2.dexbacked.MultiDex.getDexFileName;
-
 import com.google.common.collect.Lists;
+
 import org.antlr.runtime.CommonTokenStream;
 import org.antlr.runtime.Token;
 import org.antlr.runtime.TokenSource;
@@ -42,7 +41,6 @@ import org.antlr.runtime.tree.CommonTreeNodeStream;
 import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.dexbacked.MultiDex;
 import org.jf.dexlib2.iface.ClassDef;
-import org.jf.dexlib2.writer.builder.BuilderClassDef;
 import org.jf.dexlib2.writer.builder.DexBuilder;
 import org.jf.dexlib2.writer.io.FileDataStore;
 
@@ -57,7 +55,10 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 public class Smali {
 
@@ -137,8 +138,11 @@ public class Smali {
         }
 
         //dexBuilder.writeTo(new FileDataStore(new File(options.outputDexFile)));
-        multiDex.writeClassesTo(classes, dexNum -> new FileDataStore(
-                new File(options.outputDexFile, getDexFileName(dexNum))));
+        multiDex.writeClassesTo(classes, dexNum -> {
+            File output = new File(MultiDex.getDexFileName(options.outputDexFile, dexNum));
+            System.out.println("Output: " + output);
+            return new FileDataStore(output);
+        });
 
         return true;
     }
@@ -211,7 +215,6 @@ public class Smali {
         dexGen.setVerboseErrors(options.verboseErrors);
         //dexGen.setDexBuilder(dexBuilder);
         dexGen.setDexBuilder(DexBuilder.makeDexBuilder(opcodes));
-
         classes.add(dexGen.smali_file());
 
         return dexGen.getNumberOfSyntaxErrors() == 0;

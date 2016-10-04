@@ -32,13 +32,12 @@
 package org.jf.dexlib2.analysis;
 
 
-import java.io.IOException;
-import java.io.Writer;
+import org.jf.util.ExceptionWithContext;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-
-import org.jf.util.ExceptionWithContext;
+import java.io.IOException;
+import java.io.Writer;
 
 public class RegisterType {
     public final byte category;

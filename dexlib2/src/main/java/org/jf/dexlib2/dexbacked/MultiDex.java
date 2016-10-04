@@ -1,5 +1,23 @@
 package org.jf.dexlib2.dexbacked;
 
+import org.jf.dexlib2.Opcodes;
+import org.jf.dexlib2.iface.ClassDef;
+import org.jf.dexlib2.iface.DexFile;
+import org.jf.dexlib2.writer.io.DexDataStore;
+import org.jf.dexlib2.writer.io.FileDataStore;
+import org.jf.dexlib2.writer.io.MemoryDataStore;
+import org.jf.dexlib2.writer.pool.AnnotationPool;
+import org.jf.dexlib2.writer.pool.AnnotationSetPool;
+import org.jf.dexlib2.writer.pool.ClassPool;
+import org.jf.dexlib2.writer.pool.DexPool;
+import org.jf.dexlib2.writer.pool.FieldPool;
+import org.jf.dexlib2.writer.pool.MethodPool;
+import org.jf.dexlib2.writer.pool.ProtoPool;
+import org.jf.dexlib2.writer.pool.StringPool;
+import org.jf.dexlib2.writer.pool.TypeListPool;
+import org.jf.dexlib2.writer.pool.TypePool;
+
+import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -8,17 +26,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
-
-import javax.annotation.Nonnull;
-
-import org.jf.dexlib2.Opcodes;
-import org.jf.dexlib2.iface.ClassDef;
-import org.jf.dexlib2.iface.DexFile;
-import org.jf.dexlib2.writer.io.DexDataStore;
-import org.jf.dexlib2.writer.io.FileDataStore;
-import org.jf.dexlib2.writer.io.MemoryDataStore;
-import org.jf.dexlib2.writer.pool.ClassPool;
-import org.jf.dexlib2.writer.pool.DexPool;
 
 public class MultiDex implements DexFile {
     private static final int MAX_METHOD_ADDED_DURING_DEX_CREATION = 2;
@@ -133,13 +140,13 @@ public class MultiDex implements DexFile {
     public <C extends ClassDef> void writeClassesTo(
             List<C> classList, DexDataStoreFactory store) throws IOException {
         int dexNum = 0;
-        DexPool dexPool = DexPool.makeDexPool(opcodes);
-        ClassPool clsPool = (ClassPool) dexPool.classSection;
+        MultiDexPool dexPool = MultiDexPool.makeDexPool(opcodes);
+        ClassPool clsPool = dexPool.classPool;
         Collections.sort(classList, (c1, c2) -> c1.getType().compareTo(c2.getType()));
 
         for (ClassDef classDef : classList) {
-            int numMethodIds = dexPool.methodSection.getItems().size();
-            int numFieldIds = dexPool.fieldSection.getItems().size();
+            int numMethodIds = dexPool.getMethodCount();
+            int numFieldIds = dexPool.getFieldCount();
             int constantPoolSize = classDef.getDirectMethodCount()
                     + classDef.getVirtualMethodCount()
                     + classDef.getStaticFieldCount()
@@ -154,8 +161,8 @@ public class MultiDex implements DexFile {
                     || maxFieldIdsInDex > mMaxNumberOfIdxPerDex) {
                 dexPool.writeTo(store.getDataStore(dexNum));
                 dexNum++;
-                dexPool = DexPool.makeDexPool(opcodes);
-                clsPool = (ClassPool) dexPool.classSection;
+                dexPool = MultiDexPool.makeDexPool(opcodes);
+                clsPool = dexPool.classPool;
             }
             clsPool.intern(classDef);
         }
@@ -181,5 +188,45 @@ public class MultiDex implements DexFile {
 
     public interface DexDataStoreFactory {
         DexDataStore getDataStore(int dexNum) throws IOException;
+    }
+
+    public static class MultiDexPool extends DexPool {
+        public final ClassPool classPool;
+
+        protected MultiDexPool(
+                Opcodes opcodes, StringPool stringPool,
+                TypePool typePool, ProtoPool protoPool,
+                FieldPool fieldPool, MethodPool methodPool,
+                ClassPool classPool, TypeListPool typeListPool,
+                AnnotationPool annotationPool, AnnotationSetPool annotationSetPool) {
+            super(opcodes, stringPool, typePool, protoPool, fieldPool,
+                    methodPool, classPool, typeListPool, annotationPool, annotationSetPool);
+            this.classPool = classPool;
+        }
+
+        @Nonnull
+        public static MultiDexPool makeDexPool(@Nonnull Opcodes opcodes) {
+            StringPool stringPool = new StringPool();
+            TypePool typePool = new TypePool(stringPool);
+            FieldPool fieldPool = new FieldPool(stringPool, typePool);
+            TypeListPool typeListPool = new TypeListPool(typePool);
+            ProtoPool protoPool = new ProtoPool(stringPool, typePool, typeListPool);
+            MethodPool methodPool = new MethodPool(stringPool, typePool, protoPool);
+            AnnotationPool annotationPool = new AnnotationPool(stringPool, typePool, fieldPool, methodPool);
+            AnnotationSetPool annotationSetPool = new AnnotationSetPool(annotationPool);
+            ClassPool classPool = new ClassPool(stringPool, typePool, fieldPool, methodPool, annotationSetPool,
+                    typeListPool);
+
+            return new MultiDexPool(opcodes, stringPool, typePool, protoPool, fieldPool, methodPool, classPool, typeListPool,
+                    annotationPool, annotationSetPool);
+        }
+
+        public int getMethodCount() {
+            return methodSection.getItemCount();
+        }
+
+        public int getFieldCount() {
+            return fieldSection.getItemCount();
+        }
     }
 }

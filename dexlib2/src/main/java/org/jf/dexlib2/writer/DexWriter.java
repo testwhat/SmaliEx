@@ -31,26 +31,10 @@
 
 package org.jf.dexlib2.writer;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.zip.Adler32;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Ordering;
 import org.jf.dexlib2.AccessFlags;
 import org.jf.dexlib2.Opcode;
 import org.jf.dexlib2.Opcodes;
@@ -59,14 +43,7 @@ import org.jf.dexlib2.base.BaseAnnotation;
 import org.jf.dexlib2.base.BaseAnnotationElement;
 import org.jf.dexlib2.builder.MutableMethodImplementation;
 import org.jf.dexlib2.builder.instruction.BuilderInstruction31c;
-import org.jf.dexlib2.dexbacked.raw.ClassDefItem;
-import org.jf.dexlib2.dexbacked.raw.FieldIdItem;
-import org.jf.dexlib2.dexbacked.raw.HeaderItem;
-import org.jf.dexlib2.dexbacked.raw.ItemType;
-import org.jf.dexlib2.dexbacked.raw.MethodIdItem;
-import org.jf.dexlib2.dexbacked.raw.ProtoIdItem;
-import org.jf.dexlib2.dexbacked.raw.StringIdItem;
-import org.jf.dexlib2.dexbacked.raw.TypeIdItem;
+import org.jf.dexlib2.dexbacked.raw.*;
 import org.jf.dexlib2.iface.Annotation;
 import org.jf.dexlib2.iface.ExceptionHandler;
 import org.jf.dexlib2.iface.TryBlock;
@@ -75,37 +52,7 @@ import org.jf.dexlib2.iface.debug.LineNumber;
 import org.jf.dexlib2.iface.instruction.Instruction;
 import org.jf.dexlib2.iface.instruction.OneRegisterInstruction;
 import org.jf.dexlib2.iface.instruction.ReferenceInstruction;
-import org.jf.dexlib2.iface.instruction.formats.ArrayPayload;
-import org.jf.dexlib2.iface.instruction.formats.Instruction10t;
-import org.jf.dexlib2.iface.instruction.formats.Instruction10x;
-import org.jf.dexlib2.iface.instruction.formats.Instruction11n;
-import org.jf.dexlib2.iface.instruction.formats.Instruction11x;
-import org.jf.dexlib2.iface.instruction.formats.Instruction12x;
-import org.jf.dexlib2.iface.instruction.formats.Instruction20bc;
-import org.jf.dexlib2.iface.instruction.formats.Instruction20t;
-import org.jf.dexlib2.iface.instruction.formats.Instruction21c;
-import org.jf.dexlib2.iface.instruction.formats.Instruction21ih;
-import org.jf.dexlib2.iface.instruction.formats.Instruction21lh;
-import org.jf.dexlib2.iface.instruction.formats.Instruction21s;
-import org.jf.dexlib2.iface.instruction.formats.Instruction21t;
-import org.jf.dexlib2.iface.instruction.formats.Instruction22b;
-import org.jf.dexlib2.iface.instruction.formats.Instruction22c;
-import org.jf.dexlib2.iface.instruction.formats.Instruction22s;
-import org.jf.dexlib2.iface.instruction.formats.Instruction22t;
-import org.jf.dexlib2.iface.instruction.formats.Instruction22x;
-import org.jf.dexlib2.iface.instruction.formats.Instruction23x;
-import org.jf.dexlib2.iface.instruction.formats.Instruction30t;
-import org.jf.dexlib2.iface.instruction.formats.Instruction31c;
-import org.jf.dexlib2.iface.instruction.formats.Instruction31i;
-import org.jf.dexlib2.iface.instruction.formats.Instruction31t;
-import org.jf.dexlib2.iface.instruction.formats.Instruction32x;
-import org.jf.dexlib2.iface.instruction.formats.Instruction35c;
-import org.jf.dexlib2.iface.instruction.formats.Instruction3rc;
-import org.jf.dexlib2.iface.instruction.formats.Instruction45cc;
-import org.jf.dexlib2.iface.instruction.formats.Instruction4rcc;
-import org.jf.dexlib2.iface.instruction.formats.Instruction51l;
-import org.jf.dexlib2.iface.instruction.formats.PackedSwitchPayload;
-import org.jf.dexlib2.iface.instruction.formats.SparseSwitchPayload;
+import org.jf.dexlib2.iface.instruction.formats.*;
 import org.jf.dexlib2.iface.reference.FieldReference;
 import org.jf.dexlib2.iface.reference.MethodProtoReference;
 import org.jf.dexlib2.iface.reference.MethodReference;
@@ -122,10 +69,19 @@ import org.jf.dexlib2.writer.util.TryListBuilder;
 import org.jf.util.CollectionUtils;
 import org.jf.util.ExceptionWithContext;
 
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Ordering;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.zip.Adler32;
 
 public abstract class DexWriter<
         StringKey extends CharSequence, StringRef extends StringReference, TypeKey extends CharSequence,
@@ -170,11 +126,10 @@ public abstract class DexWriter<
 
     protected final StringSection<StringKey, StringRef> stringSection;
     protected final TypeSection<StringKey, TypeKey, TypeRef> typeSection;
-
     protected final ProtoSection<StringKey, TypeKey, ProtoRefKey, TypeListKey> protoSection;
-    public final FieldSection<StringKey, TypeKey, FieldRefKey, FieldKey> fieldSection;
-    public final MethodSection<StringKey, TypeKey, ProtoRefKey, MethodRefKey, MethodKey> methodSection;
-    public final ClassSection<StringKey, TypeKey, TypeListKey, ClassKey, FieldKey, MethodKey, AnnotationSetKey,
+    protected final FieldSection<StringKey, TypeKey, FieldRefKey, FieldKey> fieldSection;
+    protected final MethodSection<StringKey, TypeKey, ProtoRefKey, MethodRefKey, MethodKey> methodSection;
+    protected final ClassSection<StringKey, TypeKey, TypeListKey, ClassKey, FieldKey, MethodKey, AnnotationSetKey,
             EncodedValue> classSection;
     
     protected final TypeListSection<TypeKey, TypeListKey> typeListSection;

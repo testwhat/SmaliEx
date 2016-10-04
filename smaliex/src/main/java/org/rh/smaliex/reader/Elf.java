@@ -16,15 +16,15 @@
 
 package org.rh.smaliex.reader;
 
+import org.rh.smaliex.LLog;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-
-import org.rh.smaliex.LLog;
-
+@SuppressWarnings("unused")
 public class Elf implements Closeable {
     // art/runtime/elf.h
     // Elf32 [Addr, Off, Word, Sword]=(int), [Half]=(short)
@@ -84,7 +84,7 @@ public class Elf implements Closeable {
         long getProgramOffset() {
             return e_phoff;
         }
-    };
+    }
 
     static class Elf64_Ehdr extends Ehdr {
         long e_entry;
@@ -99,7 +99,7 @@ public class Elf implements Closeable {
         long getProgramOffset() {
             return e_phoff;
         }
-    };
+    }
 
     // --- Begin section header ---
     public static final String SHN_DYNSYM = ".dynsym";
@@ -150,7 +150,7 @@ public class Elf implements Closeable {
         public long getOffset() {
             return sh_offset;
         }
-    };
+    }
 
     // Section header for ELF64 - same fields as ELF32, different types.
     static class Elf64_Shdr extends Elf_Shdr {
@@ -170,7 +170,7 @@ public class Elf implements Closeable {
         public long getOffset() {
             return sh_offset;
         }
-    };
+    }
 
     // --- Begin symbol table ---
     public static abstract class Elf_Sym {
@@ -222,7 +222,7 @@ public class Elf implements Closeable {
         long getSize() {
             return st_size;
         }
-    };
+    }
 
     // Symbol table entries for ELF64.
     static class Elf64_Sym extends Elf_Sym {
@@ -553,12 +553,11 @@ public class Elf implements Closeable {
         if (index == SHN_UNDEF) {
             return "SHN_UNDEF";
         }
-        int start = index;
         int end = index;
         while (mStringTable[end] != '\0') {
             end++;
         }
-        return new String(mStringTable, start, end - start);
+        return new String(mStringTable, index, end - index);
     }
 
     @Nonnull
@@ -566,12 +565,11 @@ public class Elf implements Closeable {
         if (index == SHN_UNDEF) {
             return "SHN_UNDEF";
         }
-        int start = index;
         int end = index;
         while (mDynStringTable[end] != '\0') {
             end++;
         }
-        return new String(mDynStringTable, start, end - start);
+        return new String(mDynStringTable, index, end - index);
     }
 
     @Override

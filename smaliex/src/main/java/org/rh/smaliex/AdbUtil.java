@@ -16,13 +16,6 @@
 
 package org.rh.smaliex;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.FutureTask;
-import java.util.concurrent.TimeUnit;
-
 import com.android.ddmlib.AdbHelper.AdbCommandRejectedException;
 import com.android.ddmlib.AdbHelper.ShellCommandUnresponsiveException;
 import com.android.ddmlib.AdbHelper.TimeoutException;
@@ -31,6 +24,12 @@ import com.android.ddmlib.CollectingOutputReceiver;
 import com.android.ddmlib.Device;
 import com.android.ddmlib.IShellOutputReceiver;
 import com.android.ddmlib.SyncService.SyncException;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
 
 public class AdbUtil {
 
@@ -89,12 +88,7 @@ public class AdbUtil {
     }
 
     public static String shellSync(Device device, String cmd, final String[] result) {
-        final FutureTask<String> task = new FutureTask<>(new Callable<String>() {
-            @Override
-            public String call() throws Exception {
-                return result[0];
-            }
-        });
+        final FutureTask<String> task = new FutureTask<>(() -> result[0]);
         shell(device, cmd, new CollectingOutputReceiver() {
             @Override
             public void flush() {

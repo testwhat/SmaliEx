@@ -16,6 +16,8 @@
 
 package org.rh.smaliex.reader;
 
+import org.rh.smaliex.LLog;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -26,8 +28,6 @@ import java.lang.annotation.Target;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-
-import org.rh.smaliex.LLog;
 
 public class Oat {
     public final static String SECTION_RODATA = ".rodata";
