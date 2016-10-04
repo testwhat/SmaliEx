@@ -28,8 +28,9 @@ import java.util.concurrent.locks.AbstractQueuedSynchronizer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import com.android.annotations.NonNull;
+import com.android.annotations.Nullable;
+
 
 /**
  * Fetches and caches 'getprop' values from device.
@@ -111,7 +112,8 @@ class PropertyFetcher {
      * @param name the property name to retrieve
      * @return a {@link Future} that can be used to retrieve the prop value
      */
-    public synchronized Future<String> getProperty(@Nonnull String name) {
+    @NonNull
+    public synchronized Future<String> getProperty(@NonNull String name) {
         SettableFuture<String> result;
         if (mCacheState.equals(CacheState.FETCHING)) {
             result = addPendingRequest(name);
@@ -156,7 +158,7 @@ class PropertyFetcher {
         propThread.start();
     }
 
-    private synchronized void populateCache(@Nonnull Map<String, String> props) {
+    private synchronized void populateCache(@NonNull Map<String, String> props) {
         mCacheState = props.isEmpty() ? CacheState.UNPOPULATED : CacheState.POPULATED;
         if (!props.isEmpty()) {
             mProperties.putAll(props);
@@ -179,7 +181,7 @@ class PropertyFetcher {
         mPendingRequests.clear();
     }
 
-    private static boolean isRoProp(@Nonnull String propName) {
+    private static boolean isRoProp(@NonNull String propName) {
         return propName.startsWith("ro.");
     }
 }
@@ -237,7 +239,7 @@ final class SettableFuture<V> implements Future<V> {
         return new SettableFuture<>();
     }
 
-    public boolean setException(@Nonnull Throwable throwable) {
+    public boolean setException(@NonNull Throwable throwable) {
         boolean result = sync.setException(throwable);
         if (result) {
             executionList.execute();
@@ -258,7 +260,7 @@ final class Sync<V> extends AbstractQueuedSynchronizer {
     private V value;
     private Throwable exception;
 
-    static final CancellationException cancellationExceptionWithCause(
+    static CancellationException cancellationExceptionWithCause(
             @Nullable String message, @Nullable Throwable cause) {
         CancellationException exception = new CancellationException(message);
         exception.initCause(cause);

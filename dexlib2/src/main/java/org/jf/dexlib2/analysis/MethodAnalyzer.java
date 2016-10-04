@@ -2064,6 +2064,7 @@ public class MethodAnalyzer {
 
     private static class TraceRegisterParam {
         RegisterType type;
+        int tries;
         final int[] tracingRegs;
         final RegisterType[] instanceOfType;
 
@@ -2179,18 +2180,21 @@ public class MethodAnalyzer {
                     String elementType = arrayProto.getImmediateElementType();
                     type = RegisterType.getRegisterType(
                             RegisterType.REFERENCE, classPath.getClass(elementType));
+                    param.tries++;
                     break;
                 case INSTANCE_OF: // instance-of a, b, type
                     // if b is type c, then a is true
                     RegisterType insOfType = getReferenceType((Instruction22c) twoRegInstr);
                     if (param.containsReg(regB)) {
                         type = insOfType;
+                        param.tries++;
                     }
                     param.setInstanceOfType(regB, insOfType);
                     break;
                 default:
                     if (isMoveFrom(twoRegInstr.getOpcode())) {
                         type = aInstr.getPostInstructionRegisterType(regB);
+                        param.tries++;
                         if (!verifyType(type, unaInstr, fieldOffset, methodOffset)) {
                             type = findTypeByLocal(aInstr, regB);
                             if (!verifyType(type, unaInstr, fieldOffset, methodOffset)) {
@@ -2237,9 +2241,6 @@ public class MethodAnalyzer {
                 + " " + toString(unaInstr) + " reg=" + toRegString(reg) + "(" + reg + ")"
                 + " fo=" + fieldOffset + " mo=" + methodOffset);
 
-        TraceRegisterParam regTracer = new TraceRegisterParam(totalRegisters);
-        regTracer.setTracingReg(reg);
-
         RegisterType type = findTypeByLocal(unaInstr, reg);
         if (type != RegisterType.NULL_TYPE) {
             if (debug) {
@@ -2252,6 +2253,9 @@ public class MethodAnalyzer {
                 return type;
             }
         }
+
+        TraceRegisterParam regTracer = new TraceRegisterParam(totalRegisters);
+        regTracer.setTracingReg(reg);
 
         for (int i = unaInstr.instructionIndex - 1; i >= 0; i--) {
             AnalyzedInstruction aInstr = analyzedInstructions.valueAt(i);
@@ -2314,6 +2318,21 @@ public class MethodAnalyzer {
                 }
             }
         }
+
+        if (regTracer.tries == 0) {
+            ArrayList<TypeScope> scopes = localTypes.get(reg);
+            if (scopes != null) {
+                for (TypeScope scope : scopes) {
+                    if (verifyType(scope.type, unaInstr, fieldOffset, methodOffset)) {
+                        type = scope.type;
+                        if (debug) {
+                            println("  @@2 use behind local type " + type);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
         if (debug) {
             println("<<findRegisterType " + type);
         }
@@ -2348,7 +2367,6 @@ public class MethodAnalyzer {
             }
             if (objectRegisterType == RegisterType.NULL_TYPE) {
                 addAnalysisInfo("Cannot find type " + toString(analyzedInstruction));
-
             }
         }
 

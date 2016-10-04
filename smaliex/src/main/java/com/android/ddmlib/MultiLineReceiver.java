@@ -64,16 +64,22 @@ public abstract class MultiLineReceiver implements IShellOutputReceiver {
             mArray.clear();
             int start = 0;
             do {
-                int index = s.indexOf("\r\n", start); //$NON-NLS-1$
+                int index = s.indexOf('\n', start); //$NON-NLS-1$
 
-                // if \r\n was not found, this is an unfinished line
+                // if \n was not found, this is an unfinished line
                 // and we store it to be processed for the next packet
                 if (index == -1) {
                     mUnfinishedLine = s.substring(start);
                     break;
                 }
 
-                // so we found a \r\n;
+                // we found a \n, in older devices, this is preceded by a \r
+                int newlineLength = 1;
+                if (index > 0 && s.charAt(index - 1) == '\r') {
+                    index--;
+                    newlineLength = 2;
+                }
+
                 // extract the line
                 String line = s.substring(start, index);
                 if (mTrimLines) {
@@ -82,7 +88,7 @@ public abstract class MultiLineReceiver implements IShellOutputReceiver {
                 mArray.add(line);
 
                 // move start to after the \r\n we found
-                start = index + 2;
+                start = index + newlineLength;
             } while (true);
 
             if (!mArray.isEmpty()) {

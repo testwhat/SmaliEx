@@ -52,12 +52,6 @@ public class MultiDex implements DexFile {
         files.add(dexFile);
     }
 
-    public void forEach(@Nonnull Consumer<DexFile> action) {
-        if (files != null) {
-            files.forEach(action);
-        }
-    }
-
     public void forEachDexBackedDexFile(@Nonnull Consumer<DexBackedDexFile> action) {
         if (files != null) {
             files.forEach(dexFile -> {

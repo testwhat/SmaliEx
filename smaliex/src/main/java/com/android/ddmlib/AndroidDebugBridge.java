@@ -30,15 +30,15 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import javax.annotation.Nonnull;
-
+import com.android.annotations.NonNull;
+import com.android.annotations.Nullable;
 import com.android.ddmlib.Log.LogLevel;
 
 /**
  * A connection to the host-side android debug bridge (adb)
  * <p/>This is the central point to communicate with any devices, emulators, or the applications
  * running on them.
- * <p/><b>{@link #init(boolean)} must be called before anything is done.</b>
+ * <p/><b>{@link #init} must be called before anything is done.</b>
  */
 public final class AndroidDebugBridge {
 
@@ -64,7 +64,6 @@ public final class AndroidDebugBridge {
     /** Port where adb server will be started **/
     private static int sAdbServerPort = 0;
 
-    private static InetAddress sHostAddr;
     private static InetSocketAddress sSocketAddr;
 
     private static AndroidDebugBridge sThis;
@@ -96,9 +95,10 @@ public final class AndroidDebugBridge {
          * Sent when a new {@link AndroidDebugBridge} is connected.
          * <p/>
          * This is sent from a non UI thread.
-         * @param bridge the new {@link AndroidDebugBridge} object.
+         * @param bridge the new {@link AndroidDebugBridge} object, null if there were errors while
+         *               initializing the bridge
          */
-        public void bridgeChanged(AndroidDebugBridge bridge);
+        void bridgeChanged(@Nullable AndroidDebugBridge bridge);
     }
 
     /**
@@ -112,7 +112,7 @@ public final class AndroidDebugBridge {
          * This is sent from a non UI thread.
          * @param device the new device.
          */
-        public void deviceConnected(Device device);
+        void deviceConnected(@NonNull Device device);
 
         /**
          * Sent when the a device is connected to the {@link AndroidDebugBridge}.
@@ -120,18 +120,7 @@ public final class AndroidDebugBridge {
          * This is sent from a non UI thread.
          * @param device the new device.
          */
-        public void deviceDisconnected(Device device);
-
-        /**
-         * Sent when a device data changed, or when clients are started/terminated on the device.
-         * <p/>
-         * This is sent from a non UI thread.
-         * @param device the device that was updated.
-         * @param changeMask the mask describing what changed. It can contain any of the following
-         * values: {@link Device#CHANGE_BUILD_INFO}, {@link Device#CHANGE_STATE},
-         * {@link Device#CHANGE_CLIENT_LIST}
-         */
-        public void deviceChanged(Device device, int changeMask);
+        void deviceDisconnected(@NonNull Device device);
     }
 
     /**
@@ -390,6 +379,38 @@ public final class AndroidDebugBridge {
         synchronized (sLock) {
             sDeviceListeners.remove(listener);
         }
+    }
+
+    /**
+     * Returns the devices.
+     * @see #hasInitialDeviceList()
+     */
+    @NonNull
+    public Device[] getDevices() {
+        synchronized (sLock) {
+            if (mDeviceMonitor != null) {
+                return mDeviceMonitor.getDevices();
+            }
+        }
+
+        return new Device[0];
+    }
+
+    /**
+     * Returns whether the bridge has acquired the initial list from adb after being created.
+     * <p/>Calling {@link #getDevices()} right after {@link #createBridge(String, boolean)} will
+     * generally result in an empty list. This is due to the internal asynchronous communication
+     * mechanism with <code>adb</code> that does not guarantee that the {@link Device} list has been
+     * built before the call to {@link #getDevices()}.
+     * <p/>The recommended way to get the list of {@link Device} objects is to create a
+     * {@link IDeviceChangeListener} object.
+     */
+    public boolean hasInitialDeviceList() {
+        if (mDeviceMonitor != null) {
+            return mDeviceMonitor.hasInitialDeviceList();
+        }
+
+        return false;
     }
 
     /**
@@ -698,49 +719,6 @@ public final class AndroidDebugBridge {
     }
 
     /**
-     * Notify the listener of a modified {@link Device}.
-     * <p/>
-     * The notification of the listeners is done in a synchronized block. It is important to
-     * expect the listeners to potentially access various methods of {@link Device} as well as
-     * {@link #getDevices()} which use internal locks.
-     * <p/>
-     * For this reason, any call to this method from a method of {@link DeviceMonitor},
-     * {@link Device} which is also inside a synchronized block, should first synchronize on
-     * the {@link AndroidDebugBridge} lock. Access to this lock is done through {@link #getLock()}.
-     * @param device the modified <code>IDevice</code>.
-     * @see #getLock()
-     */
-    static void deviceChanged(Device device, int changeMask) {
-        // because the listeners could remove themselves from the list while processing
-        // their event callback, we make a copy of the list and iterate on it instead of
-        // the main list.
-        // This mostly happens when the application quits.
-        IDeviceChangeListener[] listenersCopy;
-        synchronized (sLock) {
-            listenersCopy = sDeviceListeners.toArray(
-                    new IDeviceChangeListener[sDeviceListeners.size()]);
-        }
-
-        // Notify the listeners
-        for (IDeviceChangeListener listener : listenersCopy) {
-            // we attempt to catch any exception so that a bad listener doesn't kill our
-            // thread
-            try {
-                listener.deviceChanged(device, changeMask);
-            } catch (Exception e) {
-                Log.e(DDMS, e);
-            }
-        }
-    }
-
-    /**
-     * Returns the {@link DeviceMonitor} object.
-     */
-    DeviceMonitor getDeviceMonitor() {
-        return mDeviceMonitor;
-    }
-
-    /**
      * Starts the adb host side server.
      * @return true if success
      */
@@ -941,8 +919,8 @@ public final class AndroidDebugBridge {
     private static void initAdbSocketAddr() {
         try {
             sAdbServerPort = getAdbServerPort();
-            sHostAddr = InetAddress.getByName(DEFAULT_ADB_HOST);
-            sSocketAddr = new InetSocketAddress(sHostAddr, sAdbServerPort);
+            InetAddress hostAddr = InetAddress.getByName(DEFAULT_ADB_HOST);
+            sSocketAddr = new InetSocketAddress(hostAddr, sAdbServerPort);
         } catch (UnknownHostException e) {
             // localhost should always be known.
         }
@@ -1010,7 +988,7 @@ public final class AndroidDebugBridge {
      * @throws IllegalArgumentException when {@code adbServerPort} is not bigger than 0 or it is
      * not a number at all
      */
-    private static int validateAdbServerPort(@Nonnull String adbServerPort)
+    private static int validateAdbServerPort(@NonNull String adbServerPort)
             throws IllegalArgumentException {
         try {
             // C tools (adb, emulator) accept hex and octal port numbers, so need to accept them too

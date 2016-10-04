@@ -1,29 +1,17 @@
 /*
- * [The "BSD licence"]
- * Copyright (c) 2014 Riddle Hsu
- * All rights reserved.
+ * Copyright (C) 2014 Riddle Hsu
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package org.rh.smaliex.reader;
@@ -44,24 +32,32 @@ import org.rh.smaliex.LLog;
 public class Oat {
     public final static String SECTION_RODATA = ".rodata";
 
+    // https://android.googlesource.com/platform/art/+/android-5.0.2_r3/runtime/oat.cc#26
     public final static int VERSION_L_50 = 39;
+    // https://android.googlesource.com/platform/art/+/android-5.1.1_r37/runtime/oat.cc#26
     public final static int VERSION_L_MR1_51 = 45;
+    // https://android.googlesource.com/platform/art/+/android-6.0.1_r46/runtime/oat.h#35
     public final static int VERSION_M_60 = 64;
-    public final static int VERSION_N = 75;
+    public final static int VERSION_N = 79;
 
     // /art/runtime/instruction_set.h
-    public final static int kNone = 0;
-    public final static int kArm = 1;
-    public final static int kArm64 = 2;
-    public final static int kThumb2 = 3;
-    public final static int kX86 = 4;
-    public final static int kX86_64 = 5;
-    public final static int kMips = 6;
-    public final static int kMips64 = 7;
+    @SuppressWarnings("unused")
+    public final static class InstructionSet {
+        public final static int kNone = 0;
+        public final static int kArm = 1;
+        public final static int kArm64 = 2;
+        public final static int kThumb2 = 3;
+        public final static int kX86 = 4;
+        public final static int kX86_64 = 5;
+        public final static int kMips = 6;
+        public final static int kMips64 = 7;
+    }
 
-    // InstructionSetFeatures
-    public final static int kHwDiv = 0;
-    public final static int kHwLpae = 1;
+    @SuppressWarnings("unused")
+    public final static class InstructionSetFeatures {
+        public final static int kHwDiv = 0;
+        public final static int kHwLpae = 1;
+    }
 
     // /art/runtime/oat.h
     public static class Header {
@@ -73,7 +69,9 @@ public class Oat {
         @DumpFormat(hex = true)
         final int adler32_checksum_;
 
+        @DumpFormat(enumClass = InstructionSet.class)
         final int instruction_set_;
+        @DumpFormat(enumClass = InstructionSetFeatures.class)
         final int instruction_set_features_;
         final int dex_file_count_;
         final int executable_offset_;
@@ -95,7 +93,7 @@ public class Oat {
         @DumpFormat(type = DumpFormat.TYPE_CHAR, isString = true)
         final char[] key_value_store_;
 
-        int artVersion = 64;
+        int artVersion = VERSION_M_60;
 
         public Header(DataReader r) throws IOException {
             r.readBytes(magic_);
@@ -172,12 +170,14 @@ public class Oat {
             public Header(DataReader r) throws IOException {
                 r.readBytes(magic_);
                 if (magic_[0] != 'd' || magic_[1] != 'e' || magic_[2] != 'x') {
-                    LLog.e(String.format("Invalid dex magic %c%c%c", magic_[0], magic_[1], magic_[2]));
+                    LLog.e(String.format("Invalid dex magic %c%c%c",
+                            magic_[0], magic_[1], magic_[2]));
                 }
                 r.readBytes(version_);
                 checksum_= r.readInt();
-                if (version_[0] != '0' || version_[1] != '3' || version_[2] != '5') {
-                    LLog.e(String.format("Invalid dex version %c%c%c", magic_[0], magic_[1], magic_[2]));
+                if (version_[0] != '0' || version_[1] != '3' || version_[2] < '5') {
+                    LLog.e(String.format("Invalid dex version %c%c%c",
+                            version_[0], version_[1], version_[2]));
                 }
                 r.readBytes(signature_);
                 file_size_ = r.readInt();
@@ -330,13 +330,17 @@ public class Oat {
 
     public void dump() {
         try {
+            System.out.println("===== Oat header =====");
             dump(mHeader);
             System.out.println();
 
+            System.out.println("===== OatDex files =====");
             for (OatDexFile odf : mOatDexFiles) {
                 dump(odf);
                 System.out.println();
             }
+
+            System.out.println("===== Dex files =====");
             for (DexFile df : mDexFiles) {
                 dump(df.mHeader);
                 System.out.println();
@@ -354,6 +358,7 @@ public class Oat {
                     || !field.getName().endsWith("_")) {
                 continue;
             }
+            field.setAccessible(true);
             Class<?> type = field.getType();
             System.out.print(field.getName() + " = ");
             Object val = field.get(obj);
@@ -370,25 +375,38 @@ public class Oat {
                     } else {
                         rawStr = new String((char[]) val);
                     }
-                    System.out.println(rawStr.replace((char) 0, ' '));
+                    System.out.println(rawStr.trim());
+                } else if (fmt.enumClass() != DumpFormat.class) {
+                    Field[] enumDefines = fmt.enumClass().getDeclaredFields();
+                    boolean matched = false;
+                    for (Field f : enumDefines) {
+                        if (val.equals(f.get(null))) {
+                            System.out.println(f.getName());
+                            matched = true;
+                            break;
+                        }
+                    }
+                    if (!matched) {
+                        System.out.println(val);
+                    }
                 } else {
                     if (type.isArray()) {
                         byte[] bytes = (byte[]) val;
-                        String sf = fmt.hex() ? "%02X" : "%d ";
+                        String sf = fmt.hex() ? "0x%02X" : "%d ";
                         for (byte b : bytes) {
                             System.out.printf(sf, b);
                         }
                         System.out.println();
                     } else {
-                        String sf = fmt.hex() ? "%X\n" : "%d\n";
+                        String sf = fmt.hex() ? "0x%X\n" : "%d\n";
                         System.out.printf(sf, val);
                     }
                 }
             } else {
                 if (type.isArray()) {
-                    Class<?> ctype = type.getComponentType();
+                    Class<?> compType = type.getComponentType();
                     int len = Array.getLength(val);
-                    System.out.println(ctype + "[" + len + "]");
+                    System.out.println(compType + "[" + len + "]");
                 } else {
                     System.out.println(val);
                 }
@@ -419,6 +437,7 @@ public class Oat {
         int type() default -1;
         boolean isString() default false;
         boolean hex() default false;
+        Class<?> enumClass() default DumpFormat.class;
     }
 
 // See compiler/oat_writer.h
