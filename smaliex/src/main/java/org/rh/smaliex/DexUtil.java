@@ -16,26 +16,12 @@
 
 package org.rh.smaliex;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.Serializable;
-import java.lang.ref.SoftReference;
-import java.util.ArrayList;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
-
-import javax.annotation.Nonnull;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 import org.jf.baksmali.Adaptors.ClassDefinition;
-import org.jf.dexlib2.Opcode;
 import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.VersionMap;
 import org.jf.dexlib2.analysis.AnalysisException;
@@ -56,10 +42,23 @@ import org.jf.dexlib2.rewriter.Rewriter;
 import org.jf.dexlib2.rewriter.RewriterModule;
 import org.jf.dexlib2.rewriter.Rewriters;
 
-import com.google.common.cache.CacheBuilder;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.Serializable;
+import java.lang.ref.SoftReference;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+
+import javax.annotation.Nonnull;
 
 public class DexUtil {
     public static int DEFAULT_API_LEVEL = 20;
@@ -164,7 +163,10 @@ public class DexUtil {
     public static ClassPathEx getClassPath(String path, Opcodes opcodes, String ext) {
         ArrayList<DexFile> dexFiles = new ArrayList<>();
         for (File f : MiscUtil.getFiles(path, ext)) {
-            dexFiles.addAll(loadMultiDex(f, opcodes));
+            dexFiles.addAll(OatUtil.getDexFiles(f, opcodes.api, null));
+        }
+        if (dexFiles.isEmpty()) {
+            LLog.i("Not added any dex from " + path);
         }
         return new ClassPathEx(dexFiles, opcodes.artVersion);
     }
@@ -484,7 +486,7 @@ public class DexUtil {
         }
 
         ODexRewriterModule(String bootClassPath, Opcodes opcodes) {
-            this(bootClassPath, opcodes, ".dex;.jar");
+            this(bootClassPath, opcodes, ".dex;.jar;.oat");
         }
 
         @Nonnull

@@ -16,6 +16,16 @@
 
 package org.rh.smaliex;
 
+import org.jf.baksmali.BaksmaliOptions;
+import org.jf.dexlib2.Opcodes;
+import org.jf.dexlib2.dexbacked.DexBackedDexFile;
+import org.jf.dexlib2.iface.DexFile;
+import org.jf.dexlib2.writer.pool.DexPool;
+import org.rh.smaliex.DexUtil.ODexRewriter;
+import org.rh.smaliex.reader.DataReader;
+import org.rh.smaliex.reader.Elf;
+import org.rh.smaliex.reader.Oat;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -29,16 +39,7 @@ import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
 import java.util.zip.ZipEntry;
 
-import org.jf.baksmali.BaksmaliOptions;
-import org.jf.dexlib2.Opcodes;
-import org.jf.dexlib2.VersionMap;
-import org.jf.dexlib2.dexbacked.DexBackedDexFile;
-import org.jf.dexlib2.iface.DexFile;
-import org.jf.dexlib2.writer.pool.DexPool;
-import org.rh.smaliex.DexUtil.ODexRewriter;
-import org.rh.smaliex.reader.DataReader;
-import org.rh.smaliex.reader.Elf;
-import org.rh.smaliex.reader.Oat;
+import javax.annotation.Nonnull;
 
 public class OatUtil {
 
@@ -47,6 +48,7 @@ public class OatUtil {
         return DexUtil.getOpcodes(key);
     }
 
+    @Nonnull
     public static List<DexBackedDexFile> getDexFiles(
             File file, int apiLevel, List<String> outputNames) {
         List<DexBackedDexFile> dexFiles = new ArrayList<>();
@@ -146,6 +148,7 @@ public class OatUtil {
                 bootClassPath, null, false);
     }
 
+    @Nonnull
     public static Oat getOat(Elf e) throws IOException {
         DataReader r = e.getReader();
         // Currently the same as e.getSymbolTable("oatdata").getOffset(e)
@@ -157,6 +160,7 @@ public class OatUtil {
         throw new IOException("oat not found");
     }
 
+    @Nonnull
     public static ArrayList<String> getBootJarNames(String bootPath, boolean fullPath) {
         ArrayList<String> names = new ArrayList<>();
         for (File oatFile : getOatFile(new File(bootPath))) {
@@ -176,6 +180,7 @@ public class OatUtil {
         return names;
     }
 
+    @Nonnull
     public static String getOutputNameForSubDex(String jarPathInOat) {
         int colonPos = jarPathInOat.indexOf(':');
         if (colonPos > 0) {
@@ -186,6 +191,7 @@ public class OatUtil {
         return jarPathInOat.substring(jarPathInOat.lastIndexOf('/') + 1);
     }
 
+    @Nonnull
     static File[] getOatFile(File oatPath) {
         return oatPath.isDirectory() ? MiscUtil.getFiles(oatPath.getAbsolutePath(), ".oat;.odex")
                 : new File[] { oatPath };
@@ -252,6 +258,7 @@ public class OatUtil {
         }
     }
 
+    @Nonnull
     static DexBackedDexFile readDex(Oat.DexFile od, int dexSize, Opcodes opcodes)
             throws IOException {
         byte[] dexBytes = new byte[dexSize];
@@ -266,6 +273,7 @@ public class OatUtil {
         return new DexBackedDexFile(opcodes, dexBytes);
     }
 
+    @Nonnull
     public static DexFile[] getOdexFromOat(Oat oat, Opcodes opcodes) throws IOException {
         if (opcodes == null) {
             opcodes = getOpcodes(oat);

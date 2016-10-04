@@ -152,7 +152,7 @@ public class Main {
     static int getInputType(File input) {
         if (input.isDirectory()) {
             File[] files = MiscUtil.getFiles(input.getAbsolutePath(), "dex;oat");
-            if (files != null && files.length > 0) {
+            if (files.length > 0) {
                 input = files[0];
             }
         }
