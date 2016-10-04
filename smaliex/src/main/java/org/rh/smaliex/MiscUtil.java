@@ -17,9 +17,10 @@
 package org.rh.smaliex;
 
 import java.io.File;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+
+import javax.annotation.Nonnull;
 
 public class MiscUtil {
 
@@ -56,23 +57,22 @@ public class MiscUtil {
         return new File(getFileDirPath(f.getAbsolutePath()), name);
     }
 
+    @Nonnull
     public static File[] getFiles(String path, String extensionsStr) {
         File dir = new File(path);
         final String[] extensions = extensionsStr.split(";");
         for (int i = 0; i < extensions.length; i++) {
             extensions[i] = extensions[i].toLowerCase();
         }
-        return dir.listFiles(new FilenameFilter() {
-            @Override
-            public boolean accept(File dir, String name) {
-                for (String ext : extensions) {
-                    if (name.toLowerCase().endsWith(ext)) {
-                        return true;
-                    }
+        File[] files =  dir.listFiles((dir1, name) -> {
+            for (String ext : extensions) {
+                if (name.toLowerCase().endsWith(ext)) {
+                    return true;
                 }
-                return false;
             }
+            return false;
         });
+        return files == null ? new File[0] : files;
     }
 
     public static String getFilenamePrefix(String filename) {

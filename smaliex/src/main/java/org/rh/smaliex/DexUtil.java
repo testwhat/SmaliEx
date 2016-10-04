@@ -16,22 +16,6 @@
 
 package org.rh.smaliex;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.lang.ref.SoftReference;
-import java.util.ArrayList;
-import java.util.Enumeration;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
-
-import javax.annotation.Nonnull;
-
 import org.jf.baksmali.Adaptors.ClassDefinition;
 import org.jf.dexlib2.Opcode;
 import org.jf.dexlib2.Opcodes;
@@ -48,6 +32,21 @@ import org.jf.dexlib2.rewriter.MethodRewriter;
 import org.jf.dexlib2.rewriter.Rewriter;
 import org.jf.dexlib2.rewriter.RewriterModule;
 import org.jf.dexlib2.rewriter.Rewriters;
+
+import javax.annotation.Nonnull;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.lang.ref.SoftReference;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 public class DexUtil {
     private static Opcodes DEFAULT_OPCODES;
@@ -152,7 +151,10 @@ public class DexUtil {
     public static ClassPath getClassPath(String path, Opcodes opcodes, String ext) {
         ArrayList<DexFile> dexFiles = new ArrayList<>();
         for (File f : MiscUtil.getFiles(path, ext)) {
-            dexFiles.addAll(loadMultiDex(f, opcodes));
+            dexFiles.addAll(OatUtil.getDexFiles(f, opcodes.version.api, null));
+        }
+        if (dexFiles.isEmpty()) {
+            LLog.i("Not added any dex from " + path);
         }
         return new ClassPath(dexFiles, false, opcodes.version);
     }
@@ -402,7 +404,7 @@ public class DexUtil {
         }
 
         ODexRewriterModule(String bootClassPath, Opcodes opcodes) {
-            this(bootClassPath, opcodes, ".dex;.jar");
+            this(bootClassPath, opcodes, ".dex;.jar;.oat");
         }
 
         @Nonnull
