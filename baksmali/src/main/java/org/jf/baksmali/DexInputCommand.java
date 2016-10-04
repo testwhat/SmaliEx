@@ -37,8 +37,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import org.jf.dexlib2.DexFileFactory;
 import org.jf.dexlib2.Opcodes;
-import org.jf.dexlib2.dexbacked.DexBackedDexFile;
-import org.jf.dexlib2.dexbacked.MultiDex;
+import org.jf.dexlib2.MultiDex;
 import org.jf.util.jcommander.Command;
 import org.jf.util.jcommander.ExtendedParameter;
 

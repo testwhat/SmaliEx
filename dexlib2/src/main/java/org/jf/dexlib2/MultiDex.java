@@ -1,6 +1,6 @@
-package org.jf.dexlib2.dexbacked;
+package org.jf.dexlib2;
 
-import org.jf.dexlib2.Opcodes;
+import org.jf.dexlib2.dexbacked.DexBackedDexFile;
 import org.jf.dexlib2.iface.ClassDef;
 import org.jf.dexlib2.iface.DexFile;
 import org.jf.dexlib2.writer.io.DexDataStore;
@@ -194,13 +194,12 @@ public class MultiDex implements DexFile {
         public final ClassPool classPool;
 
         protected MultiDexPool(
-                Opcodes opcodes, StringPool stringPool,
-                TypePool typePool, ProtoPool protoPool,
-                FieldPool fieldPool, MethodPool methodPool,
+                Opcodes opcodes, StringPool stringPool, TypePool typePool,
+                ProtoPool protoPool, FieldPool fieldPool, MethodPool methodPool,
                 ClassPool classPool, TypeListPool typeListPool,
                 AnnotationPool annotationPool, AnnotationSetPool annotationSetPool) {
-            super(opcodes, stringPool, typePool, protoPool, fieldPool,
-                    methodPool, classPool, typeListPool, annotationPool, annotationSetPool);
+            super(opcodes, stringPool, typePool, protoPool, fieldPool, methodPool,
+                    classPool, typeListPool, annotationPool, annotationSetPool);
             this.classPool = classPool;
         }
 
@@ -212,12 +211,14 @@ public class MultiDex implements DexFile {
             TypeListPool typeListPool = new TypeListPool(typePool);
             ProtoPool protoPool = new ProtoPool(stringPool, typePool, typeListPool);
             MethodPool methodPool = new MethodPool(stringPool, typePool, protoPool);
-            AnnotationPool annotationPool = new AnnotationPool(stringPool, typePool, fieldPool, methodPool);
+            AnnotationPool annotationPool = new AnnotationPool(
+                    stringPool, typePool, fieldPool, methodPool);
             AnnotationSetPool annotationSetPool = new AnnotationSetPool(annotationPool);
-            ClassPool classPool = new ClassPool(stringPool, typePool, fieldPool, methodPool, annotationSetPool,
-                    typeListPool);
+            ClassPool classPool = new ClassPool(stringPool, typePool,
+                    fieldPool, methodPool, annotationSetPool, typeListPool);
 
-            return new MultiDexPool(opcodes, stringPool, typePool, protoPool, fieldPool, methodPool, classPool, typeListPool,
+            return new MultiDexPool(opcodes, stringPool, typePool, protoPool,
+                    fieldPool, methodPool, classPool, typeListPool,
                     annotationPool, annotationSetPool);
         }
 

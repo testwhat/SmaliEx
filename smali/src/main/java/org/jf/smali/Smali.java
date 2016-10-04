@@ -39,7 +39,7 @@ import org.antlr.runtime.TokenSource;
 import org.antlr.runtime.tree.CommonTree;
 import org.antlr.runtime.tree.CommonTreeNodeStream;
 import org.jf.dexlib2.Opcodes;
-import org.jf.dexlib2.dexbacked.MultiDex;
+import org.jf.dexlib2.MultiDex;
 import org.jf.dexlib2.iface.ClassDef;
 import org.jf.dexlib2.writer.builder.DexBuilder;
 import org.jf.dexlib2.writer.io.FileDataStore;
