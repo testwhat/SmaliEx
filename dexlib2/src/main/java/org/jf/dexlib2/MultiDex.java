@@ -6,16 +6,8 @@ import org.jf.dexlib2.iface.DexFile;
 import org.jf.dexlib2.writer.io.DexDataStore;
 import org.jf.dexlib2.writer.io.FileDataStore;
 import org.jf.dexlib2.writer.io.MemoryDataStore;
-import org.jf.dexlib2.writer.pool.AnnotationPool;
-import org.jf.dexlib2.writer.pool.AnnotationSetPool;
 import org.jf.dexlib2.writer.pool.ClassPool;
 import org.jf.dexlib2.writer.pool.DexPool;
-import org.jf.dexlib2.writer.pool.FieldPool;
-import org.jf.dexlib2.writer.pool.MethodPool;
-import org.jf.dexlib2.writer.pool.ProtoPool;
-import org.jf.dexlib2.writer.pool.StringPool;
-import org.jf.dexlib2.writer.pool.TypeListPool;
-import org.jf.dexlib2.writer.pool.TypePool;
 
 import javax.annotation.Nonnull;
 import java.io.File;
@@ -193,33 +185,14 @@ public class MultiDex implements DexFile {
     public static class MultiDexPool extends DexPool {
         public final ClassPool classPool;
 
-        protected MultiDexPool(
-                Opcodes opcodes, StringPool stringPool, TypePool typePool,
-                ProtoPool protoPool, FieldPool fieldPool, MethodPool methodPool,
-                ClassPool classPool, TypeListPool typeListPool,
-                AnnotationPool annotationPool, AnnotationSetPool annotationSetPool) {
-            super(opcodes, stringPool, typePool, protoPool, fieldPool, methodPool,
-                    classPool, typeListPool, annotationPool, annotationSetPool);
-            this.classPool = classPool;
+        protected MultiDexPool(Opcodes opcodes) {
+            super(opcodes);
+            this.classPool = getSectionProvider().getClassSection();
         }
 
         @Nonnull
         public static MultiDexPool makeDexPool(@Nonnull Opcodes opcodes) {
-            StringPool stringPool = new StringPool();
-            TypePool typePool = new TypePool(stringPool);
-            FieldPool fieldPool = new FieldPool(stringPool, typePool);
-            TypeListPool typeListPool = new TypeListPool(typePool);
-            ProtoPool protoPool = new ProtoPool(stringPool, typePool, typeListPool);
-            MethodPool methodPool = new MethodPool(stringPool, typePool, protoPool);
-            AnnotationPool annotationPool = new AnnotationPool(
-                    stringPool, typePool, fieldPool, methodPool);
-            AnnotationSetPool annotationSetPool = new AnnotationSetPool(annotationPool);
-            ClassPool classPool = new ClassPool(stringPool, typePool,
-                    fieldPool, methodPool, annotationSetPool, typeListPool);
-
-            return new MultiDexPool(opcodes, stringPool, typePool, protoPool,
-                    fieldPool, methodPool, classPool, typeListPool,
-                    annotationPool, annotationSetPool);
+            return new MultiDexPool(opcodes);
         }
 
         public int getMethodCount() {

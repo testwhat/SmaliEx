@@ -82,7 +82,7 @@ public class ClassPathResolver {
     public ClassPathResolver(@Nonnull List<String> bootClassPathDirs, @Nonnull List<String> bootClassPathEntries,
                              @Nonnull List<String> extraClassPathEntries, @Nonnull DexFile dexFile)
             throws IOException {
-        this(bootClassPathDirs, bootClassPathEntries, extraClassPathEntries, dexFile, dexFile.getOpcodes().api);
+        this(bootClassPathDirs, bootClassPathEntries, extraClassPathEntries, dexFile, true);
     }
 
     /**
@@ -92,7 +92,6 @@ public class ClassPathResolver {
      * @param extraClassPathEntries A list of additional classpath entries to load. Can be empty. All entries must be
      *                              local paths. Device paths are not supported.
      * @param dexFile The dex file that the classpath will be used to analyze
-     * @param apiLevel The api level of the device. This is used to select an appropriate set of boot classpath entries.
      * @throws IOException If any IOException occurs
      * @throws ResolveException If any classpath entries cannot be loaded for some reason
      *
@@ -101,19 +100,19 @@ public class ClassPathResolver {
      *                             classpath entries will be loaded
      */
     public ClassPathResolver(@Nonnull List<String> bootClassPathDirs, @Nonnull List<String> extraClassPathEntries,
-                             @Nonnull DexFile dexFile, int apiLevel)
+                             @Nonnull DexFile dexFile)
             throws IOException {
-        this(bootClassPathDirs, null, extraClassPathEntries, dexFile, apiLevel);
+        this(bootClassPathDirs, null, extraClassPathEntries, dexFile, true);
     }
 
     private ClassPathResolver(@Nonnull List<String> bootClassPathDirs, @Nullable List<String> bootClassPathEntries,
-                              @Nonnull List<String> extraClassPathEntries, @Nonnull DexFile dexFile, int apiLevel)
+                              @Nonnull List<String> extraClassPathEntries, @Nonnull DexFile dexFile, boolean unused)
             throws IOException {
         this.classPathDirs = bootClassPathDirs;
         opcodes = dexFile.getOpcodes();
 
         if (bootClassPathEntries == null) {
-            bootClassPathEntries = getDefaultBootClassPath(dexFile, apiLevel);
+            bootClassPathEntries = getDefaultBootClassPath(dexFile, opcodes.api);
         }
 
         for (String entry : bootClassPathEntries) {
@@ -133,7 +132,18 @@ public class ClassPathResolver {
                     throw new ResolveException(ex);
                 }
             } catch (NotFoundException ex) {
-                throw new ResolveException(ex);
+                if (entry.endsWith(".odex")) {
+                    String jarEntry = entry.substring(0, entry.length() - 5) + ".jar";
+                    try {
+                        loadLocalOrDeviceBootClassPathEntry(jarEntry);
+                        } catch (NoDexException ex2) {
+                        throw new ResolveException("Neither %s nor %s contain a dex file", entry, jarEntry);
+                    } catch (NotFoundException ex2) {
+                        throw new ResolveException(ex);
+                    }
+                } else {
+                    throw new ResolveException(ex);
+                }
             }
         }
 
@@ -190,7 +200,6 @@ public class ClassPathResolver {
         for (String directory: classPathDirs) {
             File directoryFile = new File(directory);
             if (!directoryFile.exists()) {
-                // TODO: print a warning in the baksmali frontend before we get here
                 continue;
             }
 
@@ -422,7 +431,7 @@ public class ClassPathResolver {
                     "/system/framework/mms-common.jar",
                     "/system/framework/android.policy.jar",
                     "/system/framework/apache-xml.jar");
-        } else /*if (apiLevel <= 23)*/ {
+        } else if (apiLevel <= 23) {
             return Lists.newArrayList(
                     "/system/framework/core-libart.jar",
                     "/system/framework/conscrypt.jar",
@@ -436,7 +445,21 @@ public class ClassPathResolver {
                     "/system/framework/ims-common.jar",
                     "/system/framework/apache-xml.jar",
                     "/system/framework/org.apache.http.legacy.boot.jar");
+        } else /*if (apiLevel <= 24)*/ {
+            return Lists.newArrayList(
+                    "/system/framework/core-oj.jar",
+                    "/system/framework/core-libart.jar",
+                    "/system/framework/conscrypt.jar",
+                    "/system/framework/okhttp.jar",
+                    "/system/framework/core-junit.jar",
+                    "/system/framework/bouncycastle.jar",
+                    "/system/framework/ext.jar",
+                    "/system/framework/framework.jar",
+                    "/system/framework/telephony-common.jar",
+                    "/system/framework/voip-common.jar",
+                    "/system/framework/ims-common.jar",
+                    "/system/framework/apache-xml.jar",
+                    "/system/framework/org.apache.http.legacy.boot.jar");
         }
-        // TODO: update for N
     }
 }

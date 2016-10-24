@@ -46,12 +46,9 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
-public class AnalysisArguments {
-    @Parameter(names = {"-a", "--api"},
-            description = "The numeric api level of the file being disassembled.")
-    @ExtendedParameter(argumentNames = "api")
-    public int apiLevel = 15;
+import static org.jf.dexlib2.analysis.ClassPath.NOT_ART;
 
+public class AnalysisArguments {
     @Parameter(names = {"-b", "--bootclasspath", "--bcp"},
             description = "A colon separated list of the files to include in the bootclasspath when analyzing the " +
                     "dex file. If not specified, baksmali will attempt to choose an " +
@@ -86,7 +83,7 @@ public class AnalysisArguments {
     @Nonnull
     public ClassPath loadClassPathForDexFile(@Nonnull File dexFileDir, @Nonnull DexFile dexFile,
                                              boolean checkPackagePrivateAccess) throws IOException {
-        return loadClassPathForDexFile(dexFileDir, dexFile, checkPackagePrivateAccess, 0);
+        return loadClassPathForDexFile(dexFileDir, dexFile, checkPackagePrivateAccess, NOT_ART);
     }
 
     @Nonnull
@@ -95,7 +92,16 @@ public class AnalysisArguments {
             throws IOException {
         ClassPathResolver resolver;
 
-        if (dexFile instanceof OatDexFile) {
+        // By default, oatVersion should be NOT_ART, and we'll automatically set it if dexFile is an oat file. In some
+        // cases the caller may choose to override the oat version, in which case we should use the given oat version
+        // regardless of the actual version of the oat file
+        if (oatVersion == NOT_ART) {
+            if (dexFile instanceof OatDexFile) {
+                checkPackagePrivateAccess = true;
+                oatVersion = ((OatDexFile)dexFile).getContainer().getOatVersion();
+            }
+        } else {
+            // this should always be true for ART
             checkPackagePrivateAccess = true;
         }
 
@@ -120,7 +126,7 @@ public class AnalysisArguments {
         if (bootClassPath == null) {
             // TODO: we should be able to get the api from the Opcodes object associated with the dexFile..
             // except that the oat version -> api mapping doesn't fully work yet
-            resolver = new ClassPathResolver(filteredClassPathDirectories, classPath, dexFile, apiLevel);
+            resolver = new ClassPathResolver(filteredClassPathDirectories, classPath, dexFile);
         }  else if (bootClassPath.size() == 1 && bootClassPath.get(0).length() == 0) {
             // --bootclasspath "" is a special case, denoting that no bootclasspath should be used
             resolver = new ClassPathResolver(

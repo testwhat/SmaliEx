@@ -37,10 +37,13 @@ import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile.NotADexFile;
 import org.jf.dexlib2.dexbacked.ZipDexContainer.ZipDexFile;
 import org.jf.dexlib2.iface.MultiDexContainer;
+import org.jf.dexlib2.util.DexUtil;
+import org.jf.dexlib2.util.DexUtil.InvalidFile;
+import org.jf.dexlib2.util.DexUtil.UnsupportedFile;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.io.EOFException;
+import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -48,8 +51,6 @@ import java.util.Enumeration;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
-
-import static org.jf.dexlib2.dexbacked.DexBackedDexFile.verifyMagicAndByteOrder;
 
 /**
  * Represents a zip file that contains dex files (i.e. an apk or jar file)
@@ -68,6 +69,10 @@ public class ZipDexContainer implements MultiDexContainer<ZipDexFile> {
     public ZipDexContainer(@Nonnull File zipFilePath, @Nonnull Opcodes opcodes) {
         this.zipFilePath = zipFilePath;
         this.opcodes = opcodes;
+    }
+
+    @Nonnull @Override public Opcodes getOpcodes() {
+        return opcodes;
     }
 
     /**
@@ -119,13 +124,22 @@ public class ZipDexContainer implements MultiDexContainer<ZipDexFile> {
     }
 
     public boolean isZipFile() {
+        ZipFile zipFile = null;
         try {
-            getZipFile();
+            zipFile = getZipFile();
             return true;
         } catch (IOException ex) {
             return false;
         } catch (NotAZipFileException ex) {
             return false;
+        } finally {
+            if(zipFile != null) {
+                try {
+                    zipFile.close();
+                } catch (IOException ex) {
+                    // just eat it
+                }
+            }
         }
     }
 
@@ -147,29 +161,23 @@ public class ZipDexContainer implements MultiDexContainer<ZipDexFile> {
         }
     }
 
-    private boolean isDex(@Nonnull ZipFile zipFile, @Nonnull ZipEntry zipEntry) throws IOException {
-        InputStream inputStream = zipFile.getInputStream(zipEntry);
+    protected boolean isDex(@Nonnull ZipFile zipFile, @Nonnull ZipEntry zipEntry) throws IOException {
+        InputStream inputStream = new BufferedInputStream(zipFile.getInputStream(zipEntry));
         try {
-            inputStream.mark(44);
-            byte[] partialHeader = new byte[44];
-            try {
-                ByteStreams.readFully(inputStream, partialHeader);
-            } catch (EOFException ex) {
-                return false;
-            }
-
-            try {
-                verifyMagicAndByteOrder(partialHeader, 0);
-            } catch (NotADexFile ex) {
-                return false;
-            }
-            return true;
+            DexUtil.verifyDexHeader(inputStream);
+        } catch (NotADexFile ex) {
+            return false;
+        } catch (InvalidFile ex) {
+            return false;
+        } catch (UnsupportedFile ex) {
+            return false;
         } finally {
             inputStream.close();
         }
+        return true;
     }
 
-    private ZipFile getZipFile() throws IOException {
+    protected ZipFile getZipFile() throws IOException {
         try {
             return new ZipFile(zipFilePath);
         } catch (IOException ex) {
@@ -178,7 +186,7 @@ public class ZipDexContainer implements MultiDexContainer<ZipDexFile> {
     }
 
     @Nonnull
-    private ZipDexFile loadEntry(@Nonnull ZipFile zipFile, @Nonnull ZipEntry zipEntry) throws IOException {
+    protected ZipDexFile loadEntry(@Nonnull ZipFile zipFile, @Nonnull ZipEntry zipEntry) throws IOException {
         InputStream inputStream = zipFile.getInputStream(zipEntry);
         try {
             byte[] buf = ByteStreams.toByteArray(inputStream);

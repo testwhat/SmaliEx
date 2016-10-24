@@ -38,7 +38,6 @@ import com.beust.jcommander.ParametersDelegate;
 import com.beust.jcommander.validators.PositiveInteger;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.util.SyntheticAccessorResolver;
 import org.jf.util.StringWrapper;
 import org.jf.util.jcommander.ExtendedParameter;
@@ -133,6 +132,11 @@ public class DisassembleCommand extends DexInputCommand {
                     "fields from the current class.")
     private boolean implicitReferences = false;
 
+    @Parameter(names = "--classes",
+            description = "A comma separated list of classes. Only disassemble these classes")
+    @ExtendedParameter(argumentNames = "classes")
+    private List<String> classes = null;
+
     public DisassembleCommand(@Nonnull List<JCommander> commandAncestors) {
         super(commandAncestors);
     }
@@ -150,7 +154,7 @@ public class DisassembleCommand extends DexInputCommand {
         }
 
         String input = inputList.get(0);
-        loadDexFile(input, Opcodes.getDefault());
+        loadDexFile(input);
 
         if (showDeodexWarning() && dexFile.hasOdexOpcodes()) {
             StringWrapper.printWrappedString(System.err,
@@ -170,7 +174,7 @@ public class DisassembleCommand extends DexInputCommand {
             analysisArguments.classPathDirectories = Lists.newArrayList(inputFile.getAbsoluteFile().getParent());
         }
 
-        if (!Baksmali.disassembleDexFile(dexFile, outputDirectoryFile, jobs, getOptions())) {
+        if (!Baksmali.disassembleDexFile(dexFile, outputDirectoryFile, jobs, getOptions(), classes)) {
             System.exit(-1);
         }
     }

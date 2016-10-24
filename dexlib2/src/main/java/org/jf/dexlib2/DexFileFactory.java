@@ -555,5 +555,9 @@ public final class DexFileFactory {
             }
             return null;
         }
+
+        @Nonnull @Override public Opcodes getOpcodes() {
+            return dexFile.getOpcodes();
+        }
     }
 }
