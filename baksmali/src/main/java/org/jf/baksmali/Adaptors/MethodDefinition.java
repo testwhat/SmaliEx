@@ -443,7 +443,8 @@ public class MethodDefinition {
                 });
             }
 
-            if (classDef.options.accessorComments && (instruction instanceof ReferenceInstruction)) {
+            if (classDef.options.accessorComments && classDef.options.syntheticAccessorResolver != null &&
+                    (instruction instanceof ReferenceInstruction)) {
                 Opcode opcode = instruction.getOpcode();
 
                 if (opcode.referenceType == ReferenceType.METHOD) {
