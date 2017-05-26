@@ -29,48 +29,37 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package org.jf.dexlib2.dexbacked.reference;
+package org.jf.dexlib2.builder.instruction;
 
-import org.jf.dexlib2.base.reference.BaseStringReference;
-import org.jf.dexlib2.dexbacked.DexBackedDexFile;
-import org.jf.dexlib2.dexbacked.DexReader;
-import org.jf.dexlib2.dexbacked.raw.StringIdItem;
+import org.jf.dexlib2.Format;
+import org.jf.dexlib2.Opcode;
+import org.jf.dexlib2.builder.BuilderInstruction;
+import org.jf.dexlib2.iface.instruction.formats.Instruction22c;
+import org.jf.dexlib2.iface.instruction.formats.Instruction22cs;
+import org.jf.dexlib2.iface.reference.Reference;
+import org.jf.dexlib2.util.Preconditions;
 
 import javax.annotation.Nonnull;
 
-public class DexBackedStringReference extends BaseStringReference {
-    @Nonnull public final DexBackedDexFile dexFile;
-    public final int stringIndex;
+public class BuilderInstruction22cs extends BuilderInstruction implements Instruction22cs {
+    public static final Format FORMAT = Format.Format22cs;
 
-    public DexBackedStringReference(@Nonnull DexBackedDexFile dexBuf,
-                                    int stringIndex) {
-        this.dexFile = dexBuf;
-        this.stringIndex = stringIndex;
+    protected final int registerA;
+    protected final int registerB;
+    protected final int fieldOffset;
+
+    public BuilderInstruction22cs(@Nonnull Opcode opcode,
+                                  int registerA,
+                                  int registerB,
+                                  int fieldOffset) {
+        super(opcode);
+        this.registerA = Preconditions.checkNibbleRegister(registerA);
+        this.registerB = Preconditions.checkNibbleRegister(registerB);
+        this.fieldOffset = fieldOffset;
     }
 
-    @Nonnull
-    public String getString() {
-        return dexFile.getString(stringIndex);
-    }
-
-
-    /**
-     * Calculate and return the private size of a string reference.
-     *
-     * Calculated as: string_data_off + string_data_item size
-     *
-     * @return size in bytes
-     */
-    public int getSize() {
-        int size = StringIdItem.ITEM_SIZE; //uint for string_data_off
-        //add the string data length:
-        int stringOffset = dexFile.getStringIdItemOffset(stringIndex);
-        int stringDataOffset = dexFile.readSmallUint(stringOffset);
-        DexReader reader = dexFile.readerAt(stringDataOffset);
-        size += reader.peekSmallUleb128Size();
-        int utf16Length = reader.readSmallUleb128();
-        //and string data itself:
-        size += reader.peekStringLength(utf16Length);
-        return size;
-    }
+    @Override public int getRegisterA() { return registerA; }
+    @Override public int getRegisterB() { return registerB; }
+    @Override public int getFieldOffset() { return fieldOffset; }
+    @Override public Format getFormat() { return FORMAT; }
 }

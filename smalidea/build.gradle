@@ -49,7 +49,7 @@ apply plugin: 'idea'
 apply plugin: 'antlr'
 
 
-version = '0.03'
+version = '0.05'
 
 if (!('release' in gradle.startParameter.taskNames)) {
     def versionSuffix
@@ -96,7 +96,7 @@ if (!('idea' in gradle.startParameter.taskNames)) {
     apply plugin: 'org.jetbrains.intellij'
 
     intellij {
-        version 'IC-15.0.6'
+        version 'IC-2016.3.5'
         pluginName 'smalidea'
 
         updateSinceUntilBuild false
