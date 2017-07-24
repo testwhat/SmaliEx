@@ -17,6 +17,7 @@
 package org.rh.smaliex.reader;
 
 import org.rh.smaliex.LLog;
+import org.rh.smaliex.MiscUtil;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -29,19 +30,36 @@ import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 
+@SuppressWarnings("unused")
 public class Oat {
     public final static String SECTION_RODATA = ".rodata";
 
-    // https://android.googlesource.com/platform/art/+/android-5.0.2_r3/runtime/oat.cc#26
-    public final static int VERSION_L_50 = 39;
-    // https://android.googlesource.com/platform/art/+/android-5.1.1_r37/runtime/oat.cc#26
-    public final static int VERSION_L_MR1_51 = 45;
-    // https://android.googlesource.com/platform/art/+/android-6.0.1_r46/runtime/oat.h#35
-    public final static int VERSION_M_60 = 64;
-    public final static int VERSION_N = 79;
+    public enum Version {
+        // https://android.googlesource.com/platform/art/+/lollipop-release/runtime/oat.cc#26
+        L_50(21, 39),
+
+        // https://android.googlesource.com/platform/art/+/lollipop-mr1-release/runtime/oat.cc#26
+        L_MR1_51(22, 45),
+
+        // https://android.googlesource.com/platform/art/+/marshmallow-release/runtime/oat.h#35
+        M_60(23, 64),
+
+        // https://android.googlesource.com/platform/art/+/nougat-release/runtime/oat.h#35
+        N_70(24, 79),
+
+        // https://android.googlesource.com/platform/art/+/nougat-mr1-release/runtime/oat.h#35
+        N_MR1_71(25, 88);
+
+        final int api;
+        final int oat;
+
+        Version(int api, int oat) {
+            this.api = api;
+            this.oat = oat;
+        }
+    }
 
     // /art/runtime/instruction_set.h
-    @SuppressWarnings("unused")
     public final static class InstructionSet {
         public final static int kNone = 0;
         public final static int kArm = 1;
@@ -51,12 +69,6 @@ public class Oat {
         public final static int kX86_64 = 5;
         public final static int kMips = 6;
         public final static int kMips64 = 7;
-    }
-
-    @SuppressWarnings("unused")
-    public final static class InstructionSetFeatures {
-        public final static int kHwDiv = 0;
-        public final static int kHwLpae = 1;
     }
 
     // /art/runtime/oat.h
@@ -71,8 +83,7 @@ public class Oat {
 
         @DumpFormat(enumClass = InstructionSet.class)
         final int instruction_set_;
-        @DumpFormat(enumClass = InstructionSetFeatures.class)
-        final int instruction_set_features_;
+        final int instruction_set_features_; // instruction_set_features_bitmap_
         final int dex_file_count_;
         final int executable_offset_;
         final int interpreter_to_interpreter_bridge_offset_;
@@ -93,7 +104,7 @@ public class Oat {
         @DumpFormat(type = DumpFormat.TYPE_CHAR, isString = true)
         final char[] key_value_store_;
 
-        int artVersion = VERSION_M_60;
+        int artVersion = Version.M_60.oat;
 
         public Header(DataReader r) throws IOException {
             r.readBytes(magic_);
@@ -144,7 +155,7 @@ public class Oat {
             final char[] version_ = new char[4];
             @DumpFormat(hex = true)
             final int checksum_;
-            @DumpFormat(type = DumpFormat.TYPE_BYTE, hex = true)
+            @DumpFormat(hex = true)
             final byte[] signature_ = new byte[20];
             public final int file_size_;
             public final int header_size_;
@@ -170,13 +181,13 @@ public class Oat {
             public Header(DataReader r) throws IOException {
                 r.readBytes(magic_);
                 if (magic_[0] != 'd' || magic_[1] != 'e' || magic_[2] != 'x') {
-                    LLog.e(String.format("Invalid dex magic %c%c%c",
+                    LLog.e(String.format("Invalid dex magic '%c%c%c'",
                             magic_[0], magic_[1], magic_[2]));
                 }
                 r.readBytes(version_);
                 checksum_= r.readInt();
                 if (version_[0] != '0' || version_[1] != '3' || version_[2] < '5') {
-                    LLog.e(String.format("Invalid dex version %c%c%c",
+                    LLog.e(String.format("Invalid dex version '%c%c%c'",
                             version_[0], version_[1], version_[2]));
                 }
                 r.readBytes(signature_);
@@ -239,6 +250,7 @@ public class Oat {
         @DumpFormat(hex = true)
         final int dex_file_location_checksum_;
         final int dex_file_offset_;
+        File dex_file_pointer_; // If not null, dex_file_offset_ is the size of vdex header
         int class_offsets_offset_;
         int lookup_table_offset_;
 
@@ -248,7 +260,12 @@ public class Oat {
             r.readBytes(dex_file_location_data_);
             dex_file_location_checksum_ = r.readInt();
             dex_file_offset_ = r.readInt();
-            if (version >= VERSION_N) {
+
+            File vdex = MiscUtil.changeExt(r.getFile(), "vdex");
+            if (vdex.exists()) {
+                dex_file_pointer_ = vdex;
+            }
+            if (version >= Version.N_70.oat) {
                 class_offsets_offset_ = r.readInt();
                 lookup_table_offset_ = r.readInt();
             }
@@ -283,11 +300,20 @@ public class Oat {
             OatDexFile odf = new OatDexFile(reader, mHeader.artVersion);
             mOatDexFiles[i] = odf;
             long thisOatPos = reader.position();
-            reader.seek(mOatPosition + odf.dex_file_offset_);
-            DexFile dex = new DexFile(reader);
+
+            DexFile dex;
+            if (odf.dex_file_pointer_ != null) {
+                try (DataReader r = new DataReader(odf.dex_file_pointer_)) {
+                    r.seek(odf.dex_file_offset_);
+                    dex = new DexFile(r);
+                }
+            } else {
+                reader.seek(mOatPosition + odf.dex_file_offset_);
+                dex = new DexFile(reader);
+            }
             mDexFiles[i] = dex;
 
-            if (mHeader.artVersion < VERSION_N) {
+            if (mHeader.artVersion < Version.N_70.oat) {
                 int num_methods_offsets_ = dex.mHeader.class_defs_size_;
                 reader.seek(thisOatPos + 4 * num_methods_offsets_);
                 if (reader.previewInt() > 0xff) { // workaround for samsung offset
@@ -305,24 +331,6 @@ public class Oat {
             }
         }
     }
-
-    public int guessApiLevel() {
-        // See runtime/oat kOatVersion
-        // https://android.googlesource.com/platform/art/+/
-        // 075 625a64aa, 9bdf1088
-        // 072 3cfa4d05
-        if (mHeader.artVersion >= VERSION_N) {
-            return 24;
-        }
-        if (mHeader.artVersion > VERSION_L_MR1_51) {
-            return 23;
-        }
-        if (mHeader.artVersion == VERSION_L_MR1_51) {
-            return 22;
-        }
-        return 21;
-    }
-
 
     public int getArtVersion() {
         return mHeader.artVersion;
@@ -392,7 +400,7 @@ public class Oat {
                 } else {
                     if (type.isArray()) {
                         byte[] bytes = (byte[]) val;
-                        String sf = fmt.hex() ? "0x%02X" : "%d ";
+                        String sf = fmt.hex() ? "%02X " : "%d ";
                         for (byte b : bytes) {
                             System.out.printf(sf, b);
                         }

@@ -60,6 +60,7 @@ public class ClassPath {
     public ClassPath(boolean checkPkgPrivAccess, int oatVer) {
         checkPackagePrivateAccess = checkPkgPrivAccess;
         oatVersion = oatVer;
+        classProviders = Lists.newArrayList();
         unknownClass = new UnknownClassProto(this);
         loadedClasses.put(unknownClass.getType(), unknownClass);
         loadPrimitiveTypes();

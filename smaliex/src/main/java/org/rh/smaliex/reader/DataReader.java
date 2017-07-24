@@ -31,7 +31,7 @@ public class DataReader implements Closeable {
     private final RandomAccessFile mRaf;
     private final File mFile;
     private final byte[] mByteBuffer = new byte[8];
-    private boolean mIsLittleEndian;
+    private boolean mIsLittleEndian = true;
 
     public DataReader(String file) throws FileNotFoundException {
         this(new File(file));

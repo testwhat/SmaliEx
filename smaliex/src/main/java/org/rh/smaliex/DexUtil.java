@@ -46,8 +46,6 @@ import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.ref.SoftReference;
 import java.util.ArrayList;
@@ -190,128 +188,6 @@ public class DexUtil {
             }
         }
         return true;
-    }
-
-    public static class ByteData {
-        private int mMaxDataPosition;
-        private int mPosition;
-        private byte[] mData;
-
-        public ByteData(int initSize) {
-            mData = new byte[initSize];
-        }
-
-        private void ensureCapacity(int writingPos) {
-            int oldSize = mData.length;
-            if (writingPos >= oldSize) {
-                int newSize = (oldSize * 3) / 2 + 1;
-                if (newSize <= writingPos) {
-                    newSize = writingPos + 1;
-                }
-                mData = java.util.Arrays.copyOf(mData, newSize);
-            }
-            if (writingPos > mMaxDataPosition) {
-                mMaxDataPosition = writingPos;
-            }
-        }
-
-        public void put(byte c) {
-            ensureCapacity(mPosition);
-            mData[mPosition] = c;
-        }
-
-        public void put(byte[] bytes, int off, int len) {
-            ensureCapacity(mPosition + len);
-            System.arraycopy(bytes, off, mData, mPosition, len);
-        }
-
-        public byte get() {
-            return mData[mPosition];
-        }
-
-        public void get(byte[] bytes, int off, int len) {
-            System.arraycopy(mData, mPosition, bytes, off, len);
-        }
-
-        public boolean isPositionHasData() {
-            return mPosition <= mMaxDataPosition;
-        }
-
-        public int remaining() {
-            return mMaxDataPosition - mPosition;
-        }
-
-        public void position(int p) {
-            mPosition = p;
-        }
-    }
-
-    public static class MemoryDataStore implements org.jf.dexlib2.writer.io.DexDataStore {
-        final ByteData mBuffer;
-
-        public MemoryDataStore(int size) {
-            mBuffer = new ByteData(size);
-        }
-
-        @Nonnull
-        @Override
-        public OutputStream outputAt(final int offset) {
-            return new OutputStream() {
-                private int mPos = offset;
-                @Override
-                public void write(int b) throws IOException {
-                    mBuffer.position(mPos);
-                    mPos++;
-                    mBuffer.put((byte) b);
-                }
-
-                @Override
-                public void write(@Nonnull byte[] bytes, int off, int len) throws IOException {
-                    mBuffer.position(mPos);
-                    mPos += len;
-                    mBuffer.put(bytes, off, len);
-                }
-            };
-        }
-
-        @Nonnull
-        @Override
-        public InputStream readAt(final int offset) {
-            mBuffer.position(offset);
-            return new InputStream() {
-                private int mPos = offset;
-
-                @Override
-                public int read() throws IOException {
-                    mBuffer.position(mPos);
-                    if (!mBuffer.isPositionHasData()) {
-                        return -1;
-                    }
-                    mPos++;
-                    return mBuffer.get() & 0xff;
-                }
-
-                @Override
-                public int read(@Nonnull byte[] bytes, int off, int len) throws IOException {
-                    mBuffer.position(mPos);
-                    if (mBuffer.remaining() == 0 || !mBuffer.isPositionHasData()) {
-                        return -1;
-                    }
-                    len = Math.min(len, mBuffer.remaining());
-                    mPos += len;
-                    mBuffer.get(bytes, off, len);
-                    return len;
-                }
-            };
-        }
-
-        public void writeTo(OutputStream os) throws IOException {
-            os.write(mBuffer.mData, 0, mBuffer.mMaxDataPosition);
-        }
-
-        @Override
-        public void close() throws IOException {
-        }
     }
 
     public static void writeSmaliContent(String type, ClassPath classPath,

@@ -18,8 +18,10 @@ package org.rh.smaliex;
 
 import org.jf.baksmali.BaksmaliOptions;
 import org.jf.dexlib2.Opcodes;
+import org.jf.dexlib2.VersionMap;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile;
 import org.jf.dexlib2.iface.DexFile;
+import org.jf.dexlib2.writer.io.MemoryDataStore;
 import org.jf.dexlib2.writer.pool.DexPool;
 import org.rh.smaliex.DexUtil.ODexRewriter;
 import org.rh.smaliex.reader.DataReader;
@@ -43,7 +45,7 @@ import java.util.zip.ZipEntry;
 public class OatUtil {
 
     public static Opcodes getOpcodes(Oat oat) {
-        int key = oat.getArtVersion() << 16 | oat.guessApiLevel();
+        int key = oat.getArtVersion() << 16 | VersionMap.mapArtVersionToApi(oat.getArtVersion());
         return DexUtil.getOpcodes(key);
     }
 
@@ -350,11 +352,7 @@ public class OatUtil {
                 dexPath = dexPath.substring(0, colonPos);
             }
             dexPath = dexPath.substring(dexPath.lastIndexOf('/') + 1);
-            ArrayList<Oat.DexFile> dexFiles = dexFileGroup.get(dexPath);
-            if (dexFiles == null) {
-                dexFiles = new ArrayList<>();
-                dexFileGroup.put(dexPath, dexFiles);
-            }
+            ArrayList<Oat.DexFile> dexFiles = dexFileGroup.computeIfAbsent(dexPath, k -> new ArrayList<>());
             dexFiles.add(oat.mDexFiles[i]);
             if (!isBoot) {
                 Oat.DexFile dex = oat.mDexFiles[i];
@@ -381,7 +379,7 @@ public class OatUtil {
                         continue;
                     }
 
-                    DexUtil.MemoryDataStore m = new DexUtil.MemoryDataStore(dexSize + 512);
+                    MemoryDataStore m = new MemoryDataStore(dexSize + 512);
                     DexPool.writeTo(m, d);
                     m.writeTo(jos);
                     classesIdx = String.valueOf(++i);

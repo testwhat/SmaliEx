@@ -144,19 +144,15 @@ public final class DexFileFactory {
         throw new UnsupportedFileTypeException("%s is not an apk, dex, odex or oat file.", file.getPath());
     }
 
-
-
     @Nonnull
     public static List<DexBackedDexFile> loadDexFiles(
-            File dexFile, @Nullable String dexEntry, @Nonnull Opcodes opcodes) throws IOException {
+            File file, @Nullable String dexEntry, @Nonnull Opcodes opcodes) throws IOException {
         int dotPos = dexEntry == null ? -1 : dexEntry.lastIndexOf('.');
         String prefix = dotPos > 0 ? dexEntry.substring(0, dotPos) : "classes";
-        List<DexBackedDexFile> dexFiles = com.google.common.collect.Lists.newArrayList();
-        boolean isZipFile = false;
+        List<DexBackedDexFile> dexFiles = Lists.newArrayList();
         ZipFile zipFile = null;
         try {
-            zipFile = new ZipFile(dexFile);
-            isZipFile = true;
+            zipFile = new ZipFile(file);
             Enumeration<? extends ZipEntry> zs = zipFile.entries();
             while (zs.hasMoreElements()) {
                 ZipEntry zipEntry = zs.nextElement();
@@ -171,68 +167,66 @@ public final class DexFileFactory {
                     dexFiles.add(new DexBackedDexFile(opcodes, dexBytes));
                 }
             }
+            return dexFiles;
         } catch (IOException ex) {
-            if (isZipFile) {
+            if (zipFile != null) {
                 throw ex;
             }
         } finally {
             if (zipFile != null) {
                 try {
                     zipFile.close();
-                } catch (IOException ex) {
+                } catch (IOException ignored) {
                 }
             }
         }
-        if (!isZipFile) {
-            boolean done = false;
-            InputStream inputStream = new BufferedInputStream(new FileInputStream(dexFile));
-            try {
-                try {
-                    dexFiles.add(DexBackedDexFile.fromInputStream(opcodes, inputStream));
-                    done = true;
-                } catch (DexBackedDexFile.NotADexFile ex) {
-                }
-                if (!done) {
-                    try {
-                        dexFiles.add(DexBackedOdexFile.fromInputStream(opcodes, inputStream));
-                        done = true;
-                    } catch (DexBackedOdexFile.NotAnOdexFile ex) {
-                    }
-                }
-                if (!done) {
-                    try {
-                        OatFile oatFile = OatFile.fromInputStream(inputStream);
-                        if (oatFile.isSupportedVersion() == OatFile.UNSUPPORTED) {
-                            throw new UnsupportedOatVersionException(oatFile);
-                        }
 
-                        List<OatDexFile> oatDexFiles = oatFile.getDexFiles();
-                        if (dexEntry != null) {
-                            boolean noPath = !dexEntry.contains("/");
-                            for (OatDexFile oatDexFile : oatDexFiles) {
-                                if (noPath) {
-                                    File oatEntryFile = new File(oatDexFile.filename);
-                                    if (oatEntryFile.getName().equals(dexEntry)) {
-                                        dexFiles.add(oatDexFile);
-                                        return dexFiles;
-                                    }
-                                } else if (oatDexFile.filename.equals(dexEntry)) {
-                                    dexFiles.add(oatDexFile);
-                                    return dexFiles;
-                                }
-                            }
-                        } else {
-                            dexFiles.addAll(oatDexFiles);
-                        }
-                    } catch (NotAnOatFileException ex) {
-                    }
+        // Not zip, try dex, odex, oat
+        try (InputStream inputStream = new BufferedInputStream(new FileInputStream(file))) {
+            // Try dex
+            try {
+                dexFiles.add(DexBackedDexFile.fromInputStream(opcodes, inputStream));
+                return dexFiles;
+            } catch (NotADexFile ignored) {
+            }
+
+            // Try odex
+            try {
+                dexFiles.add(DexBackedOdexFile.fromInputStream(opcodes, inputStream));
+                return dexFiles;
+            } catch (DexBackedOdexFile.NotAnOdexFile ignored) {
+            }
+
+            // Try oat
+            try {
+                OatFile oatFile = OatFile.fromInputStream(inputStream, new FilenameVdexProvider(file));
+                if (oatFile.isSupportedVersion() == OatFile.UNSUPPORTED) {
+                    throw new UnsupportedOatVersionException(oatFile);
                 }
-            } finally {
-                inputStream.close();
+
+                List<OatDexFile> oatDexFiles = oatFile.getDexFiles();
+                if (dexEntry != null) {
+                    boolean noPath = !dexEntry.contains("/");
+                    for (OatDexFile oatDexFile : oatDexFiles) {
+                        if (noPath) {
+                            File oatEntryFile = new File(oatDexFile.filename);
+                            if (oatEntryFile.getName().equals(dexEntry)) {
+                                dexFiles.add(oatDexFile);
+                                return dexFiles;
+                            }
+                        } else if (oatDexFile.filename.equals(dexEntry)) {
+                            dexFiles.add(oatDexFile);
+                            return dexFiles;
+                        }
+                    }
+                } else {
+                    dexFiles.addAll(oatDexFiles);
+                }
+            } catch (NotAnOatFileException ignored) {
             }
         }
         if (dexFiles.isEmpty()) {
-            throw new ExceptionWithContext("%s is not an apk, dex file or odex file.", dexFile.getPath());
+            throw new ExceptionWithContext("%s is not an apk, dex file or odex file.", file.getPath());
         }
         return dexFiles;
     }
