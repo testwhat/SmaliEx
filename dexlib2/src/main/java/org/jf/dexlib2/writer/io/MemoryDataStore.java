@@ -8,7 +8,7 @@ import java.util.Arrays;
 
 public class MemoryDataStore implements DexDataStore {
     private byte[] buf;
-    private int lastWritePosition;
+    private int maxWritePosition;
 
     public MemoryDataStore() {
         this(1024 * 1024);
@@ -22,27 +22,33 @@ public class MemoryDataStore implements DexDataStore {
         return buf;
     }
 
+    private void updateWritePosition(int position) {
+        if (position > maxWritePosition) {
+            maxWritePosition = position;
+        }
+    }
+
     @Nonnull @Override public OutputStream outputAt(final int offset) {
         return new OutputStream() {
             private int position = offset;
             @Override public void write(int b) throws IOException {
                 growBufferIfNeeded(position);
                 buf[position++] = (byte)b;
-                lastWritePosition = position;
+                updateWritePosition(position);
             }
 
             @Override public void write(byte[] b) throws IOException {
                 growBufferIfNeeded(position + b.length);
                 System.arraycopy(b, 0, buf, position, b.length);
                 position += b.length;
-                lastWritePosition = position;
+                updateWritePosition(position);
             }
 
             @Override public void write(byte[] b, int off, int len) throws IOException {
                 growBufferIfNeeded(position + len);
                 System.arraycopy(b, off, buf, position, len);
                 position += len;
-                lastWritePosition = position;
+                updateWritePosition(position);
             }
         };
     }
@@ -104,7 +110,7 @@ public class MemoryDataStore implements DexDataStore {
     }
 
     public void writeTo(OutputStream os) throws IOException {
-        os.write(buf, 0, lastWritePosition);
+        os.write(buf, 0, maxWritePosition);
     }
 
     @Override public void close() throws IOException {

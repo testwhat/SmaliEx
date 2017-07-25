@@ -119,6 +119,8 @@ public abstract class ImmutableInstruction implements Instruction {
                 return ImmutableInstruction3rmi.of((Instruction3rmi)instruction);
             case Format3rms:
                 return ImmutableInstruction3rms.of((Instruction3rms)instruction);
+            case Format45cc:
+                return ImmutableInstruction45cc.of((Instruction45cc)instruction);
             case Format51l:
                 return ImmutableInstruction51l.of((Instruction51l)instruction);
             case PackedSwitchPayload:
@@ -128,7 +130,7 @@ public abstract class ImmutableInstruction implements Instruction {
             case ArrayPayload:
                 return ImmutableArrayPayload.of((ArrayPayload) instruction);
             default:
-                throw new RuntimeException("Unexpected instruction type");
+                throw new RuntimeException("Unexpected instruction type " + instruction.getOpcode());
         }
     }
 

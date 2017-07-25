@@ -303,10 +303,10 @@ public class Oat {
 
             DexFile dex;
             if (odf.dex_file_pointer_ != null) {
-                try (DataReader r = new DataReader(odf.dex_file_pointer_)) {
-                    r.seek(odf.dex_file_offset_);
-                    dex = new DexFile(r);
-                }
+                DataReader r = new DataReader(odf.dex_file_pointer_);
+                reader.addAssociatedReader(r);
+                r.seek(odf.dex_file_offset_);
+                dex = new DexFile(r);
             } else {
                 reader.seek(mOatPosition + odf.dex_file_offset_);
                 dex = new DexFile(reader);

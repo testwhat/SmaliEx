@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 import org.jf.baksmali.Adaptors.ClassDefinition;
+import org.jf.dexlib2.DexFileFactory;
 import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.VersionMap;
 import org.jf.dexlib2.analysis.AnalysisException;
@@ -49,13 +50,11 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.lang.ref.SoftReference;
 import java.util.ArrayList;
-import java.util.Enumeration;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
 public class DexUtil {
     public static int DEFAULT_API_LEVEL = 20;
@@ -88,48 +87,16 @@ public class DexUtil {
     }
 
     public static DexBackedDexFile loadSingleDex(File file, Opcodes opc) throws IOException {
-        return new DexBackedDexFile(getDefaultOpCodes(opc),
-                java.nio.file.Files.readAllBytes(file.toPath()));
+        return DexFileFactory.loadDexFile(file, getDefaultOpCodes(opc));
     }
 
     public static List<DexBackedDexFile> loadMultiDex(File file, Opcodes opc) {
-        List<DexBackedDexFile> dexFiles = new ArrayList<>();
-        opc = getDefaultOpCodes(opc);
         try {
-            if (MiscUtil.isZip(file)) {
-                List<byte[]> dexBytes = readMultipleDexFromJar(file);
-                for (byte[] data : dexBytes) {
-                    dexFiles.add(new DexBackedDexFile(opc, data));
-                }
-            } else {
-                dexFiles.add(loadSingleDex(file, opc));
-            }
+            return DexFileFactory.loadDexFiles(file, null, getDefaultOpCodes(opc));
         } catch (IOException ex) {
             LLog.ex(ex);
         }
-        return dexFiles;
-    }
-
-    public static List<byte[]> readMultipleDexFromJar(File file) throws IOException {
-        List<byte[]> dexBytes = new ArrayList<>(2);
-        try (ZipFile zipFile = new ZipFile(file)) {
-            Enumeration<? extends ZipEntry> zs = zipFile.entries();
-            while (zs.hasMoreElements()) {
-                ZipEntry entry = zs.nextElement();
-                String name = entry.getName();
-                if (name.startsWith("classes") && name.endsWith(".dex")) {
-                    if (entry.getSize() < 40) {
-                        LLog.i("The dex file in " + file + " is too small to be a valid dex file");
-                        continue;
-                    }
-                    dexBytes.add(MiscUtil.readBytes(zipFile.getInputStream(entry)));
-                }
-            }
-            if (dexBytes.isEmpty()) {
-                throw new IOException("Cannot find classes.dex in zip file");
-            }
-            return dexBytes;
-        }
+        return Collections.emptyList();
     }
 
     public static void odex2dex(String odex, String bootClassPath, String outFolder,

@@ -63,7 +63,7 @@ public class OatUtil {
                     if (outputNames != null) {
                         String dexName = new String(oat.mOatDexFiles[i].dex_file_location_data_);
                         dexName = getOutputNameForSubDex(dexName);
-                        outputNames.add(MiscUtil.getFilenamePrefix(dexName));
+                        outputNames.add(MiscUtil.getFilenameNoExt(dexName));
                     }
                 }
             } catch (IOException ex) {
@@ -87,7 +87,7 @@ public class OatUtil {
         if (!inputFile.isFile()) {
             LLog.i(inputFile + " is not a file.");
         }
-        String folderName = MiscUtil.getFilenamePrefix(inputFile.getName());
+        String folderName = MiscUtil.getFilenameNoExt(inputFile.getName());
         String outputBaseFolder = MiscUtil.path(
                 inputFile.getAbsoluteFile().getParent(), folderName);
         BaksmaliOptions options = new BaksmaliOptions();
@@ -316,7 +316,7 @@ public class OatUtil {
             String dexLoc = new String(odf.dex_file_location_data_);
             String outputName = getOutputNameForSubDex(dexLoc);
             if ("base.apk".equals(outputName)) {
-                outputName = MiscUtil.getFilenamePrefix(oat.mSrcFile.getName());
+                outputName = MiscUtil.getFilenameNoExt(oat.mSrcFile.getName());
             }
             File outputFile = MiscUtil.changeExt(new File(outputFolder, outputName), "dex");
             LLog.i("De-optimizing " + dexLoc);

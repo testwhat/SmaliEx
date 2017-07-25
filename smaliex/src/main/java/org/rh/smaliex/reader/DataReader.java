@@ -25,6 +25,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.channels.FileChannel;
+import java.util.ArrayList;
 
 public class DataReader implements Closeable {
 
@@ -32,6 +33,7 @@ public class DataReader implements Closeable {
     private final File mFile;
     private final byte[] mByteBuffer = new byte[8];
     private boolean mIsLittleEndian = true;
+    private ArrayList<DataReader> mAssociatedReaders;
 
     public DataReader(String file) throws FileNotFoundException {
         this(new File(file));
@@ -131,12 +133,24 @@ public class DataReader implements Closeable {
         return mRaf.length();
     }
 
+    public void addAssociatedReader(DataReader reader) {
+        if (mAssociatedReaders == null) {
+            mAssociatedReaders = new ArrayList<>();
+        }
+        mAssociatedReaders.add(reader);
+    }
+
     @Override
     public void close() {
         try {
             mRaf.close();
         } catch (IOException ex) {
             LLog.ex(ex);
+        }
+        if (mAssociatedReaders != null) {
+            for (DataReader r : mAssociatedReaders) {
+                r.close();
+            }
         }
     }
 
