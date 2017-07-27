@@ -224,6 +224,19 @@ public class Oat {
             mHeader = new Header(r);
         }
 
+        public byte[] getBytes() throws IOException {
+            byte[] dexBytes = new byte[mHeader.file_size_];
+            int remain = dexBytes.length;
+            int read = 0;
+            int readSize;
+            mReader.seek(mDexPosition);
+            while (remain > 0 && (readSize = mReader.readRaw(dexBytes, read, remain)) != -1) {
+                remain -= readSize;
+                read += readSize;
+            }
+            return dexBytes;
+        }
+
         public void saveTo(File outputFile) throws IOException {
             String targetExt = "dex";
             String outPath = outputFile.getAbsolutePath();
@@ -264,6 +277,9 @@ public class Oat {
             File vdex = MiscUtil.changeExt(r.getFile(), "vdex");
             if (vdex.exists()) {
                 dex_file_pointer_ = vdex;
+            } else if (dex_file_offset_ == 0x1C) {
+                LLog.e("dex_file_offset_=" + dex_file_offset_
+                        + ", does " + vdex.getName() + " miss?");
             }
             if (version >= Version.N_70.oat) {
                 class_offsets_offset_ = r.readInt();

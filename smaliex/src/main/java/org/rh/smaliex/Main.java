@@ -22,19 +22,19 @@ import java.io.IOException;
 public class Main {
 
     static void printUsage() {
-        System.out.println("Easy oat2dex 0.88");
-        System.out.println("Usage:");
-        System.out.println(" java -jar oat2dex.jar [options] <action>");
-        System.out.println("[options]");
-        System.out.println(" Api level (for raw odex): -a <integer>");
-        System.out.println(" Output folder: -o <folder path>");
-        System.out.println(" Print detail : -v");
-        System.out.println("<action>");
-        System.out.println(" Get dex from boot.oat: boot <boot.oat/boot-folder>");
-        System.out.println(" Get dex from oat/odex: <oat/odex-file/folder> <boot-class-folder>");
-        System.out.println(" Get raw odex from oat: odex <oat-file/folder>");
-        System.out.println(" Get raw odex smali   : smali <oat/odex-file>");
-        System.out.println(" Deodex framework     : devfw [empty or path of /system/framework/]");
+        println("Easy oat2dex 0.89");
+        println("Usage:");
+        println(" java -jar oat2dex.jar [options] <action>");
+        println("[options]");
+        println(" Api level (for raw odex): -a <integer>");
+        println(" Output folder: -o <folder path>");
+        println(" Print detail : -v");
+        println("<action>");
+        println(" Get dex from boot.oat: boot <boot.oat/boot-folder>");
+        println(" Get dex from oat/odex: <oat/odex-file/folder> <boot-class-folder>");
+        println(" Get raw odex from oat: odex <oat-file/folder>");
+        println(" Get raw odex smali   : smali <oat/odex-file>");
+        println(" Deodex framework     : devfw [empty or path of /system/framework/]");
     }
 
     public static void main(String[] args) {
@@ -46,7 +46,7 @@ public class Main {
     }
 
     public static void mainImpl(String[] args) throws IOException {
-        String outputFolder = null;
+        String outputPath = null;
         int apiLevel = DexUtil.DEFAULT_API_LEVEL;
         if (args.length > 2) {
             String opt = args[0];
@@ -57,19 +57,19 @@ public class Main {
                         try {
                             apiLevel = Integer.parseInt(args[1]);
                         } catch (NumberFormatException e) {
-                            System.out.println("Invalid api level: " + args[1]);
+                            println("Invalid api level: " + args[1]);
                         }
                         shift = 2;
                         break;
                     case 'o':
-                        outputFolder = args[1];
+                        outputPath = args[1];
                         shift = 2;
                         break;
                     case 'v':
                         LLog.VERBOSE = true;
                         break;
                     default:
-                        System.out.println("Unrecognized option: " + opt);
+                        println("Unrecognized option: " + opt);
                 }
                 String[] newArgs = shiftArgs(args, shift);
                 if (newArgs != args) {
@@ -92,22 +92,23 @@ public class Main {
         String cmd = args[0];
         if ("devfw".equals(cmd)) {
             DeodexFrameworkFromDevice.deOptimizeAuto(
-                    args.length > 1 ? args[1] : null, outputFolder);
+                    args.length > 1 ? args[1] : null, outputPath);
             return;
         }
         if (args.length == 2) {
             if ("boot".equals(cmd)) {
                 checkExist(args[1]);
-                OatUtil.bootOat2Dex(args[1], outputFolder);
+                OatUtil.bootOat2Dex(args[1], outputPath);
                 return;
             }
             if ("odex".equals(cmd)) {
-                OatUtil.extractOdexFromOat(checkExist(args[1]),
-                        outputFolder == null ? null : new File(outputFolder));
+                File out = OatUtil.extractOdexFromOat(checkExist(args[1]),
+                        outputPath == null ? null : new File(outputPath));
+                println("Output to " + out);
                 return;
             }
             if ("smali".equals(cmd)) {
-                OatUtil.smaliRaw(checkExist(args[1]), apiLevel);
+                OatUtil.smaliRaw(checkExist(args[1]), outputPath, apiLevel);
                 return;
             }
             String inputPath = args[0];
@@ -117,9 +118,9 @@ public class Main {
             int type = getInputType(input);
             if (type > 0) {
                 if (type == TYPE_ODEX) {
-                    DexUtil.odex2dex(inputPath, bootPath, outputFolder, apiLevel);
+                    DexUtil.odex2dex(inputPath, bootPath, outputPath, apiLevel);
                 } else if (type == TYPE_OAT) {
-                    OatUtil.oat2dex(inputPath, bootPath, outputFolder);
+                    OatUtil.oat2dex(inputPath, bootPath, outputPath);
                 }
             } else {
                 exit("Unknown input file type: " + input);
@@ -156,7 +157,7 @@ public class Main {
                 input = files[0];
             }
         }
-        if (MiscUtil.isDex(input)) {
+        if (MiscUtil.isOdex(input) || MiscUtil.isDex(input)) {
             return TYPE_ODEX;
         }
         if (MiscUtil.isElf(input)) {
@@ -165,8 +166,12 @@ public class Main {
         return -1;
     }
 
+    static void println(String s) {
+        System.out.println(s);
+    }
+
     static void exit(String msg) {
-        System.out.println(msg);
+        println(msg);
         System.exit(1);
     }
 }

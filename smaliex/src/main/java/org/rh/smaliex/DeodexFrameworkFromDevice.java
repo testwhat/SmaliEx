@@ -24,6 +24,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class DeodexFrameworkFromDevice {
 
@@ -48,13 +50,12 @@ public class DeodexFrameworkFromDevice {
     }
 
     public final static String FOLDER_BOOT_JAR_ORIGINAL = "boot-jar-original";
-    public final static String FOLDER_BOOT_JAR_RESULT = "boot-jar-result";
+    public final static String FOLDER_BOOT_JAR_RESULT = "boot-jar-with-dex";
     public final static String FOLDER_BOOT_ODEX = "boot-raw";
     public final static String FOLDER_FRAMEWORK_ODEX = "framework-odex";
     public final static String FOLDER_FRAMEWORK_JAR = "framework-jar-original";
     public final static String FOLDER_FRAMEWORK_JAR_DEX = "framework-jar-with-dex";
 
-    public final static String BOOT_OAT_PREFIX = "boot";
     public final static String SYS_FRAMEWORK = "/system/framework/";
 
     public static void deOptimizeAuto(String sysFolder, String outFolder) {
@@ -97,14 +98,6 @@ public class DeodexFrameworkFromDevice {
     abstract static class FwProvider {
         final static String[] ABIS = {"arm64", "arm", "x64", "x86"};
         String mAbiFolder = "arm/";
-
-        String[] getBootJarNames() {
-            return Arrays.stream(getBootClassPath()).map(p -> {
-                String[] tokens = p.split("[\\\\|/]");
-                String filename = tokens[tokens.length - 1];
-                return MiscUtil.getFilenameNoExt(filename);
-            }).toArray(String[]::new);
-        }
 
         abstract void pullFileToFolder(String remote, String localFolder);
         abstract String[] getFileList(String path);
@@ -172,11 +165,6 @@ public class DeodexFrameworkFromDevice {
         @Override
         String[] getBootClassPath() {
             return mBootJars;
-        }
-
-        @Override
-        String[] getBootJarNames() {
-            return new String[0];
         }
 
         @Override
@@ -285,7 +273,8 @@ public class DeodexFrameworkFromDevice {
     }
 
     static void generateNonBootFrameworkJar(FwProvider device,
-            String workingDir, String bootDir) throws IOException {
+                                            String workingDir,
+                                            String bootDir) throws IOException {
         final String pullOdexDir = MiscUtil.path(workingDir, FOLDER_FRAMEWORK_ODEX);
         final String pullJarDir = MiscUtil.path(workingDir, FOLDER_FRAMEWORK_JAR);
 
@@ -304,6 +293,10 @@ public class DeodexFrameworkFromDevice {
             fileLists.put(path, device.getFileList(path));
         }
 
+        final List<String> excludePrefixes = Arrays.stream(device.getBootClassPath()).map(p ->
+                "boot-" + MiscUtil.getFilenameNoExt(MiscUtil.getFilenameNoPath(p))
+        ).collect(Collectors.toList());
+
         for (java.util.Map.Entry<String, String[]> entry : fileLists.entrySet()) {
             final String path = entry.getKey();
             final String[] files = entry.getValue();
@@ -311,23 +304,32 @@ public class DeodexFrameworkFromDevice {
                 LLog.e("Cannot list " + path + " from " + device.getName());
                 continue;
             }
-            for (String f : files) {
-                if (f.startsWith(BOOT_OAT_PREFIX)) {
-                    continue;
-                }
 
+            String[] filteredFiles = Arrays.stream(files).filter(f ->
+                    !f.endsWith(".art") && !f.startsWith("boot.")
+                            && excludePrefixes.stream().noneMatch(f::startsWith)
+            ).toArray(String[]::new);
+
+            for (String f : filteredFiles) {
                 String oat = oatLocation + f;
-                LLog.i("Pulling " + oat);
+                LLog.i("Pulling " + oat + " -> " + pullOdexDir);
                 device.pullFileToFolder(oat, pullOdexDir);
 
                 String jar = SYS_FRAMEWORK + MiscUtil.getFilenameNoExt(f) + ".jar";
-                LLog.i("Pulling " + jar);
+                LLog.i("Pulling " + jar + " -> " + pullJarDir);
                 device.pullFileToFolder(jar, pullJarDir);
+            }
 
-                try (Elf e = new Elf(MiscUtil.path(pullOdexDir, f))) {
-                    OatUtil.convertToDexJar(
-                            OatUtil.getOat(e), resultJarDir,
-                            bootDir, pullJarDir, false);
+            for (String f : filteredFiles) {
+                File odex = new File(MiscUtil.path(pullOdexDir, f));
+                if (MiscUtil.isOat(odex)) {
+                    try (Elf e = new Elf(odex)) {
+                        OatUtil.convertToDexJar(
+                                OatUtil.getOat(e), resultJarDir,
+                                bootDir, pullJarDir, false);
+                    }
+                } else if (MiscUtil.isOdex(odex)) {
+                    LLog.i("Not support repacking legacy " + odex + " yet");
                 }
             }
         }
@@ -342,16 +344,16 @@ public class DeodexFrameworkFromDevice {
         LLog.i("Preparing boot jars from " + device.getName());
         for (String file : device.getFileList(bootOatLocation)) {
             if (file.endsWith(".art")) continue;
-            String targetFile = MiscUtil.path(bootOatDir, file);
-            if (new File(targetFile).exists()) {
+            File targetFile = new File(bootOatDir, file);
+            if (targetFile.exists()) {
                 LLog.i("Found " + targetFile + ", skip pull " + file);
                 continue;
             }
 
             String fileLoc = bootOatLocation + file;
-            LLog.i("Pulling " + fileLoc);
+            LLog.i("Pulling " + fileLoc + " -> " + bootOatDir);
             device.pullFileToFolder(fileLoc, bootOatDir);
-            if (!new File(targetFile).exists()) {
+            if (!targetFile.exists()) {
                 LLog.i("Pulled " + targetFile + " not found");
                 return false;
             }
@@ -360,7 +362,12 @@ public class DeodexFrameworkFromDevice {
         String originalJarFolder = MiscUtil.path(workingDir, FOLDER_BOOT_JAR_ORIGINAL);
         MiscUtil.mkdirs(new File(originalJarFolder));
         for (String jar : device.getBootClassPath()) {
-            LLog.i("Pulling " + jar);
+            File targetFile = new File(originalJarFolder, MiscUtil.getFilenameNoPath(jar));
+            if (targetFile.exists()) {
+                LLog.i("Found " + targetFile + ", skip pull " + jar);
+                continue;
+            }
+            LLog.i("Pulling " + jar + " -> " + originalJarFolder);
             device.pullFileToFolder(jar, originalJarFolder);
         }
         OatUtil.bootOat2Jar(bootOatDir, originalJarFolder, outBootJarFolder);

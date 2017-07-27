@@ -74,6 +74,11 @@ public class MiscUtil {
         return files == null ? new File[0] : files;
     }
 
+    public static String getFilenameNoPath(String path) {
+        String[] tokens = path.split("[\\\\|/]");
+        return tokens[tokens.length - 1];
+    }
+
     public static String getFilenameNoExt(String filename) {
         int dotPos = filename.lastIndexOf('.');
         if (dotPos == -1) {
@@ -143,6 +148,7 @@ public class MiscUtil {
     }
 
     static boolean checkFourBytes(File file, int offset, long fourBytes) {
+        if (file.length() < offset) return false;
         long n = 0;
         try (RandomAccessFile raf = new RandomAccessFile(file, "r")) {
             raf.skipBytes(offset);
@@ -159,6 +165,14 @@ public class MiscUtil {
 
     public static boolean isDex(File file) {
         return checkFourBytes(file, 0, 0x6465780A);
+    }
+
+    public static boolean isOdex(File file) {
+        return checkFourBytes(file, 0, 0x6465790A);
+    }
+
+    public static boolean isOat(File file) {
+        return checkFourBytes(file, 0x1000, 0x6F61740A);
     }
 
     public static boolean isElf(File file) {

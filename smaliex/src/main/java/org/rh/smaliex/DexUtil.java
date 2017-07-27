@@ -44,6 +44,7 @@ import org.jf.dexlib2.rewriter.RewriterModule;
 import org.jf.dexlib2.rewriter.Rewriters;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -76,7 +77,8 @@ public class DexUtil {
         return opcodes;
     }
 
-    public static Opcodes getDefaultOpCodes(Opcodes opc) {
+    @Nonnull
+    public static Opcodes getDefaultOpCodes(@Nullable Opcodes opc) {
         if (opc == null) {
             if (DEFAULT_OPCODES == null) {
                 DEFAULT_OPCODES = Opcodes.getDefault();
@@ -86,11 +88,14 @@ public class DexUtil {
         return opc;
     }
 
-    public static DexBackedDexFile loadSingleDex(File file, Opcodes opc) throws IOException {
+    @Nonnull
+    public static DexBackedDexFile loadSingleDex(@Nonnull File file,
+                                                 @Nullable Opcodes opc) throws IOException {
         return DexFileFactory.loadDexFile(file, getDefaultOpCodes(opc));
     }
 
-    public static List<DexBackedDexFile> loadMultiDex(File file, Opcodes opc) {
+    @Nonnull
+    public static List<DexBackedDexFile> loadMultiDex(@Nonnull File file, @Nullable Opcodes opc) {
         try {
             return DexFileFactory.loadDexFiles(file, null, getDefaultOpCodes(opc));
         } catch (IOException ex) {
@@ -99,9 +104,10 @@ public class DexUtil {
         return Collections.emptyList();
     }
 
-    public static void odex2dex(String odex, String bootClassPath, String outFolder,
-            int apiLevel) throws IOException {
-        File outputFolder = new File(outFolder == null ? MiscUtil.workingDir() : outFolder);
+    public static void odex2dex(@Nonnull String odex,
+                                @Nonnull String bootClassPath,
+                                @Nullable String outPath, int apiLevel) throws IOException {
+        File outputFolder = new File(outPath == null ? MiscUtil.workingDir() : outPath);
         MiscUtil.mkdirs(outputFolder);
 
         File input = new File(odex);
@@ -124,7 +130,9 @@ public class DexUtil {
         LLog.i("Output to " + outputFile);
     }
 
-    public static ClassPathEx getClassPath(String path, Opcodes opcodes, String ext) {
+    @Nonnull
+    public static ClassPathEx getClassPath(@Nonnull String path,
+                                           @Nonnull Opcodes opcodes, @Nonnull String ext) {
         ArrayList<DexFile> dexFiles = new ArrayList<>();
         for (File f : MiscUtil.getFiles(path, ext)) {
             dexFiles.addAll(OatUtil.getDexFiles(f, opcodes.api, null));
@@ -136,7 +144,7 @@ public class DexUtil {
     }
 
     // If return false, the dex may be customized format or encrypted.
-    public static boolean verifyStringOffset(DexBackedDexFile dex) {
+    public static boolean verifyStringOffset(@Nonnull DexBackedDexFile dex) {
         int strIdsStartOffset = dex.readSmallUint(
                 org.jf.dexlib2.dexbacked.raw.HeaderItem.STRING_START_OFFSET);
         int strStartOffset = dex.readInt(strIdsStartOffset);
@@ -157,8 +165,9 @@ public class DexUtil {
         return true;
     }
 
-    public static void writeSmaliContent(String type, ClassPath classPath,
-            java.io.Writer outWriter) {
+    public static void writeSmaliContent(@Nonnull String type,
+                                         @Nonnull ClassPath classPath,
+                                         @Nonnull java.io.Writer outWriter) {
         org.jf.baksmali.BaksmaliOptions options = new org.jf.baksmali.BaksmaliOptions();
         org.jf.dexlib2.iface.ClassDef classDef = classPath.getClassDef(type);
         options.apiLevel = VersionMap.mapArtVersionToApi(classPath.oatVersion);
@@ -177,7 +186,8 @@ public class DexUtil {
     private static final ConcurrentHashMap<String, SoftReference<ODexRewriter>> rewriterCache =
             new ConcurrentHashMap<>();
 
-    private static <K, T> T getCache(Map<K, SoftReference<T>> pool, K key) {
+    @Nullable
+    private static <K, T> T getCache(@Nonnull Map<K, SoftReference<T>> pool, K key) {
         SoftReference<T> ref = pool.get(key);
         if (ref != null) {
             return ref.get();
@@ -185,15 +195,17 @@ public class DexUtil {
         return null;
     }
 
-    private static <K, T> void putCache(Map<K, SoftReference<T>> pool, K key, T val) {
+    private static <K, T> void putCache(@Nonnull Map<K, SoftReference<T>> pool, K key, T val) {
         pool.put(key, new SoftReference<>(val));
     }
 
-    public static ODexRewriter getODexRewriter(String bootClassPathFolder, Opcodes opcodes) {
-        String key = bootClassPathFolder + " " + opcodes.api;
+    @Nonnull
+    public static ODexRewriter getODexRewriter(@Nonnull String bootClassPath,
+                                               @Nonnull Opcodes opcodes) {
+        String key = bootClassPath + " " + opcodes.api;
         ODexRewriter rewriter = getCache(rewriterCache, key);
         if (rewriter == null) {
-            rewriter = new ODexRewriter(new ODexRewriterModule(bootClassPathFolder, opcodes));
+            rewriter = new ODexRewriter(new ODexRewriterModule(bootClassPath, opcodes));
             putCache(rewriterCache, key, rewriter);
         }
         return rewriter;
@@ -222,7 +234,7 @@ public class DexUtil {
             }
         }
 
-        public void addDex(DexFile dexFile, boolean additional) {
+        public void addDex(@Nonnull DexFile dexFile, boolean additional) {
             for (ClassDef classDef : dexFile.getClasses()) {
                 ClassDef prev = availableClasses.get(classDef.getType());
                 if (prev == null) {
@@ -286,7 +298,7 @@ public class DexUtil {
             return new FailedDexFile();
         }
 
-        public void addDexToClassPath(DexFile dexFile) {
+        public void addDexToClassPath(@Nonnull DexFile dexFile) {
             mRewriterModule.mClassPath.addDex(dexFile, true);
         }
 
@@ -294,7 +306,7 @@ public class DexUtil {
             mRewriterModule.mClassPath.reset();
         }
 
-        public void setFailInfoLocation(String folder) {
+        public void setFailInfoLocation(@Nonnull String folder) {
             mRewriterModule.mFailInfoLocation = folder;
         }
 
@@ -317,18 +329,20 @@ public class DexUtil {
         }
     }
 
-    // Covert optimized dex to normal dex
+    /**
+     * Convert optimized dex to a normal dex.
+     */
     static class ODexRewriterModule extends RewriterModule {
         private final ClassPathEx mClassPath;
         private Method mCurrentMethod;
         private String mFailInfoLocation;
 
-        ODexRewriterModule(String bootClassPath, Opcodes opcodes, String ext) {
+        ODexRewriterModule(@Nonnull String bootClassPath, @Nonnull Opcodes opcodes, @Nonnull String ext) {
             mClassPath = getClassPath(bootClassPath, opcodes, ext);
         }
 
-        ODexRewriterModule(String bootClassPath, Opcodes opcodes) {
-            this(bootClassPath, opcodes, ".dex;.jar;.oat");
+        ODexRewriterModule(@Nonnull String bootClassPath, @Nonnull Opcodes opcodes) {
+            this(bootClassPath, opcodes, ".odex;.dex;.jar;.oat");
         }
 
         @Nonnull
