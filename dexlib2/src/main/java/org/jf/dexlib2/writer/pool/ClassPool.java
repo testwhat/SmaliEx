@@ -39,6 +39,7 @@ import org.jf.dexlib2.ReferenceType;
 import org.jf.dexlib2.builder.MutableMethodImplementation;
 import org.jf.dexlib2.iface.*;
 import org.jf.dexlib2.iface.debug.*;
+import org.jf.dexlib2.iface.instruction.DualReferenceInstruction;
 import org.jf.dexlib2.iface.instruction.Instruction;
 import org.jf.dexlib2.iface.instruction.ReferenceInstruction;
 import org.jf.dexlib2.iface.reference.*;
@@ -137,6 +138,12 @@ public class ClassPool extends BasePool<String, PoolClassDef> implements ClassSe
                             dexPool.fieldSection.intern((FieldReference) reference);
                             break;
                         case ReferenceType.METHOD:
+                            if (instruction instanceof DualReferenceInstruction) {
+                                DualReferenceInstruction dual = (DualReferenceInstruction) instruction;
+                                if (dual.getReferenceType2() == ReferenceType.METHOD_PROTO) {
+                                    dexPool.protoSection.intern((MethodProtoReference) dual.getReference2());
+                                }
+                            }
                             dexPool.methodSection.intern((MethodReference)reference);
                             break;
                         default:

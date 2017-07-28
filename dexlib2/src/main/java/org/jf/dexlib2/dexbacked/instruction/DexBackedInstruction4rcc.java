@@ -67,10 +67,11 @@ public class DexBackedInstruction4rcc extends DexBackedInstruction implements In
         return opcode.referenceType;
     }
 
+    @Nonnull
     @Override
     public Reference getReference2() {
         return DexBackedReference.makeReference(dexFile, opcode.referenceType2,
-                dexFile.readUshort(instructionStart + 3));
+                dexFile.readUshort(instructionStart + 6));
     }
 
     @Override
