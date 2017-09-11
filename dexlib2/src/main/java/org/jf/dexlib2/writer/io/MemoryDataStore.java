@@ -8,7 +8,7 @@ import java.util.Arrays;
 
 public class MemoryDataStore implements DexDataStore {
     private byte[] buf;
-    private int maxWritePosition;
+    private int dataLength;
 
     public MemoryDataStore() {
         this(1024 * 1024);
@@ -22,9 +22,9 @@ public class MemoryDataStore implements DexDataStore {
         return buf;
     }
 
-    private void updateWritePosition(int position) {
-        if (position > maxWritePosition) {
-            maxWritePosition = position;
+    private void updateDataLength(int position) {
+        if (position > dataLength) {
+            dataLength = position;
         }
     }
 
@@ -34,21 +34,14 @@ public class MemoryDataStore implements DexDataStore {
             @Override public void write(int b) throws IOException {
                 growBufferIfNeeded(position);
                 buf[position++] = (byte)b;
-                updateWritePosition(position);
+                updateDataLength(position);
             }
 
-            @Override public void write(byte[] b) throws IOException {
-                growBufferIfNeeded(position + b.length);
-                System.arraycopy(b, 0, buf, position, b.length);
-                position += b.length;
-                updateWritePosition(position);
-            }
-
-            @Override public void write(byte[] b, int off, int len) throws IOException {
+            @Override public void write(@Nonnull byte[] b, int off, int len) throws IOException {
                 growBufferIfNeeded(position + len);
                 System.arraycopy(b, off, buf, position, len);
                 position += len;
-                updateWritePosition(position);
+                updateDataLength(position);
             }
         };
     }
@@ -57,7 +50,7 @@ public class MemoryDataStore implements DexDataStore {
         if (index < buf.length) {
             return;
         }
-        buf = Arrays.copyOf(buf, (int)((index + 1) * 1.2));
+        buf = Arrays.copyOf(buf, index + (index >> 1));
     }
 
     @Nonnull @Override public InputStream readAt(final int offset) {
@@ -65,52 +58,37 @@ public class MemoryDataStore implements DexDataStore {
             private int position = offset;
 
             @Override public int read() throws IOException {
-                if (position >= buf.length) {
+                if (position >= dataLength) {
                     return -1;
                 }
                 return buf[position++];
             }
 
-            @Override public int read(byte[] b) throws IOException {
-                int readLength = Math.min(b.length, buf.length - position);
-                if (readLength <= 0) {
-                    if (position >= buf.length) {
-                        return -1;
-                    }
-                    return 0;
+            @Override public int read(@Nonnull byte[] b, int off, int len) throws IOException {
+                int remain = available();
+                if (remain == 0 || position >= dataLength) {
+                    return -1;
                 }
-                System.arraycopy(buf, position, b, 0, readLength);
-                position += readLength;
-                return readLength;
-            }
-
-            @Override public int read(byte[] b, int off, int len) throws IOException {
-                int readLength = Math.min(len, buf.length - position);
-                if (readLength <= 0) {
-                    if (position >= buf.length) {
-                        return -1;
-                    }
-                    return 0;
-                }
-                System.arraycopy(buf, position, b, 0, readLength);
+                int readLength = Math.min(len, remain);
+                System.arraycopy(buf, position, b, off, readLength);
                 position += readLength;
                 return readLength;
             }
 
             @Override public long skip(long n) throws IOException {
-                int skipLength = (int)Math.min(n, buf.length - position);
+                int skipLength = (int) Math.min(n, available());
                 position += skipLength;
                 return skipLength;
             }
 
             @Override public int available() throws IOException {
-                return buf.length - position;
+                return dataLength - position;
             }
         };
     }
 
     public void writeTo(OutputStream os) throws IOException {
-        os.write(buf, 0, maxWritePosition);
+        os.write(buf, 0, dataLength);
     }
 
     @Override public void close() throws IOException {

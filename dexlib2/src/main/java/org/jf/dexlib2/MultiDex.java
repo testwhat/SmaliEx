@@ -13,7 +13,7 @@ import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -25,7 +25,7 @@ public class MultiDex implements DexFile {
     private static final int DEFAULT_MAX_DEX_ID = 0xffff + 1;
     private int mMaxNumberOfIdxPerDex = DEFAULT_MAX_DEX_ID;
 
-    private Opcodes opcodes;
+    private final Opcodes opcodes;
     public List<DexFile> files;
     public final Set<ClassDef> classes = new HashSet<>();
 
@@ -34,16 +34,19 @@ public class MultiDex implements DexFile {
     }
 
     public <F extends DexFile> MultiDex(@Nonnull List<F> dexFiles) {
+        Opcodes firstOpcodes = null;
+        if (!dexFiles.isEmpty()) {
+            DexFile dexFile = dexFiles.get(0);
+            if (dexFile instanceof DexBackedDexFile) {
+                DexBackedDexFile dexBackedDexFile = (DexBackedDexFile) dexFile;
+                firstOpcodes = dexBackedDexFile.getOpcodes();
+            }
+        }
+        opcodes = firstOpcodes == null ? Opcodes.getDefault() : firstOpcodes;
         dexFiles.forEach(this::addFile);
     }
 
     public void addFile(@Nonnull DexFile dexFile) {
-        if (dexFile instanceof DexBackedDexFile) {
-            DexBackedDexFile dexBackedDexFile = (DexBackedDexFile) dexFile;
-            if (opcodes == null) {
-                opcodes = dexBackedDexFile.getOpcodes();
-            }
-        }
         classes.addAll(dexFile.getClasses());
         if (files == null) {
             files = new ArrayList<>();
@@ -89,9 +92,6 @@ public class MultiDex implements DexFile {
     @Nonnull
     @Override
     public Opcodes getOpcodes() {
-        if (opcodes == null) {
-            opcodes = Opcodes.getDefault();
-        }
         return opcodes;
     }
 
@@ -132,13 +132,13 @@ public class MultiDex implements DexFile {
     public <C extends ClassDef> void writeClassesTo(
             List<C> classList, DexDataStoreFactory store) throws IOException {
         int dexNum = 0;
-        MultiDexPool dexPool = MultiDexPool.makeDexPool(opcodes);
-        ClassPool clsPool = dexPool.classPool;
-        Collections.sort(classList, (c1, c2) -> c1.getType().compareTo(c2.getType()));
+        DexPool dexPool = new DexPool(opcodes);
+        ClassPool clsPool = dexPool.classSection;
+        classList.sort(Comparator.comparing(ClassDef::getType));
 
         for (ClassDef classDef : classList) {
-            int numMethodIds = dexPool.getMethodCount();
-            int numFieldIds = dexPool.getFieldCount();
+            int numMethodIds = dexPool.methodSection.getItemCount();
+            int numFieldIds = dexPool.fieldSection.getItemCount();
             int constantPoolSize = classDef.getDirectMethodCount()
                     + classDef.getVirtualMethodCount()
                     + classDef.getStaticFieldCount()
@@ -153,8 +153,8 @@ public class MultiDex implements DexFile {
                     || maxFieldIdsInDex > mMaxNumberOfIdxPerDex) {
                 dexPool.writeTo(store.getDataStore(dexNum));
                 dexNum++;
-                dexPool = MultiDexPool.makeDexPool(opcodes);
-                clsPool = dexPool.classPool;
+                dexPool = new DexPool(opcodes);
+                clsPool = dexPool.classSection;
             }
             clsPool.intern(classDef);
         }
@@ -180,27 +180,5 @@ public class MultiDex implements DexFile {
 
     public interface DexDataStoreFactory {
         DexDataStore getDataStore(int dexNum) throws IOException;
-    }
-
-    public static class MultiDexPool extends DexPool {
-        public final ClassPool classPool;
-
-        protected MultiDexPool(Opcodes opcodes) {
-            super(opcodes);
-            this.classPool = getSectionProvider().getClassSection();
-        }
-
-        @Nonnull
-        public static MultiDexPool makeDexPool(@Nonnull Opcodes opcodes) {
-            return new MultiDexPool(opcodes);
-        }
-
-        public int getMethodCount() {
-            return methodSection.getItemCount();
-        }
-
-        public int getFieldCount() {
-            return fieldSection.getItemCount();
-        }
     }
 }
