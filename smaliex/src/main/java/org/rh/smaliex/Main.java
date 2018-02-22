@@ -26,15 +26,16 @@ public class Main {
         println("Usage:");
         println(" java -jar oat2dex.jar [options] <action>");
         println("[options]");
-        println(" Api level (for raw odex): -a <integer>");
+        println(" Api level: -a <integer>");
         println(" Output folder: -o <folder path>");
         println(" Print detail : -v");
         println("<action>");
-        println(" Get dex from boot.oat: boot <boot.oat/boot-folder>");
-        println(" Get dex from oat/odex: <oat/odex-file/folder> <boot-class-folder>");
-        println(" Get raw odex from oat: odex <oat-file/folder>");
-        println(" Get raw odex smali   : smali <oat/odex-file>");
-        println(" Deodex framework     : devfw [empty or path of /system/framework/]");
+        println(" Get dex of boot(.oat) : boot <boot.oat/boot-folder>");
+        println(" Get dex (de-optimize) : <oat/odex file> <boot-class-folder>");
+        println("                         <vdex file>");
+        println(" Get raw odex          : odex <oat/odex/vdex file>");
+        println(" Get raw odex smali    : smali <oat/odex/vdex file>");
+        println(" Deodex framework (exp): devfw [empty or path of /system/framework/]");
     }
 
     public static void main(String[] args) {
@@ -71,7 +72,7 @@ public class Main {
                     default:
                         println("Unrecognized option: " + opt);
                 }
-                String[] newArgs = shiftArgs(args, shift);
+                final String[] newArgs = shiftArgs(args, shift);
                 if (newArgs != args) {
                     args = newArgs;
                     if (newArgs.length < shift) {
@@ -89,13 +90,17 @@ public class Main {
             return;
         }
 
-        String cmd = args[0];
+        final String cmd = args[0];
         if ("devfw".equals(cmd)) {
             DeodexFrameworkFromDevice.deOptimizeAuto(
                     args.length > 1 ? args[1] : null, outputPath);
             return;
         }
-        if (args.length == 2) {
+
+        if (args.length == 1) {
+            checkExist(args[0]);
+            DexUtil.vdex2dex(args[0], outputPath);
+        } else if (args.length == 2) {
             if ("boot".equals(cmd)) {
                 checkExist(args[1]);
                 OatUtil.bootOat2Dex(args[1], outputPath);
@@ -111,9 +116,9 @@ public class Main {
                 OatUtil.smaliRaw(checkExist(args[1]), outputPath, apiLevel);
                 return;
             }
-            String inputPath = args[0];
-            String bootPath = args[1];
-            File input = checkExist(inputPath);
+            final String inputPath = args[0];
+            final String bootPath = args[1];
+            final File input = checkExist(inputPath);
             checkExist(bootPath);
             int type = getInputType(input);
             if (type > 0) {
@@ -134,13 +139,13 @@ public class Main {
         if (n >= args.length) {
             return args;
         }
-        String[] shiftArgs = new String[args.length - n];
+        final String[] shiftArgs = new String[args.length - n];
         System.arraycopy(args, n, shiftArgs, 0, shiftArgs.length);
         return shiftArgs;
     }
 
     static File checkExist(String path) {
-        File input = new File(path);
+        final File input = new File(path);
         if (!input.exists()) {
             exit("Input file not found: " + input);
         }
@@ -152,7 +157,7 @@ public class Main {
 
     static int getInputType(File input) {
         if (input.isDirectory()) {
-            File[] files = MiscUtil.getFiles(input.getAbsolutePath(), "dex;oat");
+            File[] files = MiscUtil.getFiles(input.getAbsolutePath(), "dex;odex;oat");
             if (files.length > 0) {
                 input = files[0];
             }

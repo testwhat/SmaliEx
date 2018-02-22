@@ -25,7 +25,7 @@ public class MiscUtil {
 
     public static File changeExt(File f, String targetExt) {
         String outPath = f.getAbsolutePath();
-        if (!outPath.endsWith(targetExt)) {
+        if (!getFilenameExt(outPath).equals(targetExt)) {
             int dotPos = outPath.lastIndexOf(".");
             if (dotPos > 0) {
                 outPath = outPath.substring(0, dotPos + 1) + targetExt;
@@ -169,6 +169,10 @@ public class MiscUtil {
 
     public static boolean isOdex(File file) {
         return checkFourBytes(file, 0, 0x6465790A);
+    }
+
+    public static boolean isVdex(File file) {
+        return checkFourBytes(file, 0, 0x76646578);
     }
 
     public static boolean isOat(File file) {

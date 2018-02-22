@@ -56,8 +56,8 @@ public class Oat {
         // https://android.googlesource.com/platform/art/+/oreo-mr1-release/runtime/oat.h#36
         O_MR1_81(27, 131);
 
-        final int api;
-        final int oat;
+        public final int api;
+        public final int oat;
 
         Version(int api, int oat) {
             this.api = api;

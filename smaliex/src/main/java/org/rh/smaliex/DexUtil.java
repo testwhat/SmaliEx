@@ -42,6 +42,10 @@ import org.jf.dexlib2.rewriter.MethodRewriter;
 import org.jf.dexlib2.rewriter.Rewriter;
 import org.jf.dexlib2.rewriter.RewriterModule;
 import org.jf.dexlib2.rewriter.Rewriters;
+import org.jf.dexlib2.writer.pool.DexPool;
+import org.rh.smaliex.deopt.VdexDecompiler;
+import org.rh.smaliex.reader.DataReader;
+import org.rh.smaliex.reader.Vdex;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -61,6 +65,7 @@ public class DexUtil {
     public static int DEFAULT_API_LEVEL = 20;
     public static int API_N = 24;
     public static Opcodes DEFAULT_OPCODES;
+    private static final String NO_NEED_BOOT_CLASSPATH = "NO_NEED_BOOT_CLASSPATH";
 
     private static final ConcurrentHashMap<Integer, SoftReference<Opcodes>> opCodesCache =
             new ConcurrentHashMap<>();
@@ -104,6 +109,11 @@ public class DexUtil {
         return Collections.emptyList();
     }
 
+    public static void vdex2dex(@Nonnull String vdex,
+                                @Nullable String outPath) throws IOException {
+        odex2dex(vdex, NO_NEED_BOOT_CLASSPATH, outPath, -1);
+    }
+
     public static void odex2dex(@Nonnull String odex,
                                 @Nonnull String bootClassPath,
                                 @Nullable String outPath, int apiLevel) throws IOException {
@@ -111,22 +121,32 @@ public class DexUtil {
         MiscUtil.mkdirs(outputFolder);
 
         final File input = new File(odex);
-        if (MiscUtil.checkFourBytes(input, 4, 0x30333700) && apiLevel < API_N) {
-            LLog.i("The input has dex version 037, suggest to use api level " + API_N);
+        final DexFile dex;
+        if (NO_NEED_BOOT_CLASSPATH.equals(bootClassPath)) {
+            if (MiscUtil.isVdex(input)) {
+                try (DataReader r = new DataReader(input)) {
+                    VdexDecompiler red = new VdexDecompiler(new Vdex(r));
+                    dex = red.getUnquickenDexFile();
+                }
+            } else throw new IOException("Not a vdex file: " + input);
+        } else {
+            if (MiscUtil.checkFourBytes(input, 4, 0x30333700) && apiLevel < API_N) {
+                LLog.i("The input has dex version 037, suggest to use api level " + API_N);
+            }
+            final Opcodes opcodes = getOpcodes(apiLevel);
+            final DexFile odexFile = loadSingleDex(input, opcodes);
+            final OdexRewriter rewriter = getOdexRewriter(bootClassPath, opcodes);
+            if (LLog.VERBOSE) {
+                rewriter.setFailInfoLocation(outputFolder.getAbsolutePath());
+            }
+            dex = rewriter.rewriteDexFile(odexFile);
         }
-        final Opcodes opcodes = getOpcodes(apiLevel);
-        final DexFile odexFile = loadSingleDex(input, opcodes);
-        final OdexRewriter rewriter = getOdexRewriter(bootClassPath, opcodes);
-        if (LLog.VERBOSE) {
-            rewriter.setFailInfoLocation(outputFolder.getAbsolutePath());
-        }
-        final DexFile dex = rewriter.rewriteDexFile(odexFile);
 
         File outputFile = MiscUtil.changeExt(new File(outputFolder, input.getName()), "dex");
         if (outputFile.exists()) {
             outputFile = MiscUtil.appendTail(outputFile, "-deodex");
         }
-        org.jf.dexlib2.writer.pool.DexPool.writeTo(outputFile.getAbsolutePath(), dex);
+        DexPool.writeTo(outputFile.getAbsolutePath(), dex);
         LLog.i("Output to " + outputFile);
     }
 
