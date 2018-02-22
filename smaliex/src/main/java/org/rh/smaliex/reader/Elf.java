@@ -423,7 +423,7 @@ public class Elf implements Closeable {
             }
         }
         if (h.e_shstrndx > -1 && h.e_shstrndx < mSectionHeaders.length) {
-            Elf_Shdr strSec = mSectionHeaders[h.e_shstrndx];
+            final Elf_Shdr strSec = mSectionHeaders[h.e_shstrndx];
             if (strSec.sh_type == SHT_STRTAB) {
                 int strSecSize = strSec.getSize();
                 mStringTable = new byte[strSecSize];
@@ -445,9 +445,9 @@ public class Elf implements Closeable {
         }
     }
 
-    private void readSymbolTables() throws IOException {
+    private void readSymbolTables() {
         final DataReader r = mReader;
-        Elf_Shdr dynsym = getSection(SHN_DYNSYM);
+        final Elf_Shdr dynsym = getSection(SHN_DYNSYM);
         if (dynsym != null) {
             r.seek(dynsym.getOffset());
             int len = dynsym.getSize() / (is64bit ? 24 : 16); // sizeof Elf_Sym
@@ -482,7 +482,7 @@ public class Elf implements Closeable {
                 }
             }
 
-            Elf_Shdr dynLinkSec = mSectionHeaders[dynsym.sh_link];
+            final Elf_Shdr dynLinkSec = mSectionHeaders[dynsym.sh_link];
             r.seek(dynLinkSec.getOffset());
             mDynStringTable = new byte[dynLinkSec.getSize()];
             r.readBytes(mDynStringTable);
@@ -492,7 +492,7 @@ public class Elf implements Closeable {
         }
     }
 
-    private void readProgramHeaders() throws IOException {
+    private void readProgramHeaders() {
         final Ehdr h = mHeader;
         final DataReader r = mReader;
         mProgHeaders = new Elf_Phdr[h.e_phnum];

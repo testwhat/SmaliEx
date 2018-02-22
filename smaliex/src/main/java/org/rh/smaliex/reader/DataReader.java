@@ -21,9 +21,10 @@ import org.rh.smaliex.LLog;
 import javax.annotation.Nonnull;
 import java.io.Closeable;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.ByteOrder;
+import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 
@@ -31,94 +32,98 @@ public class DataReader implements Closeable {
 
     private final RandomAccessFile mRaf;
     private final File mFile;
-    private final byte[] mByteBuffer = new byte[8];
-    private boolean mIsLittleEndian = true;
+    private final MappedByteBuffer mMappedBuffer;
     private ArrayList<DataReader> mAssociatedReaders;
 
-    public DataReader(String file) throws FileNotFoundException {
+    public DataReader(String file) throws IOException {
         this(new File(file));
     }
 
-    public DataReader(File file) throws FileNotFoundException {
+    public DataReader(File file) throws IOException {
         mFile = file;
         mRaf = new RandomAccessFile(mFile, "r");
+        mMappedBuffer = mRaf.getChannel().map(
+                FileChannel.MapMode.READ_ONLY, 0, file.length());
+        mMappedBuffer.rewind();
+        setIsLittleEndian(true);
     }
 
     public void setIsLittleEndian(boolean isLittleEndian) {
-        mIsLittleEndian = isLittleEndian;
+        mMappedBuffer.order(isLittleEndian
+                ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN);
     }
 
-    public void seek(long offset) throws IOException {
-        mRaf.seek(offset);
+    public void seek(long offset) {
+        position((int) offset);
     }
 
-    public final int readBytes(byte[] b) throws IOException {
-        return mRaf.read(b);
+    public void position(int newPosition) {
+        mMappedBuffer.position(newPosition);
     }
 
-    public final int readBytes(char[] b) throws IOException {
-        byte[] bs = new byte[b.length];
-        int read = mRaf.read(bs);
+    public int position() {
+        return mMappedBuffer.position();
+    }
+
+    public int readByte() {
+        return mMappedBuffer.get() & 0xff;
+    }
+
+    public void readBytes(byte[] b) {
+        mMappedBuffer.get(b, 0, b.length);
+    }
+
+    public void readBytes(char[] b) {
+        final byte[] bs = new byte[b.length];
+        readBytes(bs);
         for (int i = 0; i < b.length; i++) {
             b[i] = (char) bs[i];
         }
-        return read;
     }
 
-    public final short readShort() throws IOException {
-        short s = mRaf.readShort();
-        if (mIsLittleEndian) {
-            return (short) (((s & 0x00ff) << 8) | ((s & 0xff00) >>> 8));
-        }
-        return s;
+    public short readShort() {
+        return mMappedBuffer.getShort();
     }
 
-    public final int readInt() throws IOException {
-        int i = mRaf.readInt();
-        if (mIsLittleEndian) {
-            return ((i & 0x000000ff) << 24)
-                    | ((i & 0x0000ff00) << 8)
-                    | ((i & 0x00ff0000) >>> 8)
-                    | ((i & 0xff000000) >>> 24);
-        }
-        return i;
+    public int readInt() {
+        return mMappedBuffer.getInt();
     }
 
-    public final void readIntArray(@Nonnull int[] array) throws IOException {
-        for (int i = 0; i < array.length; i++) {
-            array[i] = readInt();
-        }
-    }
-
-    public int previewInt() throws IOException {
-        long pos = mRaf.getFilePointer();
-        int value = readInt();
-        mRaf.seek(pos);
+    public int previewInt() {
+        mMappedBuffer.mark();
+        final int value = readInt();
+        mMappedBuffer.reset();
         return value;
     }
 
-    public final long readLong() throws IOException {
-        if (mIsLittleEndian) {
-            mRaf.readFully(mByteBuffer, 0, 8);
-            return (long) (mByteBuffer[7]) << 56
-                    | (long) (mByteBuffer[6] & 0xff) << 48
-                    | (long) (mByteBuffer[5] & 0xff) << 40
-                    | (long) (mByteBuffer[4] & 0xff) << 32
-                    | (long) (mByteBuffer[3] & 0xff) << 24
-                    | (long) (mByteBuffer[2] & 0xff) << 16
-                    | (long) (mByteBuffer[1] & 0xff) << 8
-                    | (long) (mByteBuffer[0] & 0xff);
-        } else {
-            return mRaf.readLong();
+    public final long readLong() {
+        return mMappedBuffer.getLong();
+    }
+
+    public int readUleb128() {
+        int result = readByte();
+        if (result > 0x7f) {
+            int curVal = readByte();
+            result = (result & 0x7f) | ((curVal & 0x7f) << 7);
+            if (curVal > 0x7f) {
+                curVal = readByte();
+                result |= (curVal & 0x7f) << 14;
+                if (curVal > 0x7f) {
+                    curVal = readByte();
+                    result |= (curVal & 0x7f) << 21;
+                    if (curVal > 0x7f) {
+                        curVal = readByte();
+                        result |= curVal << 28;
+                    }
+                }
+            }
         }
+        return result;
     }
 
-    public final int readRaw(byte b[], int off, int len) throws IOException {
-        return mRaf.read(b, off, len);
-    }
-
-    public long position() throws IOException {
-        return mRaf.getFilePointer();
+    public final int readRaw(byte b[], int offset, int length) {
+        mMappedBuffer.get(b, offset, length);
+        return length;
     }
 
     public File getFile() {
@@ -127,10 +132,6 @@ public class DataReader implements Closeable {
 
     public FileChannel getChannel() {
         return mRaf.getChannel();
-    }
-
-    public long length() throws IOException {
-        return mRaf.length();
     }
 
     public void addAssociatedReader(DataReader reader) {

@@ -48,7 +48,13 @@ public class Oat {
         N_70(24, 79),
 
         // https://android.googlesource.com/platform/art/+/nougat-mr1-release/runtime/oat.h#35
-        N_MR1_71(25, 88);
+        N_MR1_71(25, 88),
+
+        // https://android.googlesource.com/platform/art/+/oreo-release/runtime/oat.h#35
+        O_80(26, 124),
+
+        // https://android.googlesource.com/platform/art/+/oreo-mr1-release/runtime/oat.h#36
+        O_MR1_81(27, 131);
 
         final int api;
         final int oat;
@@ -59,7 +65,7 @@ public class Oat {
         }
     }
 
-    // /art/runtime/instruction_set.h
+    // See /art/runtime/instruction_set.h
     public final static class InstructionSet {
         public final static int kNone = 0;
         public final static int kArm = 1;
@@ -71,7 +77,7 @@ public class Oat {
         public final static int kMips64 = 7;
     }
 
-    // /art/runtime/oat.h
+    // See /art/runtime/oat.h
     public static class Header {
 
         @DumpFormat(type = DumpFormat.TYPE_CHAR, isString = true)
@@ -104,9 +110,9 @@ public class Oat {
         @DumpFormat(type = DumpFormat.TYPE_CHAR, isString = true)
         final char[] key_value_store_;
 
-        int artVersion = Version.M_60.oat;
+        int artVersion;
 
-        public Header(DataReader r) throws IOException {
+        public Header(DataReader r) {
             r.readBytes(magic_);
             if (magic_[0] != 'o' || magic_[1] != 'a' || magic_[2] != 't') {
                 LLog.e(String.format("Invalid art magic %c%c%c", magic_[0], magic_[1], magic_[2]));
@@ -145,7 +151,7 @@ public class Oat {
         }
     }
 
-    // /art/runtime/dex_file.h
+    // See /art/runtime/dex_file.h
     public static class DexFile {
 
         public static class Header {
@@ -178,7 +184,7 @@ public class Oat {
             final int data_size_;
             final int data_off_;
 
-            public Header(DataReader r) throws IOException {
+            public Header(DataReader r) {
                 r.readBytes(magic_);
                 if (magic_[0] != 'd' || magic_[1] != 'e' || magic_[2] != 'x') {
                     LLog.e(String.format("Invalid dex magic '%c%c%c'",
@@ -218,13 +224,13 @@ public class Oat {
         public final DataReader mReader;
         public final Header mHeader;
 
-        public DexFile(DataReader r) throws IOException {
+        public DexFile(DataReader r) {
             mDexPosition = r.position();
             mReader = r;
             mHeader = new Header(r);
         }
 
-        public byte[] getBytes() throws IOException {
+        public byte[] getBytes() {
             byte[] dexBytes = new byte[mHeader.file_size_];
             int remain = dexBytes.length;
             int read = 0;
@@ -238,17 +244,6 @@ public class Oat {
         }
 
         public void saveTo(File outputFile) throws IOException {
-            String targetExt = "dex";
-            String outPath = outputFile.getAbsolutePath();
-            if (!outPath.endsWith(targetExt)) {
-                int dotPos = outPath.lastIndexOf(".");
-                if (dotPos > 0) {
-                    outPath = outPath.substring(0, dotPos + 1) + targetExt;
-                } else {
-                    outPath = outPath + "." + targetExt;
-                }
-                outputFile = new File(outPath);
-            }
             try (FileOutputStream output = new FileOutputStream(outputFile)) {
                 mReader.getChannel().transferTo(mDexPosition, mHeader.file_size_, output.getChannel());
             }
@@ -267,14 +262,14 @@ public class Oat {
         int class_offsets_offset_;
         int lookup_table_offset_;
 
-        public OatDexFile(DataReader r, int version) throws IOException {
+        public OatDexFile(DataReader r, int version) {
             dex_file_location_size_ = r.readInt();
             dex_file_location_data_ = new byte[dex_file_location_size_];
             r.readBytes(dex_file_location_data_);
             dex_file_location_checksum_ = r.readInt();
             dex_file_offset_ = r.readInt();
 
-            File vdex = MiscUtil.changeExt(r.getFile(), "vdex");
+            final File vdex = MiscUtil.changeExt(r.getFile(), "vdex");
             if (vdex.exists()) {
                 dex_file_pointer_ = vdex;
             } else if (dex_file_offset_ == 0x1C) {
@@ -313,11 +308,11 @@ public class Oat {
         mOatDexFiles = new OatDexFile[mHeader.dex_file_count_];
         mDexFiles = new DexFile[mHeader.dex_file_count_];
         for (int i = 0; i < mOatDexFiles.length; i++) {
-            OatDexFile odf = new OatDexFile(reader, mHeader.artVersion);
+            final OatDexFile odf = new OatDexFile(reader, mHeader.artVersion);
             mOatDexFiles[i] = odf;
-            long thisOatPos = reader.position();
+            final long curOatPos = reader.position();
 
-            DexFile dex;
+            final DexFile dex;
             if (odf.dex_file_pointer_ != null) {
                 DataReader r = new DataReader(odf.dex_file_pointer_);
                 reader.addAssociatedReader(r);
@@ -331,7 +326,7 @@ public class Oat {
 
             if (mHeader.artVersion < Version.N_70.oat) {
                 int num_methods_offsets_ = dex.mHeader.class_defs_size_;
-                reader.seek(thisOatPos + 4 * num_methods_offsets_);
+                reader.seek(curOatPos + 4 * num_methods_offsets_);
                 if (reader.previewInt() > 0xff) { // workaround for samsung offset
                     //num_methods_offsets_ += 4;
                     reader.readInt();
@@ -343,7 +338,7 @@ public class Oat {
                 //reader.readIntArray(odf.methods_offsets_);
 
             } else {
-                reader.seek(thisOatPos);
+                reader.seek(curOatPos);
             }
         }
     }
@@ -375,7 +370,7 @@ public class Oat {
     }
 
     public static void dump(final Object obj) throws IllegalArgumentException, IllegalAccessException {
-        Field[] fields = obj.getClass().getDeclaredFields();
+        final Field[] fields = obj.getClass().getDeclaredFields();
 
         for (Field field : fields) {
             if (field.getModifiers() == Modifier.STATIC
@@ -383,17 +378,17 @@ public class Oat {
                 continue;
             }
             field.setAccessible(true);
-            Class<?> type = field.getType();
+            final Class<?> type = field.getType();
             System.out.print(field.getName() + " = ");
-            Object val = field.get(obj);
+            final Object val = field.get(obj);
             if (val == null) {
                 System.out.println("null");
                 continue;
             }
-            DumpFormat fmt = field.getAnnotation(DumpFormat.class);
+            final DumpFormat fmt = field.getAnnotation(DumpFormat.class);
             if (fmt != null) {
                 if (fmt.isString()) {
-                    String rawStr;
+                    final String rawStr;
                     if (fmt.type() == DumpFormat.TYPE_BYTE) {
                         rawStr = new String((byte[]) val);
                     } else {
@@ -401,7 +396,7 @@ public class Oat {
                     }
                     System.out.println(rawStr.trim());
                 } else if (fmt.enumClass() != DumpFormat.class) {
-                    Field[] enumDefines = fmt.enumClass().getDeclaredFields();
+                    final Field[] enumDefines = fmt.enumClass().getDeclaredFields();
                     boolean matched = false;
                     for (Field f : enumDefines) {
                         if (val.equals(f.get(null))) {
@@ -415,22 +410,20 @@ public class Oat {
                     }
                 } else {
                     if (type.isArray()) {
-                        byte[] bytes = (byte[]) val;
-                        String sf = fmt.hex() ? "%02X " : "%d ";
+                        final byte[] bytes = (byte[]) val;
+                        final String sf = fmt.hex() ? "%02X " : "%d ";
                         for (byte b : bytes) {
                             System.out.printf(sf, b);
                         }
                         System.out.println();
                     } else {
-                        String sf = fmt.hex() ? "0x%X\n" : "%d\n";
-                        System.out.printf(sf, val);
+                        System.out.printf(fmt.hex() ? "0x%X\n" : "%d\n", val);
                     }
                 }
             } else {
                 if (type.isArray()) {
-                    Class<?> compType = type.getComponentType();
-                    int len = Array.getLength(val);
-                    System.out.println(compType + "[" + len + "]");
+                    final Class<?> compType = type.getComponentType();
+                    System.out.println(compType + "[" + Array.getLength(val) + "]");
                 } else {
                     System.out.println(val);
                 }
@@ -440,8 +433,8 @@ public class Oat {
 
     public static void dump(String oatFile) {
         try (Elf e = new Elf(oatFile)) {
-            DataReader r = e.getReader();
-            Elf.Elf_Shdr sec = e.getSection(SECTION_RODATA);
+            final DataReader r = e.getReader();
+            final Elf.Elf_Shdr sec = e.getSection(SECTION_RODATA);
             if (sec != null) {
                 r.seek(sec.getOffset());
                 Oat oat = new Oat(r);
@@ -464,47 +457,4 @@ public class Oat {
         Class<?> enumClass() default DumpFormat.class;
     }
 
-// See compiler/oat_writer.h
-// OatHeader         variable length with count of D OatDexFiles
-//
-// OatDexFile[0]     one variable sized OatDexFile with offsets to Dex and OatClasses
-// OatDexFile[1]
-// ...
-// OatDexFile[D]
-//
-// Dex[0]            one variable sized DexFile for each OatDexFile.
-// Dex[1]            these are literal copies of the input .dex files.
-// ...
-// Dex[D]
-//
-// OatClass[0]       one variable sized OatClass for each of C DexFile::ClassDefs
-// OatClass[1]       contains OatClass entries with class status, offsets to code, etc.
-// ...
-// OatClass[C]
-//
-// GcMap             one variable sized blob with GC map.
-// GcMap             GC maps are deduplicated.
-// ...
-// GcMap
-//
-// VmapTable         one variable sized VmapTable blob (quick compiler only).
-// VmapTable         VmapTables are deduplicated.
-// ...
-// VmapTable
-//
-// MappingTable      one variable sized blob with MappingTable (quick compiler only).
-// MappingTable      MappingTables are deduplicated.
-// ...
-// MappingTable
-//
-// padding           if necessary so that the following code will be page aligned
-//
-// OatMethodHeader   fixed size header for a CompiledMethod including the size of the MethodCode.
-// MethodCode        one variable sized blob with the code of a CompiledMethod.
-// OatMethodHeader   (OatMethodHeader, MethodCode) pairs are deduplicated.
-// MethodCode
-// ...
-// OatMethodHeader
-// MethodCode
-//
 }
