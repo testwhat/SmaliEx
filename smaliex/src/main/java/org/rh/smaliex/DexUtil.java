@@ -107,20 +107,20 @@ public class DexUtil {
     public static void odex2dex(@Nonnull String odex,
                                 @Nonnull String bootClassPath,
                                 @Nullable String outPath, int apiLevel) throws IOException {
-        File outputFolder = new File(outPath == null ? MiscUtil.workingDir() : outPath);
+        final File outputFolder = new File(outPath == null ? MiscUtil.workingDir() : outPath);
         MiscUtil.mkdirs(outputFolder);
 
-        File input = new File(odex);
+        final File input = new File(odex);
         if (MiscUtil.checkFourBytes(input, 4, 0x30333700) && apiLevel < API_N) {
             LLog.i("The input has dex version 037, suggest to use api level " + API_N);
         }
-        Opcodes opcodes = getOpcodes(apiLevel);
-        DexFile odexFile = loadSingleDex(input, opcodes);
-        ODexRewriter rewriter = getODexRewriter(bootClassPath, opcodes);
+        final Opcodes opcodes = getOpcodes(apiLevel);
+        final DexFile odexFile = loadSingleDex(input, opcodes);
+        final OdexRewriter rewriter = getOdexRewriter(bootClassPath, opcodes);
         if (LLog.VERBOSE) {
             rewriter.setFailInfoLocation(outputFolder.getAbsolutePath());
         }
-        DexFile dex = rewriter.rewriteDexFile(odexFile);
+        final DexFile dex = rewriter.rewriteDexFile(odexFile);
 
         File outputFile = MiscUtil.changeExt(new File(outputFolder, input.getName()), "dex");
         if (outputFile.exists()) {
@@ -133,7 +133,7 @@ public class DexUtil {
     @Nonnull
     public static ClassPathEx getClassPath(@Nonnull String path,
                                            @Nonnull Opcodes opcodes, @Nonnull String ext) {
-        ArrayList<DexFile> dexFiles = new ArrayList<>();
+        final ArrayList<DexFile> dexFiles = new ArrayList<>();
         for (File f : MiscUtil.getFiles(path, ext)) {
             dexFiles.addAll(OatUtil.getDexFiles(f, opcodes.api, null));
         }
@@ -145,16 +145,17 @@ public class DexUtil {
 
     // If return false, the dex may be customized format or encrypted.
     public static boolean verifyStringOffset(@Nonnull DexBackedDexFile dex) {
-        int strIdsStartOffset = dex.readSmallUint(
+        final int strIdsStartOffset = dex.readSmallUint(
                 org.jf.dexlib2.dexbacked.raw.HeaderItem.STRING_START_OFFSET);
-        int strStartOffset = dex.readInt(strIdsStartOffset);
-        int mapOffset = dex.readSmallUint(org.jf.dexlib2.dexbacked.raw.HeaderItem.MAP_OFFSET);
-        int mapSize = dex.readSmallUint(mapOffset);
+        final int strStartOffset = dex.readInt(strIdsStartOffset);
+        final int mapOffset = dex.readSmallUint(org.jf.dexlib2.dexbacked.raw.HeaderItem.MAP_OFFSET);
+        final int mapSize = dex.readSmallUint(mapOffset);
         for (int i = 0; i < mapSize; i++) {
-            int mapItemOffset = mapOffset + 4 + i * org.jf.dexlib2.dexbacked.raw.MapItem.ITEM_SIZE;
+            final int mapItemOffset = mapOffset + 4 +
+                    i * org.jf.dexlib2.dexbacked.raw.MapItem.ITEM_SIZE;
             if (dex.readUshort(mapItemOffset)
                     == org.jf.dexlib2.dexbacked.raw.ItemType.STRING_DATA_ITEM) {
-                int realStrStartOffset = dex.readSmallUint(
+                final int realStrStartOffset = dex.readSmallUint(
                         mapItemOffset + org.jf.dexlib2.dexbacked.raw.MapItem.OFFSET_OFFSET);
                 if (strStartOffset != realStrStartOffset) {
                     return false;
@@ -168,13 +169,13 @@ public class DexUtil {
     public static void writeSmaliContent(@Nonnull String type,
                                          @Nonnull ClassPath classPath,
                                          @Nonnull java.io.Writer outWriter) {
-        org.jf.baksmali.BaksmaliOptions options = new org.jf.baksmali.BaksmaliOptions();
-        org.jf.dexlib2.iface.ClassDef classDef = classPath.getClassDef(type);
+        final org.jf.baksmali.BaksmaliOptions options = new org.jf.baksmali.BaksmaliOptions();
+        final org.jf.dexlib2.iface.ClassDef classDef = classPath.getClassDef(type);
         options.apiLevel = VersionMap.mapArtVersionToApi(classPath.oatVersion);
         options.allowOdex = true;
         options.classPath = classPath;
 
-        ClassDefinition cd = new ClassDefinition(options, classDef);
+        final ClassDefinition cd = new ClassDefinition(options, classDef);
         try {
             org.jf.util.IndentingWriter writer = new org.jf.util.IndentingWriter(outWriter);
             cd.writeTo(writer);
@@ -183,12 +184,12 @@ public class DexUtil {
         }
     }
 
-    private static final ConcurrentHashMap<String, SoftReference<ODexRewriter>> rewriterCache =
+    private static final ConcurrentHashMap<String, SoftReference<OdexRewriter>> rewriterCache =
             new ConcurrentHashMap<>();
 
     @Nullable
     private static <K, T> T getCache(@Nonnull Map<K, SoftReference<T>> pool, K key) {
-        SoftReference<T> ref = pool.get(key);
+        final SoftReference<T> ref = pool.get(key);
         if (ref != null) {
             return ref.get();
         }
@@ -200,12 +201,12 @@ public class DexUtil {
     }
 
     @Nonnull
-    public static ODexRewriter getODexRewriter(@Nonnull String bootClassPath,
+    public static OdexRewriter getOdexRewriter(@Nonnull String bootClassPath,
                                                @Nonnull Opcodes opcodes) {
-        String key = bootClassPath + " " + opcodes.api;
-        ODexRewriter rewriter = getCache(rewriterCache, key);
+        final String key = bootClassPath + " " + opcodes.api;
+        OdexRewriter rewriter = getCache(rewriterCache, key);
         if (rewriter == null) {
-            rewriter = new ODexRewriter(new ODexRewriterModule(bootClassPath, opcodes));
+            rewriter = new OdexRewriter(new OdexRewriterModule(bootClassPath, opcodes));
             putCache(rewriterCache, key, rewriter);
         }
         return rewriter;
@@ -222,7 +223,7 @@ public class DexUtil {
                 addDex(dexFile, false);
             }
             if (availableClasses.get("Ljava/lang/Class;") == null) {
-                DexFile basicClasses = new ImmutableDexFile(getOpcodes(DEFAULT_API_LEVEL),
+                final DexFile basicClasses = new ImmutableDexFile(getOpcodes(DEFAULT_API_LEVEL),
                         ImmutableSet.of(
                                 new ReflectionClassDef(Class.class),
                                 new ReflectionClassDef(Cloneable.class),
@@ -236,7 +237,7 @@ public class DexUtil {
 
         public void addDex(@Nonnull DexFile dexFile, boolean additional) {
             for (ClassDef classDef : dexFile.getClasses()) {
-                ClassDef prev = availableClasses.get(classDef.getType());
+                final ClassDef prev = availableClasses.get(classDef.getType());
                 if (prev == null) {
                     availableClasses.put(classDef.getType(), classDef);
                 }
@@ -267,7 +268,7 @@ public class DexUtil {
         @Nonnull
         @Override
         public ClassDef getClassDef(String type) {
-            ClassDef ret = availableClasses.get(type);
+            final ClassDef ret = availableClasses.get(type);
             if (ret == null) {
                 throw new UnresolvedClassException("Could not resolve class %s", type);
             }
@@ -275,10 +276,10 @@ public class DexUtil {
         }
     }
 
-    public static class ODexRewriter extends org.jf.dexlib2.rewriter.DexRewriter {
-        final ODexRewriterModule mRewriterModule;
+    public static class OdexRewriter extends org.jf.dexlib2.rewriter.DexRewriter {
+        final OdexRewriterModule mRewriterModule;
 
-        ODexRewriter(ODexRewriterModule module) {
+        OdexRewriter(OdexRewriterModule module) {
             super(module);
             mRewriterModule = module;
         }
@@ -332,16 +333,16 @@ public class DexUtil {
     /**
      * Convert optimized dex to a normal dex.
      */
-    static class ODexRewriterModule extends RewriterModule {
+    static class OdexRewriterModule extends RewriterModule {
         private final ClassPathEx mClassPath;
         private Method mCurrentMethod;
         private String mFailInfoLocation;
 
-        ODexRewriterModule(@Nonnull String bootClassPath, @Nonnull Opcodes opcodes, @Nonnull String ext) {
+        OdexRewriterModule(@Nonnull String bootClassPath, @Nonnull Opcodes opcodes, @Nonnull String ext) {
             mClassPath = getClassPath(bootClassPath, opcodes, ext);
         }
 
-        ODexRewriterModule(@Nonnull String bootClassPath, @Nonnull Opcodes opcodes) {
+        OdexRewriterModule(@Nonnull String bootClassPath, @Nonnull Opcodes opcodes) {
             this(bootClassPath, opcodes, ".odex;.dex;.jar;.oat");
         }
 
@@ -358,7 +359,7 @@ public class DexUtil {
                         @Nonnull
                         @Override
                         public Iterable<? extends Instruction> getInstructions() {
-                            MethodAnalyzer ma = new MethodAnalyzer(
+                            final MethodAnalyzer ma = new MethodAnalyzer(
                                     mClassPath, mCurrentMethod, null, false);
                             if (!ma.analysisInfo.isEmpty()) {
                                 StringBuilder sb = new StringBuilder(256);
@@ -369,7 +370,7 @@ public class DexUtil {
                                 }
                                 LLog.v(sb.toString());
                             }
-                            AnalysisException ae = ma.getAnalysisException();
+                            final AnalysisException ae = ma.getAnalysisException();
                             if (ae != null) {
                                 handleAnalysisException(ae);
                             }
@@ -383,7 +384,7 @@ public class DexUtil {
         void handleAnalysisException(AnalysisException ae) {
             LLog.e("Analysis error in class=" + mCurrentMethod.getDefiningClass()
                     + " method=" + mCurrentMethod.getName() + "\n" + ae.getContext());
-            StackTraceElement[] stacks = ae.getCause() == null
+            final StackTraceElement[] stacks = ae.getCause() == null
                     ? ae.getStackTrace() : ae.getCause().getStackTrace();
             if (LLog.VERBOSE || stacks.length < 10) {
                 LLog.ex(ae);
@@ -406,9 +407,9 @@ public class DexUtil {
                 LLog.i(sb.toString());
             }
             if (mFailInfoLocation != null) {
-                String fileName = mCurrentMethod.getDefiningClass().replace(
+                final String fileName = mCurrentMethod.getDefiningClass().replace(
                         "/", "-").replace(";", "") + ".smali";
-                String failedCase = MiscUtil.path(mFailInfoLocation, fileName);
+                final String failedCase = MiscUtil.path(mFailInfoLocation, fileName);
                 try (FileWriter writer = new FileWriter(failedCase)) {
                     writeSmaliContent(mCurrentMethod.getDefiningClass(), mClassPath, writer);
                     LLog.i("Output failed class content to " + failedCase);
