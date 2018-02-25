@@ -66,7 +66,7 @@ public class VdexDecompiler {
         if (mResult == null) {
             mResult = ImmutableDexFile.of(
                     mVdexRewriter.rewriteDexFile(mRewriterModule.mDex));
-            if (mRewriterModule.mDebug) {
+            if (VdexRewriterModule.DEBUG) {
                 mRewriterModule.fillLastInfo();
             }
         }
@@ -75,6 +75,7 @@ public class VdexDecompiler {
 
     // See art/runtime/dex_to_dex_decompiler.cc
     public static class VdexRewriterModule extends RewriterModule {
+        public static boolean DEBUG;
         private static final int kDexNoIndex16 = 0xffff;
         private final Vdex mVdex;
         private final DexBackedDexFile mDex; // TODO multi-dex
@@ -82,7 +83,6 @@ public class VdexDecompiler {
         private int mDexPc;
         private Method mCurrentMethod;
         private boolean mDecompileReturnInstruction = true;
-        private boolean mDebug = true;
         private int mQuickenInstrCount;
 
         final static OdexedFieldInstructionMapper sInstrMapper =
@@ -107,7 +107,7 @@ public class VdexDecompiler {
             mVdex = vdex;
             mDex = new DexBackedDexFile(opcodes, vdex.getDexBytes());
             mQiIter = vdex.mQuickeningInfoList.listIterator();
-            mMethodInfoList = mDebug ? new ArrayList<>() : null;
+            mMethodInfoList = DEBUG ? new ArrayList<>() : null;
         }
 
         public void setDecompileReturnInstruction(boolean enable) {
@@ -129,6 +129,11 @@ public class VdexDecompiler {
                 return null;
             }
             final int refIndex = ni.getIndex();
+            if (refIndex >= 0xff) {
+                LLog.i("Skip incorrect NOP ref in " + mCurrentMethod);
+                mQiIter.previous();
+                return null;
+            }
             final int typeIndex = nextInfo().getIndex();
             final Reference ref = DexBackedReference.makeReference(
                     mDex, ReferenceType.TYPE, typeIndex);
@@ -244,7 +249,7 @@ public class VdexDecompiler {
                 public Method rewrite(@Nonnull Method method) {
                     mDexPc = 0;
                     mCurrentMethod = method;
-                    if (mDebug && !AccessFlags.ABSTRACT.isSet(method.getAccessFlags())) {
+                    if (DEBUG && !AccessFlags.ABSTRACT.isSet(method.getAccessFlags())) {
                         fillLastInfo();
                         mMethodInfoList.add(new MethodInfo(method));
                     }
