@@ -17,9 +17,12 @@
 package org.rh.smaliex;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.lang.ref.SoftReference;
+import java.util.Map;
 
 public class MiscUtil {
 
@@ -145,6 +148,19 @@ public class MiscUtil {
 
     public static byte[] readBytes(java.io.InputStream input) throws IOException {
         return readBytes(input, input.available());
+    }
+
+    @Nullable
+    public static <K, T> T getCache(@Nonnull Map<K, SoftReference<T>> pool, K key) {
+        final SoftReference<T> ref = pool.get(key);
+        if (ref != null) {
+            return ref.get();
+        }
+        return null;
+    }
+
+    public static <K, T> void putCache(@Nonnull Map<K, SoftReference<T>> pool, K key, T val) {
+        pool.put(key, new SoftReference<>(val));
     }
 
     static boolean checkFourBytes(File file, int offset, long fourBytes) {

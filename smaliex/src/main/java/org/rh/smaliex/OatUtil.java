@@ -23,7 +23,7 @@ import org.jf.dexlib2.dexbacked.DexBackedDexFile;
 import org.jf.dexlib2.iface.DexFile;
 import org.jf.dexlib2.writer.io.MemoryDataStore;
 import org.jf.dexlib2.writer.pool.DexPool;
-import org.rh.smaliex.DexUtil.OdexRewriter;
+import org.rh.smaliex.deopt.OdexRewriter;
 import org.rh.smaliex.reader.DataReader;
 import org.rh.smaliex.reader.Elf;
 import org.rh.smaliex.reader.Oat;
@@ -72,7 +72,7 @@ public class OatUtil {
                 LLog.ex(ex);
             }
         } else {
-            final Opcodes opc = DexUtil.getOpcodes(apiLevel > 0 ? apiLevel : DexUtil.DEFAULT_API_LEVEL);
+            final Opcodes opc = DexUtil.getOpcodes(apiLevel);
             dexFiles = DexUtil.loadMultiDex(file, opc);
             if (outputNames != null) {
                 String dexName = "classes";
@@ -344,10 +344,8 @@ public class OatUtil {
         if (bootClassPath == null || !new File(bootClassPath).exists()) {
             throw new IOException("Invalid bootclasspath: " + bootClassPath);
         }
-        final OdexRewriter deOpt = DexUtil.getOdexRewriter(bootClassPath, opcodes);
-        if (LLog.VERBOSE) {
-            deOpt.setFailInfoLocation(outputDir.getAbsolutePath());
-        }
+        final OdexRewriter deOpt = OdexRewriter.get(
+                bootClassPath, opcodes, outputDir.getAbsolutePath());
 
         LLog.i("Art version=" + oat.getArtVersion() + " (" + oat.mSrcFile + ")");
         final DexFile[] dexFiles = getOdexFromOat(oat, opcodes);
@@ -368,7 +366,7 @@ public class OatUtil {
 
             LLog.i("De-optimizing " + dexLoc);
             final DexFile d = deOpt.rewriteDexFile(dexFiles[i]);
-            if (!OdexRewriter.isValid(d)) {
+            if (OdexRewriter.isInvalid(d)) {
                 LLog.i("convertToDex: skip " + dexLoc);
                 continue;
             }
@@ -390,7 +388,8 @@ public class OatUtil {
                                        @Nonnull String noClassJarFolder,
                                        boolean isBoot) throws IOException {
         final Opcodes opcodes = getOpcodes(oat);
-        final OdexRewriter deOpt = DexUtil.getOdexRewriter(bootClassPath, opcodes);
+        final OdexRewriter deOpt = OdexRewriter.get(
+                bootClassPath, opcodes, outputFolder.getAbsolutePath());
         final HashMap<String, ArrayList<Oat.DexFile>> dexFileGroup = new HashMap<>();
         for (int i = 0; i < oat.mOatDexFiles.length; i++) {
             final Oat.OatDexFile odf = oat.mOatDexFiles[i];
@@ -408,9 +407,6 @@ public class OatUtil {
                 deOpt.addDexToClassPath(new DexBackedDexFile(opcodes, oat.mDexFiles[i].getBytes()));
             }
         }
-        if (LLog.VERBOSE) {
-            deOpt.setFailInfoLocation(outputFolder.getAbsolutePath());
-        }
 
         for (String jarName : dexFileGroup.keySet()) {
             final File outputJar = MiscUtil.changeExt(new File(outputFolder, jarName), "jar");
@@ -424,7 +420,7 @@ public class OatUtil {
                     LLog.i("De-optimizing " + jarName + (i > 1 ? (" part-" + classesIdx) : ""));
                     final DexFile d = deOpt.rewriteDexFile(
                             new DexBackedDexFile(opcodes, dex.getBytes()));
-                    if (!OdexRewriter.isValid(d)) {
+                    if (OdexRewriter.isInvalid(d)) {
                         LLog.i("convertToDexJar: skip " + jarName);
                         continue;
                     }
