@@ -257,4 +257,8 @@ public class DexBackedMethod extends BaseMethodReference implements Method {
 
         return size;
     }
+
+    public int getCodeOffset() {
+        return codeOffset;
+    }
 }

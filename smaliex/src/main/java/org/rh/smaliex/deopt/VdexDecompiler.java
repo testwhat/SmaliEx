@@ -22,6 +22,7 @@ import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.ReferenceType;
 import org.jf.dexlib2.analysis.OdexedFieldInstructionMapper;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile;
+import org.jf.dexlib2.dexbacked.DexBackedMethod;
 import org.jf.dexlib2.dexbacked.reference.DexBackedFieldReference;
 import org.jf.dexlib2.dexbacked.reference.DexBackedReference;
 import org.jf.dexlib2.iface.DexFile;
@@ -68,6 +69,7 @@ public class VdexDecompiler {
                     mVdexRewriter.rewriteDexFile(mRewriterModule.mDex));
             if (VdexRewriterModule.DEBUG) {
                 mRewriterModule.fillLastInfo();
+                mRewriterModule.printUnquickenInfo();
             }
         }
         return mResult;
@@ -79,10 +81,12 @@ public class VdexDecompiler {
         private static final int kDexNoIndex16 = 0xffff;
         private final Vdex mVdex;
         private final DexBackedDexFile mDex; // TODO multi-dex
-        private ListIterator<? extends Vdex.QuickeningInfo> mQiIter;
+        private ListIterator<Vdex.QuickeningInfoList> mGiIter;
+        private ListIterator<Vdex.QuickeningInfo> mQiIter;
         private int mDexPc;
-        private Method mCurrentMethod;
+        private DexBackedMethod mCurrentMethod;
         private boolean mDecompileReturnInstruction = true;
+        private boolean mNoQuickenInfo;
         private int mQuickenInstrCount;
 
         final static OdexedFieldInstructionMapper sInstrMapper =
@@ -106,7 +110,7 @@ public class VdexDecompiler {
         public VdexRewriterModule(Vdex vdex, Opcodes opcodes) {
             mVdex = vdex;
             mDex = new DexBackedDexFile(opcodes, vdex.getDexBytes());
-            mQiIter = vdex.mQuickeningInfoList.listIterator();
+            mGiIter = vdex.mQuickeningInfoList.listIterator();
             mMethodInfoList = DEBUG ? new ArrayList<>() : null;
         }
 
@@ -123,14 +127,16 @@ public class VdexDecompiler {
 
         Instruction decompileNop() {
             final Vdex.QuickeningInfo ni = nextInfo();
-            if (ni == null || ni.getIndex() == kDexNoIndex16
-                    || (ni.getDexPc() != Vdex.QuickeningInfo.NO_DEX_PC && ni.getDexPc() != mDexPc)) {
-                mQiIter.previous();
+            if (ni == null) {
                 return null;
             }
             final int refIndex = ni.getIndex();
-            if (refIndex >= 0xff) {
-                LLog.i("Skip incorrect NOP ref in " + mCurrentMethod);
+            if (refIndex == kDexNoIndex16 || !ni.matchDexPc(mDexPc)) {
+                mQiIter.previous();
+                return null;
+            }
+            if (refIndex > 0xff) {
+                LLog.i("Skip incorrect NOP ref " + refIndex + " in " + mCurrentMethod);
                 mQiIter.previous();
                 return null;
             }
@@ -183,7 +189,8 @@ public class VdexDecompiler {
                         LLog.e("=== Error ===");
                         LLog.e("Method: " + mCurrentMethod);
                         LLog.e("Instruction: " + instruction.getOpcode()
-                                + " " + instruction.getOpcode().format);
+                                + " " + instruction.getOpcode().format
+                                + " pos: " + mDexPc);
                         throw e;
                     }
                 }
@@ -199,7 +206,9 @@ public class VdexDecompiler {
                             isQuickenInstr = false;
                             break;
                         case NOP:
-                            newInstr = decompileNop();
+                            if (!mNoQuickenInfo) {
+                                newInstr = decompileNop();
+                            }
                             break;
                         case IGET_QUICK:
                         case IGET_WIDE_QUICK:
@@ -244,14 +253,37 @@ public class VdexDecompiler {
         public Rewriter<Method> getMethodRewriter(@Nonnull Rewriters rewriters) {
             return new MethodRewriter(rewriters) {
 
+                void nextQuickenGroup() {
+                    if (mVdex.mQuickeningInfoList.shouldIterateAll
+                            && mQiIter != null && mQiIter.hasNext()) {
+                        return;
+                    }
+
+                    if (!mGiIter.hasNext()) {
+                        return;
+                    }
+                    final Vdex.QuickeningInfoList list = mVdex.mQuickeningInfoList.get(
+                            mGiIter.nextIndex());
+                    if (list.matchCodeOffset(mCurrentMethod.getCodeOffset())) {
+                        mQiIter = list.listIterator();
+                        mGiIter.next();
+                    } else {
+                        mNoQuickenInfo = true;
+                    }
+                }
+
                 @Nonnull
                 @Override
                 public Method rewrite(@Nonnull Method method) {
                     mDexPc = 0;
-                    mCurrentMethod = method;
-                    if (DEBUG && !AccessFlags.ABSTRACT.isSet(method.getAccessFlags())) {
-                        fillLastInfo();
-                        mMethodInfoList.add(new MethodInfo(method));
+                    mNoQuickenInfo = false;
+                    mCurrentMethod = (DexBackedMethod) method;
+                    if (!AccessFlags.ABSTRACT.isSet(method.getAccessFlags())) {
+                        nextQuickenGroup();
+                        if (DEBUG) {
+                            fillLastInfo();
+                            mMethodInfoList.add(new MethodInfo(method));
+                        }
                     }
                     mQuickenInstrCount = 0;
                     return super.rewrite(method);
@@ -278,11 +310,10 @@ public class VdexDecompiler {
                 }
             }
             System.out.println("\n===== mQuickeningInfo =====");
-            final ArrayList<Vdex.QuickeningInfoList.GroupInfo> groupInfoList =
-                    mVdex.mQuickeningInfoList.mGroupInfo;
+            final ArrayList<Vdex.QuickeningInfoList> groupInfoList = mVdex.mQuickeningInfoList;
             for (int i = 0; i < groupInfoList.size(); i++) {
-                final Vdex.QuickeningInfoList.GroupInfo gi = groupInfoList.get(i);
-                System.out.println(String.format("# %4d size: %d", (i + 1), gi.size));
+                final Vdex.QuickeningInfoList gi = groupInfoList.get(i);
+                System.out.println(String.format("# %4d size: %d", (i + 1), gi.size()));
             }
         }
 

@@ -16,13 +16,12 @@
 
 package org.rh.smaliex.reader;
 
+import org.rh.smaliex.LLog;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
-
-import org.rh.smaliex.LLog;
-import org.rh.smaliex.reader.Vdex.QuickeningInfoList.GroupInfo;
 
 // See art/runtime/vdex_file.cc
 public class Vdex {
@@ -37,7 +36,7 @@ public class Vdex {
         final int quickening_info_size_;
 
         final int[] mVdexCheckSums;
-        final String mVersion;
+        public final String mVersion;
 
         public Header(DataReader r) {
             r.readBytes(magic_);
@@ -71,66 +70,77 @@ public class Vdex {
         public int getDexPc() {
             return NO_DEX_PC;
         }
+
+        public boolean matchDexPc(int dexPc) {
+            return dexPc == NO_DEX_PC || dexPc == getDexPc();
+        }
     }
 
-    protected QuickeningInfoReader<? extends QuickeningInfo> getQuickeningInfoReader() {
+    protected QuickeningInfoReader getQuickeningInfoReader() {
         if ("006".equals(mHeader.mVersion.trim())) {
             return new QuickeningInfoReaderV6();
         }
         return new QuickeningInfoReaderV10();
     }
 
-    public static class QuickeningInfoList<T extends QuickeningInfo> extends ArrayList<T> {
-        public static class GroupInfo {
-            public final int startIndex;
-            public final int size;
+    // A group means a set of quicken info for a method.
+    public static class QuickeningGroupList extends ArrayList<QuickeningInfoList> {
+        public final boolean shouldIterateAll;
 
-            GroupInfo(int start, int size) {
-                this.startIndex = start;
-                this.size = size;
-            }
+        QuickeningGroupList(boolean shouldIterateAll) {
+            super(64);
+            this.shouldIterateAll = shouldIterateAll;
         }
-
-        public final ArrayList<GroupInfo> mGroupInfo = new ArrayList<>();
     }
 
-    public abstract static class QuickeningInfoReader<T extends QuickeningInfo> {
-        QuickeningInfoList<T> read(DataReader r, long begin, long end) {
-            final QuickeningInfoList<T> infoList = new QuickeningInfoList<>();
-            r.seek(begin);
-            while (r.position() < end) {
-                final int groupByteSize = r.readInt();
-                final long groupEnd = r.position() + groupByteSize;
-                final int start = infoList.size();
-                while (r.position() < groupEnd) {
-                    infoList.add(createInfo(r));
-                }
-                infoList.mGroupInfo.add(new GroupInfo(start, infoList.size() - start));
-            }
-            return infoList;
+    public static class QuickeningInfoList extends ArrayList<QuickeningInfo> {
+        interface OffsetChecker {
+            boolean matchCodeOffset(int codeOffset);
+        }
+        OffsetChecker mOffsetChecker;
+
+        QuickeningInfoList() {
+            super(16);
         }
 
-        abstract T createInfo(DataReader r);
+        public boolean matchCodeOffset(int codeOffset) {
+            return mOffsetChecker == null || mOffsetChecker.matchCodeOffset(codeOffset);
+        }
+    }
+
+    public interface QuickeningInfoReader {
+        QuickeningGroupList read(DataReader r, long begin, long end);
     }
 
     static class QuickeningInfoV6 extends QuickeningInfo {
-        final int dexPc;
+        final int mDexPc;
 
         QuickeningInfoV6(DataReader r) {
-            dexPc = r.readUleb128();
+            mDexPc = r.readUleb128();
             mIndex = r.readUleb128();
         }
 
         @Override
         public int getDexPc() {
-            return dexPc;
+            return mDexPc;
         }
     }
 
-    static class QuickeningInfoReaderV6 extends QuickeningInfoReader<QuickeningInfoV6> {
+    static class QuickeningInfoReaderV6 implements QuickeningInfoReader {
         @Override
-        QuickeningInfoV6 createInfo(DataReader r) {
-            return new QuickeningInfoV6(r);
+        public QuickeningGroupList read(DataReader r, long begin, long end) {
+            final QuickeningGroupList groupList = new QuickeningGroupList(true);
+            r.seek(begin);
+            while (r.position() < end) {
+                final QuickeningInfoList infoList = new QuickeningInfoList();
+                final int groupByteSize = r.readInt();
+                final int groupEnd = r.position() + groupByteSize;
+                while (r.position() < groupEnd) {
+                    infoList.add(new QuickeningInfoV6(r));
+                }
+                groupList.add(infoList);
+            }
+            return groupList;
         }
     }
 
@@ -139,12 +149,47 @@ public class Vdex {
         QuickeningInfoV10(DataReader r) {
             mIndex = r.readShort() & 0xffff;
         }
+
+        static class OffsetInfo implements QuickeningInfoList.OffsetChecker {
+            final int codeOffset;
+            final int sizeOffset;
+            OffsetInfo(DataReader r) {
+                codeOffset = r.readInt();
+                sizeOffset = r.readInt();
+            }
+
+            @Override
+            public boolean matchCodeOffset(int codeOffset) {
+                return this.codeOffset == codeOffset;
+            }
+        }
     }
 
-    static class QuickeningInfoReaderV10 extends QuickeningInfoReader<QuickeningInfoV10> {
+    static class QuickeningInfoReaderV10 implements QuickeningInfoReader {
         @Override
-        QuickeningInfoV10 createInfo(DataReader r) {
-            return new QuickeningInfoV10(r);
+        public QuickeningGroupList read(DataReader r, long begin, long end) {
+            final long offsetEnd = end - Integer.BYTES /* TODO * dexIndex */;
+            r.seek(offsetEnd);
+            final int offsetPos = r.readInt();
+            final ArrayList<QuickeningInfoV10.OffsetInfo> offsetInfoList = new ArrayList<>();
+            r.seek(begin + offsetPos);
+            while (r.position() < offsetEnd) {
+                offsetInfoList.add(new QuickeningInfoV10.OffsetInfo(r));
+            }
+
+            final QuickeningGroupList groupList = new QuickeningGroupList(false);
+            for (QuickeningInfoV10.OffsetInfo info : offsetInfoList) {
+                final QuickeningInfoList infoList = new QuickeningInfoList();
+                infoList.mOffsetChecker = info;
+                r.seek(begin + info.sizeOffset);
+                final int groupByteSize = r.readInt();
+                final int groupEnd = r.position() + groupByteSize;
+                while (r.position() < groupEnd) {
+                    infoList.add(new QuickeningInfoV10(r));
+                }
+                groupList.add(infoList);
+            }
+            return groupList;
         }
     }
 
@@ -154,7 +199,7 @@ public class Vdex {
     public final long mDexBegin;
     public final long mVerifierDepsDataBegin;
     public final long mQuickeningInfoBegin;
-    public final QuickeningInfoList<? extends QuickeningInfo> mQuickeningInfoList;
+    public final QuickeningGroupList mQuickeningInfoList;
 
     public Vdex(DataReader r) {
         mReader = r;
