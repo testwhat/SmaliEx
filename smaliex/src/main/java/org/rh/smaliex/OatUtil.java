@@ -25,6 +25,7 @@ import org.jf.dexlib2.writer.io.MemoryDataStore;
 import org.jf.dexlib2.writer.pool.DexPool;
 import org.rh.smaliex.deopt.OdexRewriter;
 import org.rh.smaliex.reader.DataReader;
+import org.rh.smaliex.reader.Dex;
 import org.rh.smaliex.reader.Elf;
 import org.rh.smaliex.reader.Oat;
 
@@ -59,12 +60,12 @@ public class OatUtil {
             try (Elf e = new Elf(file)) {
                 final Oat oat = getOat(e);
                 final Opcodes opc = apiLevel > 0 ? DexUtil.getOpcodes(apiLevel) : getOpcodes(oat);
-                for (int i = 0; i < oat.mDexFiles.length; i++) {
-                    final Oat.DexFile df = oat.mDexFiles[i];
+                for (int i = 0; i < oat.dexFiles.length; i++) {
+                    final Dex df = oat.dexFiles[i];
                     dexFiles.add(new DexBackedDexFile(opc, df.getBytes()));
                     if (outputNames != null) {
                         final String dexName = getOutputNameForSubDex(
-                                new String(oat.mOatDexFiles[i].dex_file_location_data_));
+                                new String(oat.oatDexFiles[i].dex_file_location_data_));
                         outputNames.add(MiscUtil.getFilenameNoExt(dexName));
                     }
                 }
@@ -179,7 +180,7 @@ public class OatUtil {
         for (File oatFile : getOatFile(new File(bootPath))) {
             try (Elf e = new Elf(oatFile)) {
                 final Oat oat = getOat(e);
-                for (Oat.OatDexFile df : oat.mOatDexFiles) {
+                for (Oat.OatDexFile df : oat.oatDexFiles) {
                     final String s = new String(df.dex_file_location_data_);
                     if (s.contains(":")) {
                         continue;
@@ -248,9 +249,9 @@ public class OatUtil {
             }
             try (Elf e = new Elf(oatFile)) {
                 final Oat oat = getOat(e);
-                for (int i = 0; i < oat.mDexFiles.length; i++) {
-                    final Oat.OatDexFile odf = oat.mOatDexFiles[i];
-                    final Oat.DexFile df = oat.mDexFiles[i];
+                for (int i = 0; i < oat.dexFiles.length; i++) {
+                    final Oat.OatDexFile odf = oat.oatDexFiles[i];
+                    final Dex df = oat.dexFiles[i];
                     final String outFile = getOutputNameForSubDex(
                             new String(odf.dex_file_location_data_));
                     final File out = MiscUtil.changeExt(new File(outputDir, outFile),
@@ -316,13 +317,13 @@ public class OatUtil {
         if (opcodes == null) {
             opcodes = getOpcodes(oat);
         }
-        final DexFile[] dexFiles = new DexFile[oat.mOatDexFiles.length];
-        for (int i = 0; i < oat.mOatDexFiles.length; i++) {
-            final Oat.DexFile dex = oat.mDexFiles[i];
+        final DexFile[] dexFiles = new DexFile[oat.oatDexFiles.length];
+        for (int i = 0; i < oat.oatDexFiles.length; i++) {
+            final Dex dex = oat.dexFiles[i];
             final DexBackedDexFile dexFile = new DexBackedDexFile(opcodes, dex.getBytes());
             if (!DexUtil.verifyStringOffset(dexFile)) {
                 LLog.i("Bad string offset.");
-                throw new IOException("The dex does not have formal format in: " + oat.mSrcFile);
+                throw new IOException("The dex does not have formal format in: " + oat.srcFile);
             }
             dexFiles[i] = dexFile;
         }
@@ -338,7 +339,7 @@ public class OatUtil {
      * @param isBoot Whether the input oat to add dex files to boot class path field
      * @throws IOException Failed to read input or write output
      */
-    private static void convertToDex(@Nonnull Oat oat, @Nonnull File outputDir,
+    public static void convertToDex(@Nonnull Oat oat, @Nonnull File outputDir,
                                      String bootClassPath, boolean isBoot) throws IOException {
         final Opcodes opcodes = getOpcodes(oat);
         if (bootClassPath == null || !new File(bootClassPath).exists()) {
@@ -347,19 +348,19 @@ public class OatUtil {
         final OdexRewriter deOpt = OdexRewriter.get(
                 bootClassPath, opcodes, outputDir.getAbsolutePath());
 
-        LLog.i("Art version=" + oat.getArtVersion() + " (" + oat.mSrcFile + ")");
+        LLog.i("Art version=" + oat.getArtVersion() + " (" + oat.srcFile + ")");
         final DexFile[] dexFiles = getOdexFromOat(oat, opcodes);
         if (!isBoot) {
             for (DexFile d : dexFiles) {
                 deOpt.addDexToClassPath(d);
             }
         }
-        for (int i = 0; i < oat.mOatDexFiles.length; i++) {
-            final Oat.OatDexFile odf = oat.mOatDexFiles[i];
+        for (int i = 0; i < oat.oatDexFiles.length; i++) {
+            final Oat.OatDexFile odf = oat.oatDexFiles[i];
             final String dexLoc = new String(odf.dex_file_location_data_);
             String outputName = getOutputNameForSubDex(dexLoc);
             if ("base.apk".equals(outputName)) {
-                outputName = MiscUtil.getFilenameNoExt(oat.mSrcFile.getName());
+                outputName = MiscUtil.getFilenameNoExt(oat.srcFile.getName());
             }
             File outputFile = MiscUtil.changeExt(new File(outputDir, outputName), "dex");
             if (SKIP_EXISTS && outputFile.exists()) continue;
@@ -371,14 +372,7 @@ public class OatUtil {
                 continue;
             }
 
-            if (outputFile.exists()) {
-                MiscUtil.delete(outputFile);
-                //File old = outputFile;
-                //outputFile = MiscUtil.appendTail(outputFile, "-deodex");
-                //LLog.i(old + " already existed, use name " + outputFile.getName());
-            }
-            DexPool.writeTo(outputFile.getAbsolutePath(), d);
-            LLog.i("Output to " + outputFile);
+            DexUtil.outputDex(d, outputFile, true);
         }
     }
 
@@ -390,9 +384,9 @@ public class OatUtil {
         final Opcodes opcodes = getOpcodes(oat);
         final OdexRewriter deOpt = OdexRewriter.get(
                 bootClassPath, opcodes, outputFolder.getAbsolutePath());
-        final HashMap<String, ArrayList<Oat.DexFile>> dexFileGroup = new HashMap<>();
-        for (int i = 0; i < oat.mOatDexFiles.length; i++) {
-            final Oat.OatDexFile odf = oat.mOatDexFiles[i];
+        final HashMap<String, ArrayList<Dex>> dexFileGroup = new HashMap<>();
+        for (int i = 0; i < oat.oatDexFiles.length; i++) {
+            final Oat.OatDexFile odf = oat.oatDexFiles[i];
             String dexPath = new String(odf.dex_file_location_data_);
             int colonPos = dexPath.indexOf(':');
             if (colonPos > 0) {
@@ -400,11 +394,11 @@ public class OatUtil {
                 dexPath = dexPath.substring(0, colonPos);
             }
             dexPath = dexPath.substring(dexPath.lastIndexOf('/') + 1);
-            final ArrayList<Oat.DexFile> dexFiles = dexFileGroup.computeIfAbsent(
+            final ArrayList<Dex> dexFiles = dexFileGroup.computeIfAbsent(
                     dexPath, k -> new ArrayList<>());
-            dexFiles.add(oat.mDexFiles[i]);
+            dexFiles.add(oat.dexFiles[i]);
             if (!isBoot) {
-                deOpt.addDexToClassPath(new DexBackedDexFile(opcodes, oat.mDexFiles[i].getBytes()));
+                deOpt.addDexToClassPath(new DexBackedDexFile(opcodes, oat.dexFiles[i].getBytes()));
             }
         }
 
@@ -415,7 +409,7 @@ public class OatUtil {
             String classesIdx = "";
             int i = 1;
             try (JarOutputStream jos = new JarOutputStream(new FileOutputStream(outputJar))) {
-                for (Oat.DexFile dex : dexFileGroup.get(jarName)) {
+                for (Dex dex : dexFileGroup.get(jarName)) {
                     jos.putNextEntry(new ZipEntry("classes" + classesIdx + ".dex"));
                     LLog.i("De-optimizing " + jarName + (i > 1 ? (" part-" + classesIdx) : ""));
                     final DexFile d = deOpt.rewriteDexFile(
@@ -425,7 +419,7 @@ public class OatUtil {
                         continue;
                     }
 
-                    final MemoryDataStore m = new MemoryDataStore(dex.mHeader.file_size_ + 512);
+                    final MemoryDataStore m = new MemoryDataStore(dex.header.file_size_ + 512);
                     DexPool.writeTo(m, d);
                     m.writeTo(jos);
                     classesIdx = String.valueOf(++i);

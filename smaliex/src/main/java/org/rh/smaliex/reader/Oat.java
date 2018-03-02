@@ -16,19 +16,13 @@
 
 package org.rh.smaliex.reader;
 
+import static org.rh.smaliex.MiscUtil.DumpFormat;
+
 import org.rh.smaliex.LLog;
 import org.rh.smaliex.MiscUtil;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
-import java.lang.reflect.Array;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 
 @SuppressWarnings("unused")
 public class Oat {
@@ -151,105 +145,6 @@ public class Oat {
         }
     }
 
-    // See /art/runtime/dex_file.h
-    public static class DexFile {
-
-        public static class Header {
-            @DumpFormat(type = DumpFormat.TYPE_CHAR, isString = true)
-            final char[] magic_ = new char[4];
-            @DumpFormat(type = DumpFormat.TYPE_CHAR, isString = true)
-            final char[] version_ = new char[4];
-            @DumpFormat(hex = true)
-            final int checksum_;
-            @DumpFormat(hex = true)
-            final byte[] signature_ = new byte[20];
-            public final int file_size_;
-            public final int header_size_;
-            final int endian_tag_;
-            final int link_size_;
-            final int link_off_;
-            final int map_off_;
-            final int string_ids_size_;
-            final int string_ids_off_;
-            final int type_ids_size_;
-            final int type_ids_off_;
-            final int proto_ids_size_;
-            final int proto_ids_off_;
-            final int field_ids_size_;
-            final int field_ids_off_;
-            final int method_ids_size_;
-            final int method_ids_off_;
-            final int class_defs_size_;
-            final int class_defs_off_;
-            final int data_size_;
-            final int data_off_;
-
-            public Header(DataReader r) {
-                r.readBytes(magic_);
-                if (magic_[0] != 'd' || magic_[1] != 'e' || magic_[2] != 'x') {
-                    LLog.e(String.format("Invalid dex magic '%c%c%c'",
-                            magic_[0], magic_[1], magic_[2]));
-                }
-                r.readBytes(version_);
-                checksum_= r.readInt();
-                if (version_[0] != '0' || version_[1] != '3' || version_[2] < '5') {
-                    LLog.e(String.format("Invalid dex version '%c%c%c'",
-                            version_[0], version_[1], version_[2]));
-                }
-                r.readBytes(signature_);
-                file_size_ = r.readInt();
-                header_size_ = r.readInt();
-                endian_tag_ = r.readInt();
-                link_size_ = r.readInt();
-                link_off_ = r.readInt();
-                map_off_ = r.readInt();
-                string_ids_size_ = r.readInt();
-                string_ids_off_ = r.readInt();
-                type_ids_size_ = r.readInt();
-                type_ids_off_ = r.readInt();
-                proto_ids_size_ = r.readInt();
-                proto_ids_off_ = r.readInt();
-                field_ids_size_ = r.readInt();
-                field_ids_off_ = r.readInt();
-                method_ids_size_ = r.readInt();
-                method_ids_off_ = r.readInt();
-                class_defs_size_ = r.readInt();
-                class_defs_off_ = r.readInt();
-                data_size_ = r.readInt();
-                data_off_ = r.readInt();
-            }
-        }
-
-        public final long mDexPosition;
-        public final DataReader mReader;
-        public final Header mHeader;
-
-        public DexFile(DataReader r) {
-            mDexPosition = r.position();
-            mReader = r;
-            mHeader = new Header(r);
-        }
-
-        public byte[] getBytes() {
-            byte[] dexBytes = new byte[mHeader.file_size_];
-            int remain = dexBytes.length;
-            int read = 0;
-            int readSize;
-            mReader.seek(mDexPosition);
-            while (remain > 0 && (readSize = mReader.readRaw(dexBytes, read, remain)) != -1) {
-                remain -= readSize;
-                read += readSize;
-            }
-            return dexBytes;
-        }
-
-        public void saveTo(File outputFile) throws IOException {
-            try (FileOutputStream output = new FileOutputStream(outputFile)) {
-                mReader.getChannel().transferTo(mDexPosition, mHeader.file_size_, output.getChannel());
-            }
-        }
-    }
-
     // See art/compiler/oat_writer OatDexFile::Write
     public static class OatDexFile {
         public final int dex_file_location_size_;
@@ -287,45 +182,41 @@ public class Oat {
         }
     }
 
-    public DexFile[] getDexFiles() {
-        return mDexFiles;
-    }
-
-    public final long mOatPosition;
-    public final Header mHeader;
-    public final OatDexFile[] mOatDexFiles;
-    public final DexFile[] mDexFiles;
-    public final File mSrcFile;
+    public final long oatPosition;
+    public final Header header;
+    public final OatDexFile[] oatDexFiles;
+    public final Dex[] dexFiles;
+    public final File srcFile;
 
     public Oat(DataReader reader) throws IOException {
-        mOatPosition = reader.position();
-        if (mOatPosition != 4096) {
+        oatPosition = reader.position();
+        if (oatPosition != 4096) {
              // Normally start from 4096(0x1000)
-            LLog.i("Strange oat position " + mOatPosition);
+            LLog.i("Strange oat position " + oatPosition);
         }
-        mSrcFile = reader.getFile();
-        mHeader = new Header(reader);
-        mOatDexFiles = new OatDexFile[mHeader.dex_file_count_];
-        mDexFiles = new DexFile[mHeader.dex_file_count_];
-        for (int i = 0; i < mOatDexFiles.length; i++) {
-            final OatDexFile odf = new OatDexFile(reader, mHeader.artVersion);
-            mOatDexFiles[i] = odf;
+        srcFile = reader.getFile();
+        header = new Header(reader);
+        oatDexFiles = new OatDexFile[header.dex_file_count_];
+        dexFiles = new Dex[header.dex_file_count_];
+        for (int i = 0; i < oatDexFiles.length; i++) {
+            final OatDexFile odf = new OatDexFile(reader, header.artVersion);
+            oatDexFiles[i] = odf;
             final long curOatPos = reader.position();
 
-            final DexFile dex;
+            final Dex dex;
             if (odf.dex_file_pointer_ != null) {
                 DataReader r = new DataReader(odf.dex_file_pointer_);
                 reader.addAssociatedReader(r);
                 r.seek(odf.dex_file_offset_);
-                dex = new DexFile(r);
+                dex = new Dex(r);
             } else {
-                reader.seek(mOatPosition + odf.dex_file_offset_);
-                dex = new DexFile(reader);
+                reader.seek(oatPosition + odf.dex_file_offset_);
+                dex = new Dex(reader);
             }
-            mDexFiles[i] = dex;
+            dexFiles[i] = dex;
 
-            if (mHeader.artVersion < Version.N_70.oat) {
-                int num_methods_offsets_ = dex.mHeader.class_defs_size_;
+            if (header.artVersion < Version.N_70.oat) {
+                int num_methods_offsets_ = dex.header.class_defs_size_;
                 reader.seek(curOatPos + 4 * num_methods_offsets_);
                 if (reader.previewInt() > 0xff) { // workaround for samsung offset
                     //num_methods_offsets_ += 4;
@@ -344,90 +235,24 @@ public class Oat {
     }
 
     public int getArtVersion() {
-        return mHeader.artVersion;
+        return header.artVersion;
     }
 
     public void dump() {
-        try {
-            System.out.println("===== Oat header =====");
-            dump(mHeader);
+        System.out.println("===== Oat header =====");
+        MiscUtil.dump(header);
+        System.out.println();
+
+        System.out.println("===== OatDex files =====");
+        for (OatDexFile odf : oatDexFiles) {
+            MiscUtil.dump(odf);
             System.out.println();
-
-            System.out.println("===== OatDex files =====");
-            for (OatDexFile odf : mOatDexFiles) {
-                dump(odf);
-                System.out.println();
-            }
-
-            System.out.println("===== Dex files =====");
-            for (DexFile df : mDexFiles) {
-                dump(df.mHeader);
-                System.out.println();
-            }
-        } catch (IllegalArgumentException | IllegalAccessException ex) {
-            LLog.ex(ex);
         }
-    }
 
-    public static void dump(final Object obj) throws IllegalArgumentException, IllegalAccessException {
-        final Field[] fields = obj.getClass().getDeclaredFields();
-
-        for (Field field : fields) {
-            if (field.getModifiers() == Modifier.STATIC
-                    || !field.getName().endsWith("_")) {
-                continue;
-            }
-            field.setAccessible(true);
-            final Class<?> type = field.getType();
-            System.out.print(field.getName() + " = ");
-            final Object val = field.get(obj);
-            if (val == null) {
-                System.out.println("null");
-                continue;
-            }
-            final DumpFormat fmt = field.getAnnotation(DumpFormat.class);
-            if (fmt != null) {
-                if (fmt.isString()) {
-                    final String rawStr;
-                    if (fmt.type() == DumpFormat.TYPE_BYTE) {
-                        rawStr = new String((byte[]) val);
-                    } else {
-                        rawStr = new String((char[]) val);
-                    }
-                    System.out.println(rawStr.trim());
-                } else if (fmt.enumClass() != DumpFormat.class) {
-                    final Field[] enumDefines = fmt.enumClass().getDeclaredFields();
-                    boolean matched = false;
-                    for (Field f : enumDefines) {
-                        if (val.equals(f.get(null))) {
-                            System.out.println(f.getName());
-                            matched = true;
-                            break;
-                        }
-                    }
-                    if (!matched) {
-                        System.out.println(val);
-                    }
-                } else {
-                    if (type.isArray()) {
-                        final byte[] bytes = (byte[]) val;
-                        final String sf = fmt.hex() ? "%02X " : "%d ";
-                        for (byte b : bytes) {
-                            System.out.printf(sf, b);
-                        }
-                        System.out.println();
-                    } else {
-                        System.out.printf(fmt.hex() ? "0x%X\n" : "%d\n", val);
-                    }
-                }
-            } else {
-                if (type.isArray()) {
-                    final Class<?> compType = type.getComponentType();
-                    System.out.println(compType + "[" + Array.getLength(val) + "]");
-                } else {
-                    System.out.println(val);
-                }
-            }
+        System.out.println("===== Dex files =====");
+        for (Dex df : dexFiles) {
+            MiscUtil.dump(df.header);
+            System.out.println();
         }
     }
 
@@ -444,17 +269,6 @@ public class Oat {
             LLog.e("Failed to dump " + oatFile);
             LLog.ex(ex);
         }
-    }
-
-    @Retention(value = RetentionPolicy.RUNTIME)
-    @Target(value = {ElementType.FIELD})
-    public @interface DumpFormat {
-        int TYPE_BYTE = 0;
-        int TYPE_CHAR = 1;
-        int type() default -1;
-        boolean isString() default false;
-        boolean hex() default false;
-        Class<?> enumClass() default DumpFormat.class;
     }
 
 }

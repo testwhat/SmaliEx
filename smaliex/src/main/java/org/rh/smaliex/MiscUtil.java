@@ -21,7 +21,14 @@ import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import java.lang.ref.SoftReference;
+import java.lang.reflect.Array;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.Map;
 
 public class MiscUtil {
@@ -197,5 +204,86 @@ public class MiscUtil {
 
     public static boolean isElf(File file) {
         return checkFourBytes(file, 0, 0x7F454C46);
+    }
+
+    public static void dump(final Object obj) {
+        try {
+            dump0(obj);
+        } catch (IllegalArgumentException | IllegalAccessException ex) {
+            LLog.ex(ex);
+        }
+    }
+
+    public static void dump0(final Object obj) throws IllegalArgumentException, IllegalAccessException {
+        final Field[] fields = obj.getClass().getDeclaredFields();
+
+        for (Field field : fields) {
+            if (field.getModifiers() == Modifier.STATIC
+                    || !field.getName().endsWith("_")) {
+                continue;
+            }
+            field.setAccessible(true);
+            final Class<?> type = field.getType();
+            System.out.print(field.getName() + " = ");
+            final Object val = field.get(obj);
+            if (val == null) {
+                System.out.println("null");
+                continue;
+            }
+            final DumpFormat fmt = field.getAnnotation(DumpFormat.class);
+            if (fmt != null) {
+                if (fmt.isString()) {
+                    final String rawStr;
+                    if (fmt.type() == DumpFormat.TYPE_BYTE) {
+                        rawStr = new String((byte[]) val);
+                    } else {
+                        rawStr = new String((char[]) val);
+                    }
+                    System.out.println(rawStr.trim());
+                } else if (fmt.enumClass() != DumpFormat.class) {
+                    final Field[] enumDefines = fmt.enumClass().getDeclaredFields();
+                    boolean matched = false;
+                    for (Field f : enumDefines) {
+                        if (val.equals(f.get(null))) {
+                            System.out.println(f.getName());
+                            matched = true;
+                            break;
+                        }
+                    }
+                    if (!matched) {
+                        System.out.println(val);
+                    }
+                } else {
+                    if (type.isArray()) {
+                        final byte[] bytes = (byte[]) val;
+                        final String sf = fmt.hex() ? "%02X " : "%d ";
+                        for (byte b : bytes) {
+                            System.out.printf(sf, b);
+                        }
+                        System.out.println();
+                    } else {
+                        System.out.printf(fmt.hex() ? "0x%X\n" : "%d\n", val);
+                    }
+                }
+            } else {
+                if (type.isArray()) {
+                    final Class<?> compType = type.getComponentType();
+                    System.out.println(compType + "[" + Array.getLength(val) + "]");
+                } else {
+                    System.out.println(val);
+                }
+            }
+        }
+    }
+
+    @Retention(value = RetentionPolicy.RUNTIME)
+    @Target(value = {ElementType.FIELD})
+    public @interface DumpFormat {
+        int TYPE_BYTE = 0;
+        int TYPE_CHAR = 1;
+        int type() default -1;
+        boolean isString() default false;
+        boolean hex() default false;
+        Class<?> enumClass() default DumpFormat.class;
     }
 }

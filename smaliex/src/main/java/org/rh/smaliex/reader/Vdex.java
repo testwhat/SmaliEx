@@ -16,11 +16,11 @@
 
 package org.rh.smaliex.reader;
 
+import static org.rh.smaliex.MiscUtil.DumpFormat;
+
 import org.rh.smaliex.LLog;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import javax.annotation.Nonnull;
 import java.util.ArrayList;
 
 // See art/runtime/vdex_file.cc
@@ -28,15 +28,17 @@ public class Vdex {
 
     public static class Header {
 
+        @DumpFormat(type = DumpFormat.TYPE_CHAR, isString = true)
         final char[] magic_ = new char[4];
+        @DumpFormat(type = DumpFormat.TYPE_CHAR, isString = true)
         final char[] version_ = new char[4];
-        final int number_of_dex_files_;
+        public final int number_of_dex_files_;
         final int dex_size_;
         final int verifier_deps_size_;
         final int quickening_info_size_;
 
-        final int[] mVdexCheckSums;
-        public final String mVersion;
+        final int[] vdexCheckSums;
+        public final String version;
 
         public Header(DataReader r) {
             r.readBytes(magic_);
@@ -46,15 +48,15 @@ public class Vdex {
             }
 
             r.readBytes(version_);
-            mVersion = new String(version_);
+            version = new String(version_);
             number_of_dex_files_ = r.readInt();
             dex_size_ = r.readInt();
             verifier_deps_size_ = r.readInt();
             quickening_info_size_ = r.readInt();
 
-            mVdexCheckSums = new int[number_of_dex_files_];
-            for (int i = 0; i < mVdexCheckSums.length; i++) {
-                mVdexCheckSums[i] = r.readInt();
+            vdexCheckSums = new int[number_of_dex_files_];
+            for (int i = 0; i < vdexCheckSums.length; i++) {
+                vdexCheckSums[i] = r.readInt();
             }
         }
     }
@@ -76,19 +78,12 @@ public class Vdex {
         }
     }
 
-    protected QuickeningInfoReader getQuickeningInfoReader() {
-        if ("006".equals(mHeader.mVersion.trim())) {
-            return new QuickeningInfoReaderV6();
-        }
-        return new QuickeningInfoReaderV10();
-    }
-
     // A group means a set of quicken info for a method.
     public static class QuickeningGroupList extends ArrayList<QuickeningInfoList> {
         public final boolean shouldIterateAll;
 
-        QuickeningGroupList(boolean shouldIterateAll) {
-            super(64);
+        QuickeningGroupList(int initialCapacity, boolean shouldIterateAll) {
+            super(initialCapacity);
             this.shouldIterateAll = shouldIterateAll;
         }
     }
@@ -99,8 +94,8 @@ public class Vdex {
         }
         OffsetChecker mOffsetChecker;
 
-        QuickeningInfoList() {
-            super(16);
+        QuickeningInfoList(int initialCapacity) {
+            super(initialCapacity);
         }
 
         public boolean matchCodeOffset(int codeOffset) {
@@ -108,8 +103,12 @@ public class Vdex {
         }
     }
 
-    public interface QuickeningInfoReader {
-        QuickeningGroupList read(DataReader r, long begin, long end);
+    public static abstract class QuickeningInfoReader {
+        Header header;
+        int begin;
+        int end;
+
+        abstract QuickeningGroupList read(DataReader r, int dexIndex);
     }
 
     static class QuickeningInfoV6 extends QuickeningInfo {
@@ -126,21 +125,27 @@ public class Vdex {
         }
     }
 
-    static class QuickeningInfoReaderV6 implements QuickeningInfoReader {
+    static class QuickeningInfoReaderV6 extends QuickeningInfoReader {
+        private QuickeningGroupList mGroupList;
+
         @Override
-        public QuickeningGroupList read(DataReader r, long begin, long end) {
-            final QuickeningGroupList groupList = new QuickeningGroupList(true);
+        public QuickeningGroupList read(DataReader r, int dexIndex) {
+            if (mGroupList != null) {
+                // V6 does not separate by dex files, so just reuse it.
+                return mGroupList;
+            }
+            mGroupList = new QuickeningGroupList(16, true);
             r.seek(begin);
             while (r.position() < end) {
-                final QuickeningInfoList infoList = new QuickeningInfoList();
                 final int groupByteSize = r.readInt();
                 final int groupEnd = r.position() + groupByteSize;
+                final QuickeningInfoList infoList = new QuickeningInfoList(groupByteSize / 2);
                 while (r.position() < groupEnd) {
                     infoList.add(new QuickeningInfoV6(r));
                 }
-                groupList.add(infoList);
+                mGroupList.add(infoList);
             }
-            return groupList;
+            return mGroupList;
         }
     }
 
@@ -165,10 +170,10 @@ public class Vdex {
         }
     }
 
-    static class QuickeningInfoReaderV10 implements QuickeningInfoReader {
+    static class QuickeningInfoReaderV10 extends QuickeningInfoReader {
         @Override
-        public QuickeningGroupList read(DataReader r, long begin, long end) {
-            final long offsetEnd = end - Integer.BYTES /* TODO * dexIndex */;
+        public QuickeningGroupList read(DataReader r, int dexIndex) {
+            final int offsetEnd = end - Integer.BYTES * (header.number_of_dex_files_ - dexIndex);
             r.seek(offsetEnd);
             final int offsetPos = r.readInt();
             final ArrayList<QuickeningInfoV10.OffsetInfo> offsetInfoList = new ArrayList<>();
@@ -177,13 +182,15 @@ public class Vdex {
                 offsetInfoList.add(new QuickeningInfoV10.OffsetInfo(r));
             }
 
-            final QuickeningGroupList groupList = new QuickeningGroupList(false);
+            final QuickeningGroupList groupList = new QuickeningGroupList(
+                    offsetInfoList.size(), false);
             for (QuickeningInfoV10.OffsetInfo info : offsetInfoList) {
-                final QuickeningInfoList infoList = new QuickeningInfoList();
-                infoList.mOffsetChecker = info;
                 r.seek(begin + info.sizeOffset);
                 final int groupByteSize = r.readInt();
                 final int groupEnd = r.position() + groupByteSize;
+                final QuickeningInfoList infoList = new QuickeningInfoList(
+                        groupByteSize / Integer.BYTES);
+                infoList.mOffsetChecker = info;
                 while (r.position() < groupEnd) {
                     infoList.add(new QuickeningInfoV10(r));
                 }
@@ -193,40 +200,50 @@ public class Vdex {
         }
     }
 
-    public final DataReader mReader;
-    public final Header mHeader;
+    public static class QuickenDex extends Dex {
+        public final QuickeningGroupList quickeningInfoList;
 
-    public final long mDexBegin;
-    public final long mVerifierDepsDataBegin;
-    public final long mQuickeningInfoBegin;
-    public final QuickeningGroupList mQuickeningInfoList;
-
-    public Vdex(DataReader r) {
-        mReader = r;
-        mHeader = new Header(r);
-        mDexBegin = r.position();
-        mVerifierDepsDataBegin = mDexBegin + mHeader.dex_size_;
-        mQuickeningInfoBegin = mVerifierDepsDataBegin + mHeader.verifier_deps_size_;
-        mQuickeningInfoList = getQuickeningInfoReader().read(r,
-                mQuickeningInfoBegin, mQuickeningInfoBegin + mHeader.quickening_info_size_);
+        QuickenDex(DataReader r, int dexIndex, QuickeningInfoReader infoReader) {
+            super(r);
+            quickeningInfoList = infoReader.read(r, dexIndex);
+        }
     }
 
-    public int getSizeOfChecksumsSection() {
-        return Integer.SIZE * mHeader.number_of_dex_files_;
+    public final Header header;
+    public final QuickenDex[] dexFiles;
+    public final int dexBegin;
+    public final int verifierDepsDataBegin;
+    public final int quickeningInfoBegin;
+    public final boolean isSingleQuickeningInfo;
+
+    protected QuickeningInfoReader createQuickeningInfoReader() {
+        final QuickeningInfoReader reader;
+        if ("006".equals(header.version.trim())) {
+            reader = new QuickeningInfoReaderV6();
+        } else {
+            reader = new QuickeningInfoReaderV10();
+        }
+        reader.header = header;
+        reader.begin = quickeningInfoBegin;
+        reader.end = quickeningInfoBegin + header.quickening_info_size_;
+        return reader;
     }
 
-    // TODO multi-dex
-    public byte[] getDexBytes() {
-        final byte[] dexBytes = new byte[mHeader.dex_size_];
-        mReader.seek(mDexBegin);
-        mReader.readBytes(dexBytes);
-        return dexBytes;
-    }
+    public Vdex(@Nonnull DataReader r) {
+        header = new Header(r);
+        dexBegin = r.position();
+        verifierDepsDataBegin = dexBegin + header.dex_size_;
+        quickeningInfoBegin = verifierDepsDataBegin + header.verifier_deps_size_;
 
-    // TODO multi-dex
-    public void saveTo(File outputFile) throws IOException {
-        try (FileOutputStream output = new FileOutputStream(outputFile)) {
-            mReader.getChannel().transferTo(mDexBegin, mHeader.dex_size_, output.getChannel());
+        final QuickeningInfoReader infoReader = createQuickeningInfoReader();
+        isSingleQuickeningInfo = infoReader instanceof QuickeningInfoReaderV6;
+
+        r.position(dexBegin);
+        dexFiles = new QuickenDex[header.number_of_dex_files_];
+        for (int i = 0; i < header.number_of_dex_files_; i++) {
+            final QuickenDex dex = new QuickenDex(r, i, infoReader);
+            dexFiles[i] = dex;
+            r.position(dex.dexPosition + dex.header.file_size_);
         }
     }
 

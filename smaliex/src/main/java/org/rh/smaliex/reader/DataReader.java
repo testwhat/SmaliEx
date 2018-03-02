@@ -35,20 +35,20 @@ public class DataReader implements Closeable {
     private final MappedByteBuffer mMappedBuffer;
     private ArrayList<DataReader> mAssociatedReaders;
 
-    public DataReader(String file) throws IOException {
+    public DataReader(@Nonnull String file) throws IOException {
         this(new File(file));
     }
 
-    public DataReader(File file) throws IOException {
+    public DataReader(@Nonnull File file) throws IOException {
         mFile = file;
         mRaf = new RandomAccessFile(mFile, "r");
         mMappedBuffer = mRaf.getChannel().map(
                 FileChannel.MapMode.READ_ONLY, 0, file.length());
         mMappedBuffer.rewind();
-        setIsLittleEndian(true);
+        setLittleEndian(true);
     }
 
-    public void setIsLittleEndian(boolean isLittleEndian) {
+    public void setLittleEndian(boolean isLittleEndian) {
         mMappedBuffer.order(isLittleEndian
                 ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN);
     }
@@ -69,11 +69,11 @@ public class DataReader implements Closeable {
         return mMappedBuffer.get() & 0xff;
     }
 
-    public void readBytes(byte[] b) {
+    public void readBytes(@Nonnull byte[] b) {
         mMappedBuffer.get(b, 0, b.length);
     }
 
-    public void readBytes(char[] b) {
+    public void readBytes(@Nonnull char[] b) {
         final byte[] bs = new byte[b.length];
         readBytes(bs);
         for (int i = 0; i < b.length; i++) {
@@ -119,11 +119,6 @@ public class DataReader implements Closeable {
             }
         }
         return result;
-    }
-
-    public final int readRaw(byte b[], int offset, int length) {
-        mMappedBuffer.get(b, offset, length);
-        return length;
     }
 
     public File getFile() {

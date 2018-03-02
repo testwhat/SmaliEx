@@ -16,50 +16,28 @@
 
 package org.rh.smaliex;
 
-import com.google.common.cache.CacheBuilder;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-
 import org.jf.baksmali.Adaptors.ClassDefinition;
 import org.jf.dexlib2.DexFileFactory;
+import org.jf.dexlib2.MultiDex;
 import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.VersionMap;
-import org.jf.dexlib2.analysis.AnalysisException;
 import org.jf.dexlib2.analysis.ClassPath;
-import org.jf.dexlib2.analysis.MethodAnalyzer;
-import org.jf.dexlib2.analysis.UnresolvedClassException;
-import org.jf.dexlib2.analysis.reflection.ReflectionClassDef;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile;
-import org.jf.dexlib2.iface.ClassDef;
 import org.jf.dexlib2.iface.DexFile;
-import org.jf.dexlib2.iface.Method;
-import org.jf.dexlib2.iface.MethodImplementation;
-import org.jf.dexlib2.iface.instruction.Instruction;
-import org.jf.dexlib2.immutable.ImmutableDexFile;
-import org.jf.dexlib2.rewriter.MethodImplementationRewriter;
-import org.jf.dexlib2.rewriter.MethodRewriter;
-import org.jf.dexlib2.rewriter.Rewriter;
-import org.jf.dexlib2.rewriter.RewriterModule;
-import org.jf.dexlib2.rewriter.Rewriters;
 import org.jf.dexlib2.writer.pool.DexPool;
 import org.rh.smaliex.deopt.OdexRewriter;
 import org.rh.smaliex.deopt.VdexDecompiler;
 import org.rh.smaliex.reader.DataReader;
+import org.rh.smaliex.reader.Oat;
 import org.rh.smaliex.reader.Vdex;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.io.Serializable;
 import java.lang.ref.SoftReference;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class DexUtil {
@@ -122,12 +100,18 @@ public class DexUtil {
         MiscUtil.mkdirs(outputFolder);
 
         final File input = new File(odex);
-        final DexFile dex;
         if (NO_NEED_BOOT_CLASSPATH.equals(bootClassPath)) {
             if (MiscUtil.isVdex(input)) {
+                final Opcodes opcodes = getOpcodes(Math.max(Oat.Version.O_80.api, apiLevel));
                 try (DataReader r = new DataReader(input)) {
-                    VdexDecompiler red = new VdexDecompiler(new Vdex(r));
-                    dex = red.getUnquickenDexFile();
+                    final Vdex vdex = new Vdex(r);
+                    LLog.i("Unquickening " + input + " ver=" + vdex.header.version);
+                    final DexFile[] dexFiles = VdexDecompiler.unquicken(vdex, opcodes);
+                    for (int i = 0; i < dexFiles.length; i++) {
+                        final File outputFile = MiscUtil.changeExt(new File(outputFolder,
+                                MultiDex.getDexFileName(input.getName(), i)), "dex");
+                        outputDex(dexFiles[i], outputFile, false);
+                    }
                 }
             } else throw new IOException("Not a vdex file: " + input);
         } else {
@@ -138,15 +122,25 @@ public class DexUtil {
             final DexFile odexFile = loadSingleDex(input, opcodes);
             final OdexRewriter rewriter = OdexRewriter.get(
                     bootClassPath, opcodes, outputFolder.getAbsolutePath());
-            dex = rewriter.rewriteDexFile(odexFile);
+            final File outputFile = MiscUtil.changeExt(
+                    new File(outputFolder, input.getName()), "dex");
+            outputDex(rewriter.rewriteDexFile(odexFile), outputFile, false);
         }
+    }
 
-        File outputFile = MiscUtil.changeExt(new File(outputFolder, input.getName()), "dex");
-        if (outputFile.exists()) {
-            outputFile = MiscUtil.appendTail(outputFile, "-deodex");
+    static void outputDex(@Nonnull DexFile dex, @Nonnull File output,
+                          boolean replace) throws IOException {
+        if (output.exists()) {
+            if (replace) {
+                MiscUtil.delete(output);
+            } else {
+                final File old = output;
+                output = MiscUtil.appendTail(output, "-deodex");
+                LLog.i(old + " already existed, use name " + output.getName());
+            }
         }
-        DexPool.writeTo(outputFile.getAbsolutePath(), dex);
-        LLog.i("Output to " + outputFile);
+        DexPool.writeTo(output.getAbsolutePath(), dex);
+        LLog.i("Output to " + output);
     }
 
     // If return false, the dex may be customized format or encrypted.

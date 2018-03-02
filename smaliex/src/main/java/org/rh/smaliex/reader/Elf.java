@@ -359,7 +359,7 @@ public class Elf implements Closeable {
         if (!checkMagic()) {
             LLog.e("Invalid elf magic: " + file);
         }
-        r.setIsLittleEndian(isLittleEndian());
+        r.setLittleEndian(isLittleEndian());
 
         is64bit = getFileClass() == 2;
         if (is64bit) {

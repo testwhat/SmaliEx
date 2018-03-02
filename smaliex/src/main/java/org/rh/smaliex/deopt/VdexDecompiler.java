@@ -45,48 +45,61 @@ import org.jf.dexlib2.rewriter.Rewriter;
 import org.jf.dexlib2.rewriter.RewriterModule;
 import org.jf.dexlib2.rewriter.Rewriters;
 import org.jf.dexlib2.util.MethodUtil;
+import org.rh.smaliex.DexUtil;
 import org.rh.smaliex.LLog;
 import org.rh.smaliex.reader.Oat;
 import org.rh.smaliex.reader.Vdex;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.ListIterator;
 
 public class VdexDecompiler {
-    public final VdexRewriterModule mRewriterModule;
-    private final DexRewriter mVdexRewriter;
-    private DexFile mResult;
 
-    public VdexDecompiler(Vdex vdex) {
-        mRewriterModule = new VdexRewriterModule(vdex);
-        mVdexRewriter = new DexRewriter(mRewriterModule);
+    private VdexDecompiler() {
     }
 
-    public DexFile getUnquickenDexFile() {
-        if (mResult == null) {
-            mResult = ImmutableDexFile.of(
-                    mVdexRewriter.rewriteDexFile(mRewriterModule.mDex));
+    @Nonnull
+    public static DexFile[] unquicken(@Nonnull Vdex vdex, @Nullable Opcodes opcodes) {
+        if (opcodes == null) {
+            opcodes = DexUtil.getOpcodes(Oat.Version.O_80.api);
+        }
+
+        VdexRewriterModule previousModule = null;
+        final DexFile[] mDeodexedFiles = new DexFile[vdex.dexFiles.length];
+        for (int i = 0; i < mDeodexedFiles.length; i++) {
+            final VdexRewriterModule rewriterModule;
+            if (vdex.isSingleQuickeningInfo && previousModule != null) {
+                // All dex share the same iterator.
+                rewriterModule = new VdexRewriterModule(vdex.dexFiles[i], previousModule);
+            } else {
+                rewriterModule = new VdexRewriterModule(vdex.dexFiles[i], opcodes);
+            }
+            final DexRewriter vdexRewriter = new DexRewriter(rewriterModule);
+            mDeodexedFiles[i] = ImmutableDexFile.of(
+                    vdexRewriter.rewriteDexFile(rewriterModule.mDex));
+            previousModule = rewriterModule;
             if (VdexRewriterModule.DEBUG) {
-                mRewriterModule.fillLastInfo();
-                mRewriterModule.printUnquickenInfo();
+                rewriterModule.fillLastInfo();
+                rewriterModule.printUnquickenInfo();
             }
         }
-        return mResult;
+        return mDeodexedFiles;
     }
 
     // See art/runtime/dex_to_dex_decompiler.cc
     public static class VdexRewriterModule extends RewriterModule {
         public static boolean DEBUG;
         private static final int kDexNoIndex16 = 0xffff;
-        private final Vdex mVdex;
-        private final DexBackedDexFile mDex; // TODO multi-dex
+        private final Vdex.QuickenDex mOdex;
+        private final DexBackedDexFile mDex;
         private ListIterator<Vdex.QuickeningInfoList> mGiIter;
         private ListIterator<Vdex.QuickeningInfo> mQiIter;
-        private int mDexPc;
         private DexBackedMethod mCurrentMethod;
         private boolean mDecompileReturnInstruction = true;
         private boolean mNoQuickenInfo;
+        private int mDexPc;
         private int mQuickenInstrCount;
 
         final static OdexedFieldInstructionMapper sInstrMapper =
@@ -101,17 +114,19 @@ public class VdexDecompiler {
             }
         }
 
-        private final ArrayList<MethodInfo> mMethodInfoList;
+        private final ArrayList<MethodInfo> mMethodInfoList = DEBUG ? new ArrayList<>() : null;
 
-        public VdexRewriterModule(Vdex vdex) {
-            this(vdex, Opcodes.forApi(Oat.Version.O_80.api));
+        public VdexRewriterModule(Vdex.QuickenDex odex, Opcodes opcodes) {
+            mOdex = odex;
+            mDex = new DexBackedDexFile(opcodes, odex.getBytes());
+            mGiIter = odex.quickeningInfoList.listIterator();
         }
 
-        public VdexRewriterModule(Vdex vdex, Opcodes opcodes) {
-            mVdex = vdex;
-            mDex = new DexBackedDexFile(opcodes, vdex.getDexBytes());
-            mGiIter = vdex.mQuickeningInfoList.listIterator();
-            mMethodInfoList = DEBUG ? new ArrayList<>() : null;
+        private VdexRewriterModule(Vdex.QuickenDex odex, VdexRewriterModule module) {
+            mOdex = odex;
+            mDex = new DexBackedDexFile(module.mDex.getOpcodes(), odex.getBytes());
+            mGiIter = module.mGiIter;
+            mQiIter = module.mQiIter;
         }
 
         public void setDecompileReturnInstruction(boolean enable) {
@@ -254,15 +269,18 @@ public class VdexDecompiler {
             return new MethodRewriter(rewriters) {
 
                 void nextQuickenGroup() {
-                    if (mVdex.mQuickeningInfoList.shouldIterateAll
+                    if (mOdex.quickeningInfoList.shouldIterateAll
                             && mQiIter != null && mQiIter.hasNext()) {
                         return;
                     }
 
                     if (!mGiIter.hasNext()) {
+                        if (DEBUG) {
+                            LLog.v("Reach end @ " + mCurrentMethod);
+                        }
                         return;
                     }
-                    final Vdex.QuickeningInfoList list = mVdex.mQuickeningInfoList.get(
+                    final Vdex.QuickeningInfoList list = mOdex.quickeningInfoList.get(
                             mGiIter.nextIndex());
                     if (list.matchCodeOffset(mCurrentMethod.getCodeOffset())) {
                         mQiIter = list.listIterator();
@@ -310,7 +328,7 @@ public class VdexDecompiler {
                 }
             }
             System.out.println("\n===== mQuickeningInfo =====");
-            final ArrayList<Vdex.QuickeningInfoList> groupInfoList = mVdex.mQuickeningInfoList;
+            final ArrayList<Vdex.QuickeningInfoList> groupInfoList = mOdex.quickeningInfoList;
             for (int i = 0; i < groupInfoList.size(); i++) {
                 final Vdex.QuickeningInfoList gi = groupInfoList.get(i);
                 System.out.println(String.format("# %4d size: %d", (i + 1), gi.size()));

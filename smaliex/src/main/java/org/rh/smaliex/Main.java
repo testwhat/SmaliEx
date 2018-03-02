@@ -22,7 +22,7 @@ import java.io.IOException;
 public class Main {
 
     static void printUsage() {
-        println("Easy oat2dex 0.89");
+        println("Easy oat2dex 0.90");
         println("Usage:");
         println(" java -jar oat2dex.jar [options] <action>");
         println("[options]");
