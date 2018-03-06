@@ -16,7 +16,6 @@
 
 package org.rh.smaliex.deopt;
 
-import org.jf.dexlib2.AccessFlags;
 import org.jf.dexlib2.Opcode;
 import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.ReferenceType;
@@ -146,16 +145,34 @@ public class VdexDecompiler {
                 return null;
             }
             final int refIndex = ni.getIndex();
-            if (refIndex == kDexNoIndex16 || !ni.matchDexPc(mDexPc)) {
+            if (refIndex == kDexNoIndex16) { // For vdex ver 010
+                return null;
+            }
+            if (!ni.matchDexPc(mDexPc)) { // For vdex ver 006
                 mQiIter.previous();
                 return null;
             }
             if (refIndex > 0xff) {
-                LLog.i("Skip incorrect NOP ref " + refIndex + " in " + mCurrentMethod);
+                if (DEBUG) {
+                    LLog.v("Invalid NOP register "
+                            + refIndex + " in " + mCurrentMethod + " " + mDexPc);
+                }
                 mQiIter.previous();
                 return null;
             }
-            final int typeIndex = nextInfo().getIndex();
+            final Vdex.QuickeningInfo typeInfo = nextInfo();
+            if (typeInfo == null) {
+                LLog.v("Not NOP info ref " + refIndex + " in " + mCurrentMethod + " " + mDexPc);
+                mQiIter.previous();
+                return null;
+            } else if (typeInfo.getIndex() > mDex.getTypeCount()) {
+                LLog.v("Type index " + typeInfo.getIndex() + " over " + mDex.getTypeCount()
+                        + " in " + mCurrentMethod + " " + mDexPc);
+                mQiIter.previous();
+                mQiIter.previous();
+                return null;
+            }
+            final int typeIndex = typeInfo.getIndex();
             final Reference ref = DexBackedReference.makeReference(
                     mDex, ReferenceType.TYPE, typeIndex);
             return new ImmutableInstruction21c(Opcode.CHECK_CAST, refIndex, ref);
@@ -205,7 +222,7 @@ public class VdexDecompiler {
                         LLog.e("Method: " + mCurrentMethod);
                         LLog.e("Instruction: " + instruction.getOpcode()
                                 + " " + instruction.getOpcode().format
-                                + " pos: " + mDexPc);
+                                + " pos=" + mDexPc + " nq=" + mNoQuickenInfo);
                         throw e;
                     }
                 }
@@ -271,6 +288,7 @@ public class VdexDecompiler {
                 void nextQuickenGroup() {
                     if (mOdex.quickeningInfoList.shouldIterateAll
                             && mQiIter != null && mQiIter.hasNext()) {
+                        // For version 006
                         return;
                     }
 
@@ -296,7 +314,7 @@ public class VdexDecompiler {
                     mDexPc = 0;
                     mNoQuickenInfo = false;
                     mCurrentMethod = (DexBackedMethod) method;
-                    if (!AccessFlags.ABSTRACT.isSet(method.getAccessFlags())) {
+                    if (method.getImplementation() != null) {
                         nextQuickenGroup();
                         if (DEBUG) {
                             fillLastInfo();
@@ -322,6 +340,7 @@ public class VdexDecompiler {
                 System.out.println("===== Method =====");
                 for (int i = 0; i < mMethodInfoList.size(); i++) {
                     final MethodInfo mi = mMethodInfoList.get(i);
+                    if (mi.quickenInstrCount == 0) continue;
                     System.out.println(String.format("# %4d %c [%3d] %s", (i + 1),
                             MethodUtil.isDirect(mi.method) ? 'D' : 'V',
                             mi.quickenInstrCount, mi.method.toString()));

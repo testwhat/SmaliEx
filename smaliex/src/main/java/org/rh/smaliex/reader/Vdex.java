@@ -74,7 +74,7 @@ public class Vdex {
         }
 
         public boolean matchDexPc(int dexPc) {
-            return dexPc == NO_DEX_PC || dexPc == getDexPc();
+            return getDexPc() == NO_DEX_PC || getDexPc() == dexPc;
         }
     }
 
@@ -155,10 +155,11 @@ public class Vdex {
             mIndex = r.readShort() & 0xffff;
         }
 
-        static class OffsetInfo implements QuickeningInfoList.OffsetChecker {
+        static class GroupOffsetInfo implements QuickeningInfoList.OffsetChecker {
             final int codeOffset;
             final int sizeOffset;
-            OffsetInfo(DataReader r) {
+
+            GroupOffsetInfo(DataReader r) {
                 codeOffset = r.readInt();
                 sizeOffset = r.readInt();
             }
@@ -173,18 +174,28 @@ public class Vdex {
     static class QuickeningInfoReaderV10 extends QuickeningInfoReader {
         @Override
         public QuickeningGroupList read(DataReader r, int dexIndex) {
-            final int offsetEnd = end - Integer.BYTES * (header.number_of_dex_files_ - dexIndex);
-            r.seek(offsetEnd);
-            final int offsetPos = r.readInt();
-            final ArrayList<QuickeningInfoV10.OffsetInfo> offsetInfoList = new ArrayList<>();
-            r.seek(begin + offsetPos);
-            while (r.position() < offsetEnd) {
-                offsetInfoList.add(new QuickeningInfoV10.OffsetInfo(r));
+            final int dexIndicesPos = end - Integer.BYTES * header.number_of_dex_files_;
+            r.seek(dexIndicesPos + Integer.BYTES * dexIndex);
+            final int offsetStartPos = r.readInt();
+            final int codeItemEnd;
+            if (dexIndex == header.number_of_dex_files_ - 1) {
+                codeItemEnd = dexIndicesPos;
+            } else {
+                r.seek(dexIndicesPos + Integer.BYTES * (dexIndex + 1));
+                codeItemEnd = begin + r.readInt();
+            }
+            LLog.i("QuickeningGroup dexIndex=" + dexIndex
+                    + " offsetBegin=" + (begin + offsetStartPos)
+                    + " offsetEnd=" + codeItemEnd);
+            final ArrayList<QuickeningInfoV10.GroupOffsetInfo> offsetInfoList = new ArrayList<>();
+            r.seek(begin + offsetStartPos);
+            while (r.position() < codeItemEnd) {
+                offsetInfoList.add(new QuickeningInfoV10.GroupOffsetInfo(r));
             }
 
             final QuickeningGroupList groupList = new QuickeningGroupList(
                     offsetInfoList.size(), false);
-            for (QuickeningInfoV10.OffsetInfo info : offsetInfoList) {
+            for (QuickeningInfoV10.GroupOffsetInfo info : offsetInfoList) {
                 r.seek(begin + info.sizeOffset);
                 final int groupByteSize = r.readInt();
                 final int groupEnd = r.position() + groupByteSize;
@@ -206,6 +217,7 @@ public class Vdex {
         QuickenDex(DataReader r, int dexIndex, QuickeningInfoReader infoReader) {
             super(r);
             quickeningInfoList = infoReader.read(r, dexIndex);
+            LLog.i("QuickeningInfoSize[" + dexIndex + "]=" + quickeningInfoList.size());
         }
     }
 
@@ -219,9 +231,9 @@ public class Vdex {
     protected QuickeningInfoReader createQuickeningInfoReader() {
         final QuickeningInfoReader reader;
         if ("006".equals(header.version.trim())) {
-            reader = new QuickeningInfoReaderV6();
+            reader = new QuickeningInfoReaderV6(); // Oreo
         } else {
-            reader = new QuickeningInfoReaderV10();
+            reader = new QuickeningInfoReaderV10(); // Oreo MR1
         }
         reader.header = header;
         reader.begin = quickeningInfoBegin;
