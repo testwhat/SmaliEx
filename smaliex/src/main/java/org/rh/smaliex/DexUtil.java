@@ -18,16 +18,13 @@ package org.rh.smaliex;
 
 import org.jf.baksmali.Adaptors.ClassDefinition;
 import org.jf.dexlib2.DexFileFactory;
-import org.jf.dexlib2.MultiDex;
 import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.VersionMap;
 import org.jf.dexlib2.analysis.ClassPath;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile;
-import org.jf.dexlib2.iface.DexFile;
-import org.jf.dexlib2.writer.pool.DexPool;
-import org.rh.smaliex.deopt.OdexRewriter;
-import org.rh.smaliex.deopt.VdexDecompiler;
 import org.rh.smaliex.reader.DataReader;
+import org.rh.smaliex.reader.Dex;
+import org.rh.smaliex.reader.Elf;
 import org.rh.smaliex.reader.Oat;
 import org.rh.smaliex.reader.Vdex;
 
@@ -36,6 +33,7 @@ import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.lang.ref.SoftReference;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -44,7 +42,6 @@ public class DexUtil {
     public static int DEFAULT_API_LEVEL = 20;
     public static int API_N = 24;
     public static Opcodes DEFAULT_OPCODES;
-    private static final String NO_NEED_BOOT_CLASSPATH = "NO_NEED_BOOT_CLASSPATH";
 
     private static final ConcurrentHashMap<Integer, SoftReference<Opcodes>> opCodesCache =
             new ConcurrentHashMap<>();
@@ -88,61 +85,6 @@ public class DexUtil {
         return Collections.emptyList();
     }
 
-    public static void vdex2dex(@Nonnull String vdex,
-                                @Nullable String outPath) throws IOException {
-        odex2dex(vdex, NO_NEED_BOOT_CLASSPATH, outPath, -1);
-    }
-
-    public static void odex2dex(@Nonnull String odex,
-                                @Nonnull String bootClassPath,
-                                @Nullable String outPath, int apiLevel) throws IOException {
-        final File outputFolder = new File(outPath == null ? MiscUtil.workingDir() : outPath);
-        MiscUtil.mkdirs(outputFolder);
-
-        final File input = new File(odex);
-        if (NO_NEED_BOOT_CLASSPATH.equals(bootClassPath)) {
-            if (MiscUtil.isVdex(input)) {
-                final Opcodes opcodes = getOpcodes(Math.max(Oat.Version.O_80.api, apiLevel));
-                try (DataReader r = new DataReader(input)) {
-                    final Vdex vdex = new Vdex(r);
-                    LLog.i("Unquickening " + input + " ver=" + vdex.header.version);
-                    final DexFile[] dexFiles = VdexDecompiler.unquicken(vdex, opcodes);
-                    for (int i = 0; i < dexFiles.length; i++) {
-                        final File outputFile = MiscUtil.changeExt(new File(outputFolder,
-                                MultiDex.getDexFileName(input.getName(), i)), "dex");
-                        outputDex(dexFiles[i], outputFile, false);
-                    }
-                }
-            } else throw new IOException("Not a vdex file: " + input);
-        } else {
-            if (MiscUtil.checkFourBytes(input, 4, 0x30333700) && apiLevel < API_N) {
-                LLog.i("The input has dex version 037, suggest to use api level " + API_N);
-            }
-            final Opcodes opcodes = getOpcodes(apiLevel);
-            final DexFile odexFile = loadSingleDex(input, opcodes);
-            final OdexRewriter rewriter = OdexRewriter.get(
-                    bootClassPath, opcodes, outputFolder.getAbsolutePath());
-            final File outputFile = MiscUtil.changeExt(
-                    new File(outputFolder, input.getName()), "dex");
-            outputDex(rewriter.rewriteDexFile(odexFile), outputFile, false);
-        }
-    }
-
-    static void outputDex(@Nonnull DexFile dex, @Nonnull File output,
-                          boolean replace) throws IOException {
-        if (output.exists()) {
-            if (replace) {
-                MiscUtil.delete(output);
-            } else {
-                final File old = output;
-                output = MiscUtil.appendTail(output, "-deodex");
-                LLog.i(old + " already existed, use name " + output.getName());
-            }
-        }
-        DexPool.writeTo(output.getAbsolutePath(), dex);
-        LLog.i("Output to " + output);
-    }
-
     // If return false, the dex may be customized format or encrypted.
     public static boolean verifyStringOffset(@Nonnull DexBackedDexFile dex) {
         final int strIdsStartOffset = dex.readSmallUint(
@@ -184,4 +126,49 @@ public class DexUtil {
         }
     }
 
+    @Nonnull
+    public static List<DexBackedDexFile> getDexFiles(@Nonnull File file,
+                                                     int apiLevel,
+                                                     @Nullable List<String> outputNames) {
+        List<DexBackedDexFile> dexFiles = new ArrayList<>();
+        if (MiscUtil.isElf(file)) {
+            try (Elf e = new Elf(file)) {
+                final Oat oat = OatUtil.getOat(e);
+                final Opcodes opc = apiLevel > 0 ? getOpcodes(apiLevel) : OatUtil.getOpcodes(oat);
+                for (int i = 0; i < oat.dexFiles.length; i++) {
+                    final Dex df = oat.dexFiles[i];
+                    dexFiles.add(new DexBackedDexFile(opc, df.getBytes()));
+                    if (outputNames != null) {
+                        final String dexName = OatUtil.getOutputNameForSubDex(
+                                new String(oat.oatDexFiles[i].dex_file_location_data_));
+                        outputNames.add(MiscUtil.getFilenameNoExt(dexName));
+                    }
+                }
+            } catch (IOException ex) {
+                LLog.ex(ex);
+            }
+            return dexFiles;
+        } else if (MiscUtil.isVdex(file)) {
+            try (DataReader r = new DataReader(file)) {
+                final Vdex vdex = new Vdex(r);
+                final Opcodes opc = getOpcodes(Math.max(Oat.Version.O_80.api, apiLevel));
+                for (Dex dex : vdex.dexFiles) {
+                    dexFiles.add(new DexBackedDexFile(opc, dex.getBytes()));
+                }
+            } catch (IOException ex) {
+                LLog.ex(ex);
+            }
+        } else {
+            final Opcodes opc = getOpcodes(apiLevel);
+            dexFiles = loadMultiDex(file, opc);
+        }
+        if (outputNames != null) {
+            String dexName = "classes";
+            for (int i = 0; i < dexFiles.size(); i++) {
+                outputNames.add(dexName);
+                dexName = "classes" + (i + 2);
+            }
+        }
+        return dexFiles;
+    }
 }

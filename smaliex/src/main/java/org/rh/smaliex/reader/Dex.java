@@ -4,6 +4,7 @@ import static org.rh.smaliex.MiscUtil.DumpFormat;
 
 import org.rh.smaliex.LLog;
 
+import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -87,6 +88,7 @@ public class Dex {
         header = new Header(r);
     }
 
+    @Nonnull
     public byte[] getBytes() {
         final byte[] dexBytes = new byte[header.file_size_];
         mReader.position(dexPosition);
@@ -94,7 +96,7 @@ public class Dex {
         return dexBytes;
     }
 
-    public void saveTo(File outputFile) throws IOException {
+    public void saveTo(@Nonnull File outputFile) throws IOException {
         try (FileOutputStream output = new FileOutputStream(outputFile)) {
             mReader.getChannel().transferTo(dexPosition, header.file_size_, output.getChannel());
         }

@@ -99,7 +99,7 @@ public class Main {
 
         if (args.length == 1) {
             checkExist(args[0]);
-            DexUtil.vdex2dex(args[0], outputPath);
+            OdexUtil.vdex2dex(args[0], outputPath);
         } else if (args.length == 2) {
             if ("boot".equals(cmd)) {
                 checkExist(args[1]);
@@ -107,13 +107,13 @@ public class Main {
                 return;
             }
             if ("odex".equals(cmd)) {
-                File out = OatUtil.extractOdexFromOat(checkExist(args[1]),
+                File out = OdexUtil.extractOdex(checkExist(args[1]),
                         outputPath == null ? null : new File(outputPath));
                 println("Output to " + out);
                 return;
             }
             if ("smali".equals(cmd)) {
-                OatUtil.smaliRaw(checkExist(args[1]), outputPath, apiLevel);
+                OdexUtil.smaliRaw(checkExist(args[1]), outputPath, apiLevel);
                 return;
             }
             final String inputPath = args[0];
@@ -123,7 +123,7 @@ public class Main {
             int type = getInputType(input);
             if (type > 0) {
                 if (type == TYPE_ODEX) {
-                    DexUtil.odex2dex(inputPath, bootPath, outputPath, apiLevel);
+                    OdexUtil.odex2dex(inputPath, bootPath, outputPath, apiLevel);
                 } else if (type == TYPE_OAT) {
                     OatUtil.oat2dex(inputPath, bootPath, outputPath);
                 }

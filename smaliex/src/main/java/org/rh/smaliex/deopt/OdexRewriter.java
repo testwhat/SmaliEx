@@ -40,7 +40,6 @@ import org.jf.dexlib2.rewriter.Rewriters;
 import org.rh.smaliex.DexUtil;
 import org.rh.smaliex.LLog;
 import org.rh.smaliex.MiscUtil;
-import org.rh.smaliex.OatUtil;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -126,7 +125,7 @@ public class OdexRewriter extends org.jf.dexlib2.rewriter.DexRewriter {
                                            @Nonnull Opcodes opcodes, @Nonnull String ext) {
         final ArrayList<DexFile> dexFiles = new ArrayList<>();
         for (File f : MiscUtil.getFiles(path, ext)) {
-            dexFiles.addAll(OatUtil.getDexFiles(f, opcodes.api, null));
+            dexFiles.addAll(DexUtil.getDexFiles(f, opcodes.api, null));
         }
         if (dexFiles.isEmpty()) {
             LLog.i("Not added any dex from " + path);

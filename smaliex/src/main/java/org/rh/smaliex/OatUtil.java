@@ -16,7 +16,6 @@
 
 package org.rh.smaliex;
 
-import org.jf.baksmali.BaksmaliOptions;
 import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.VersionMap;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile;
@@ -38,7 +37,6 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
-import java.util.List;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
@@ -49,85 +47,6 @@ public class OatUtil {
 
     public static Opcodes getOpcodes(Oat oat) {
         return DexUtil.getOpcodes(VersionMap.mapArtVersionToApi(oat.getArtVersion()));
-    }
-
-    @Nonnull
-    public static List<DexBackedDexFile> getDexFiles(@Nonnull File file,
-                                                     int apiLevel,
-                                                     @Nullable List<String> outputNames) {
-        List<DexBackedDexFile> dexFiles = new ArrayList<>();
-        if (MiscUtil.isElf(file)) {
-            try (Elf e = new Elf(file)) {
-                final Oat oat = getOat(e);
-                final Opcodes opc = apiLevel > 0 ? DexUtil.getOpcodes(apiLevel) : getOpcodes(oat);
-                for (int i = 0; i < oat.dexFiles.length; i++) {
-                    final Dex df = oat.dexFiles[i];
-                    dexFiles.add(new DexBackedDexFile(opc, df.getBytes()));
-                    if (outputNames != null) {
-                        final String dexName = getOutputNameForSubDex(
-                                new String(oat.oatDexFiles[i].dex_file_location_data_));
-                        outputNames.add(MiscUtil.getFilenameNoExt(dexName));
-                    }
-                }
-            } catch (IOException ex) {
-                LLog.ex(ex);
-            }
-        } else {
-            final Opcodes opc = DexUtil.getOpcodes(apiLevel);
-            dexFiles = DexUtil.loadMultiDex(file, opc);
-            if (outputNames != null) {
-                String dexName = "classes";
-                for (int i = 0; i < dexFiles.size(); i++) {
-                    outputNames.add(dexName);
-                    dexName = "classes" + (i + 2);
-                }
-            }
-        }
-        return dexFiles;
-    }
-
-    /**
-     * Extract smali from odex or oat file.
-     *
-     * If the input file has multiple embedded dex files, the smali files will be placed into subdirectories
-     * within the output directory. Otherwise, the smali files are placed directly into the output directory.
-     *
-     * If there are multiple dex files in the input file, the subdirectories will be named as follows:
-     * 1. If the input file is an oat file, then the subdirectory name is based on the dex_file_location_data_ field
-     * 2. If the input file is not an oat file, then the subdirectory name is "classes", "classes2", etc.
-     *
-     * @param inputFile Input odex or oat file
-     * @param outputPath Path to output directory. If null, the output will put at the same place of input
-     */
-    public static void smaliRaw(@Nonnull File inputFile,
-                                @Nullable String outputPath, int apiLevel) {
-        if (!inputFile.isFile()) {
-            LLog.i(inputFile + " is not a file. ");
-        }
-        final String folderName = MiscUtil.getFilenameNoExt(inputFile.getName());
-        final String outputBaseDir = outputPath != null ? outputPath
-                : MiscUtil.path(inputFile.getAbsoluteFile().getParent(), folderName);
-        final BaksmaliOptions options = new BaksmaliOptions();
-        final Opcodes opc = DexUtil.getOpcodes(apiLevel);
-        options.apiLevel = opc.api;
-        options.allowOdex = true;
-
-        final List<String> outSubDirs = new ArrayList<>();
-        final List<DexBackedDexFile> dexFiles = getDexFiles(inputFile, apiLevel, outSubDirs);
-        if (outSubDirs.size() == 1) {
-            outSubDirs.set(0, outputBaseDir);
-        } else {
-            for (int i = 0; i < outSubDirs.size(); i++) {
-                outSubDirs.set(i, MiscUtil.path(outputBaseDir, outSubDirs.get(i)));
-            }
-        }
-
-        for (int i = 0; i < dexFiles.size(); i++) {
-            final File outputDir = new File(outSubDirs.get(i));
-            org.jf.baksmali.Baksmali.disassembleDexFile(dexFiles.get(i), outputDir, 4, options);
-            LLog.i("Output to " + outputDir);
-        }
-        LLog.i("All done");
     }
 
     /**
@@ -206,23 +125,8 @@ public class OatUtil {
     }
 
     @Nonnull
-    static File ensureOutputDir(@Nonnull File src, @Nullable File out, @Nonnull String postfix) {
-        if (out == null) {
-            out = new File(src.getParentFile(), src.getName() + postfix);
-        }
-        return out;
-    }
-
-    @Nonnull
-    static File ensureOutputDir(@Nonnull String src, @Nullable String out, @Nonnull String postfix) {
-        return ensureOutputDir(new File(src), out == null ? null : new File(out), postfix);
-    }
-
-    @Nonnull
     static File[] getOatFile(@Nonnull File oatPath) {
-        return oatPath.isDirectory()
-                ? MiscUtil.getFiles(oatPath.getAbsolutePath(), ".oat;.odex")
-                : new File[] { oatPath };
+        return MiscUtil.getAsFiles(oatPath, ".oat;.odex");
     }
 
     /**
@@ -239,8 +143,7 @@ public class OatUtil {
     @Nonnull
     public static File extractOdexFromOat(@Nonnull File oatPath,
                                           @Nullable File outputDir) throws IOException {
-        outputDir = ensureOutputDir(oatPath, outputDir, "-odex");
-        MiscUtil.mkdirs(outputDir);
+        outputDir = MiscUtil.ensureOutputDir(oatPath, outputDir, "-odex");
         IOException ioe = null;
         for (File oatFile : getOatFile(oatPath)) {
             if (!MiscUtil.isElf(oatFile)) {
@@ -278,8 +181,7 @@ public class OatUtil {
                                              @Nullable String noClassJarFolder,
                                              boolean isBoot) throws IOException {
         final boolean dexOnly = noClassJarFolder == null;
-        final File outDir = ensureOutputDir(oatPath, outputPath, dexOnly ? "-dex" : "-jar");
-        MiscUtil.mkdirs(outDir);
+        final File outDir = MiscUtil.ensureOutputDir(oatPath, outputPath, dexOnly ? "-dex" : "-jar");
 
         LLog.v("Use bootclasspath " + bootClassPath);
         IOException ioe = null;
@@ -372,7 +274,7 @@ public class OatUtil {
                 continue;
             }
 
-            DexUtil.outputDex(d, outputFile, true);
+            OdexUtil.outputDex(d, outputFile, true);
         }
     }
 

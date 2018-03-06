@@ -170,6 +170,29 @@ public class MiscUtil {
         pool.put(key, new SoftReference<>(val));
     }
 
+    @Nonnull
+    public static File[] getAsFiles(@Nonnull File path, @Nonnull String extensionsStr) {
+        return path.isDirectory()
+                ? MiscUtil.getFiles(path.getAbsolutePath(), extensionsStr)
+                : new File[] { path };
+    }
+
+    @Nonnull
+    public static File ensureOutputDir(@Nonnull File src,
+                                       @Nullable File out, @Nonnull String postfix) {
+        if (out == null) {
+            out = new File(src.getParentFile(), src.getName() + postfix);
+        }
+        mkdirs(out);
+        return out;
+    }
+
+    @Nonnull
+    public static File ensureOutputDir(@Nonnull String src,
+                                       @Nullable String out, @Nonnull String postfix) {
+        return ensureOutputDir(new File(src), out == null ? null : new File(out), postfix);
+    }
+
     static boolean checkFourBytes(File file, int offset, long fourBytes) {
         if (file.length() < offset) return false;
         long n = 0;

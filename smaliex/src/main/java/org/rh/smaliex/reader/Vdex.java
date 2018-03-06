@@ -217,7 +217,8 @@ public class Vdex {
         QuickenDex(DataReader r, int dexIndex, QuickeningInfoReader infoReader) {
             super(r);
             quickeningInfoList = infoReader.read(r, dexIndex);
-            LLog.i("QuickeningInfoSize[" + dexIndex + "]=" + quickeningInfoList.size());
+            LLog.i("QuickeningInfoSize[" + dexIndex + "]="
+                    + quickeningInfoList.size() + " @ " + r.getFile());
         }
     }
 
