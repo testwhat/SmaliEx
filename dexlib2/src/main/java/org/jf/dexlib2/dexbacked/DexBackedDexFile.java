@@ -69,6 +69,13 @@ public class DexBackedDexFile extends BaseDexBuffer implements DexFile {
     private final int classCount;
     private final int classStartOffset;
 
+    final int fileSize;
+    final int dataSize;
+    final int dataOffset;
+    /** 0 if this is not compact dex. */
+    final int compactDataOffset;
+    public final boolean isCompact;
+
     protected DexBackedDexFile(@Nonnull Opcodes opcodes, @Nonnull byte[] buf, int offset, boolean verifyMagic) {
         super(buf, offset);
 
@@ -78,6 +85,7 @@ public class DexBackedDexFile extends BaseDexBuffer implements DexFile {
             DexUtil.verifyDexHeader(buf, offset);
         }
 
+        fileSize = readSmallUint(HeaderItem.FILE_SIZE_OFFSET);
         stringCount = readSmallUint(HeaderItem.STRING_COUNT_OFFSET);
         stringStartOffset = readSmallUint(HeaderItem.STRING_START_OFFSET);
         typeCount = readSmallUint(HeaderItem.TYPE_COUNT_OFFSET);
@@ -90,6 +98,14 @@ public class DexBackedDexFile extends BaseDexBuffer implements DexFile {
         methodStartOffset = readSmallUint(HeaderItem.METHOD_START_OFFSET);
         classCount = readSmallUint(HeaderItem.CLASS_COUNT_OFFSET);
         classStartOffset = readSmallUint(HeaderItem.CLASS_START_OFFSET);
+
+        dataSize = readSmallUint(HeaderItem.DATA_SIZE);
+        dataOffset = readSmallUint(HeaderItem.DATA_OFFSET);
+
+        // See https://android.googlesource.com/platform/art/+/c3a22aa19bbe35ff8447460b29e07d42937a39de
+        // Shared separate data section for compact dex.
+        isCompact = dataOffset >= fileSize;
+        compactDataOffset = isCompact ? dataOffset : 0;
     }
 
     public DexBackedDexFile(@Nonnull Opcodes opcodes, @Nonnull BaseDexBuffer buf) {
@@ -213,7 +229,7 @@ public class DexBackedDexFile extends BaseDexBuffer implements DexFile {
     @Nonnull
     public String getString(int stringIndex) {
         int stringOffset = getStringIdItemOffset(stringIndex);
-        int stringDataOffset = readSmallUint(stringOffset);
+        int stringDataOffset = readSmallUintPlusDataOffset(stringOffset);
         DexReader reader = readerAt(stringDataOffset);
         int utf16Length = reader.readSmallUleb128();
         return reader.readString(utf16Length);
@@ -321,6 +337,10 @@ public class DexBackedDexFile extends BaseDexBuffer implements DexFile {
     @Nonnull
     public DexReader readerAt(int offset) {
         return new DexReader(this, offset);
+    }
+
+    public int readSmallUintPlusDataOffset(int offset) {
+        return super.readSmallUint(offset) + compactDataOffset;
     }
 
     public static class NotADexFile extends RuntimeException {

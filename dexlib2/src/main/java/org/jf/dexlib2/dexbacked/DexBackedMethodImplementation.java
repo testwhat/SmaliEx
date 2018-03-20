@@ -54,22 +54,135 @@ public class DexBackedMethodImplementation implements MethodImplementation {
     @Nonnull public final DexBackedMethod method;
     private final int codeOffset;
 
+    private final static int SIZEOF_UINT16 = 2;
+    private final static int kRegistersSizeShift = 12;
+    private final static int kInsSizeShift = 8;
+    private final static int kOutsSizeShift = 4;
+    private final static int kInsnsSizeShift = 5;
+
+    private final static int kFlagPreHeaderRegisterSize = 0x1;
+    private final static int kFlagPreHeaderInsSize = 0x1 << 1;
+    private final static int kFlagPreHeaderOutsSize = 0x1 << 2;
+    private final static int kFlagPreHeaderTriesSize = 0x1 << 3;
+    private final static int kFlagPreHeaderInsnsSize = 0x1 << 4;
+    private final static int kFlagPreHeaderCombined =
+                    kFlagPreHeaderRegisterSize |
+                    kFlagPreHeaderInsSize |
+                    kFlagPreHeaderOutsSize |
+                    kFlagPreHeaderTriesSize |
+                    kFlagPreHeaderInsnsSize;
+
+    // TODO: Sync to org.jf.dexlib2.dexbacked.raw.CodeItem
+    static class CompactCodeItemInfo {
+        final int registersSize;
+        final int insSize;
+        final int outsSize;
+        final int triesSize;
+        final int insnsCount;
+
+        public CompactCodeItemInfo(int registersSize, int insSize, int outsSize, int triesSize, int insnsCount) {
+            this.registersSize = registersSize;
+            this.insSize = insSize;
+            this.outsSize = outsSize;
+            this.triesSize = triesSize;
+            this.insnsCount = insnsCount;
+        }
+
+        @Override
+        public String toString() {
+            return " registers_size=" + registersSize
+                    + " ins_size=" + insSize
+                    + " outs_size=" + outsSize
+                    + " tries_size=" + triesSize
+                    + " insns_count=" + insnsCount;
+        }
+    }
+
+    private final CompactCodeItemInfo codeItemInfo;
+
     public DexBackedMethodImplementation(@Nonnull DexBackedDexFile dexFile,
                                          @Nonnull DexBackedMethod method,
                                          int codeOffset) {
         this.dexFile = dexFile;
         this.method = method;
         this.codeOffset = codeOffset;
+
+        // See art/libdexfile/dex/compact_dex_file.h, art/dexlayout/compact_dex_writer.cc
+        if (dexFile.isCompact) {
+            final int fields = dexFile.readUshort(codeOffset);
+            int registers_size = (fields >> kRegistersSizeShift) & 0xF;
+            int ins_size = (fields >> kInsSizeShift) & 0xF;
+            int outs_size = (fields >> kOutsSizeShift) & 0xF;
+            int tries_size = fields & 0xF;
+
+            final int insns_count_and_flags_ = dexFile.readUshort(SIZEOF_UINT16 + codeOffset);
+            int insns_count = insns_count_and_flags_ >> kInsnsSizeShift;
+
+            if ((insns_count_and_flags_ & kFlagPreHeaderCombined) != 0) {
+                // The code item has pre-headers.
+                int preOffset = codeOffset;
+                if ((insns_count_and_flags_ & kFlagPreHeaderInsnsSize) != 0) {
+                    preOffset -= SIZEOF_UINT16;
+                    insns_count += dexFile.readUshort(preOffset);
+                    preOffset -= SIZEOF_UINT16;
+                    insns_count += dexFile.readUshort(preOffset) << 16;
+                }
+                if ((insns_count_and_flags_ & kFlagPreHeaderRegisterSize) != 0) {
+                    preOffset -= SIZEOF_UINT16;
+                    registers_size += dexFile.readUshort(preOffset);
+                }
+                if ((insns_count_and_flags_ & kFlagPreHeaderInsSize) != 0) {
+                    preOffset -= SIZEOF_UINT16;
+                    ins_size += dexFile.readUshort(preOffset);
+                }
+                if ((insns_count_and_flags_ & kFlagPreHeaderOutsSize) != 0) {
+                    preOffset -= SIZEOF_UINT16;
+                    outs_size += dexFile.readUshort(preOffset);
+                }
+                if ((insns_count_and_flags_ & kFlagPreHeaderTriesSize) != 0) {
+                    preOffset -= SIZEOF_UINT16;
+                    tries_size += dexFile.readUshort(preOffset);
+                }
+            }
+            registers_size += ins_size;
+            codeItemInfo = new CompactCodeItemInfo(
+                    registers_size, ins_size, outs_size, tries_size, insns_count);
+        } else {
+            codeItemInfo = null;
+        }
     }
 
-    @Override public int getRegisterCount() { return dexFile.readUshort(codeOffset); }
+    @Override public int getRegisterCount() {
+        if (codeItemInfo != null) {
+            return codeItemInfo.registersSize;
+        }
+        return dexFile.readUshort(codeOffset);
+    }
+
+    public int getInstructionsCount() { // Size of the instructions list, in 16-bit code units.
+        if (codeItemInfo != null) {
+            return codeItemInfo.insnsCount;
+        }
+        return dexFile.readSmallUint(codeOffset + CodeItem.INSTRUCTION_COUNT_OFFSET);
+    }
+
+    public int getInstructionstartOffset() {
+        if (codeItemInfo != null) {
+            return codeOffset + 2 * SIZEOF_UINT16;
+        }
+        return codeOffset + CodeItem.INSTRUCTION_START_OFFSET;
+    }
+
+    public int getTriesSize() {
+        if (codeItemInfo != null) {
+            return codeItemInfo.triesSize;
+        }
+        return dexFile.readUshort(codeOffset + CodeItem.TRIES_SIZE_OFFSET);
+    }
 
     @Nonnull @Override public Iterable<? extends Instruction> getInstructions() {
-        // instructionsSize is the number of 16-bit code units in the instruction list, not the number of instructions
-        int instructionsSize = dexFile.readSmallUint(codeOffset + CodeItem.INSTRUCTION_COUNT_OFFSET);
-
-        final int instructionsStartOffset = codeOffset + CodeItem.INSTRUCTION_START_OFFSET;
-        final int endOffset = instructionsStartOffset + (instructionsSize*2);
+        final int instructionsStartOffset = getInstructionstartOffset();
+        final int endOffset = instructionsStartOffset + (getInstructionsCount() * 2);
         return new Iterable<Instruction>() {
             @Override
             public Iterator<Instruction> iterator() {
@@ -98,11 +211,11 @@ public class DexBackedMethodImplementation implements MethodImplementation {
     @Nonnull
     @Override
     public List<? extends DexBackedTryBlock> getTryBlocks() {
-        final int triesSize = dexFile.readUshort(codeOffset + CodeItem.TRIES_SIZE_OFFSET);
+        final int triesSize = getTriesSize();
         if (triesSize > 0) {
-            int instructionsSize = dexFile.readSmallUint(codeOffset + CodeItem.INSTRUCTION_COUNT_OFFSET);
             final int triesStartOffset = AlignmentUtils.alignOffset(
-                    codeOffset + CodeItem.INSTRUCTION_START_OFFSET + (instructionsSize*2), 4);
+                    codeOffset + CodeItem.INSTRUCTION_START_OFFSET
+                            + getInstructionsCount() * 2, 4);
             final int handlersStartOffset = triesStartOffset + triesSize*CodeItem.TryItem.ITEM_SIZE;
 
             return new FixedSizeList<DexBackedTryBlock>() {
@@ -165,7 +278,7 @@ public class DexBackedMethodImplementation implements MethodImplementation {
         int lastOffset = codeOffset + CodeItem.INSTRUCTION_START_OFFSET;
 
         //set code_item ending offset to the end of instructions list (insns_size * ushort)
-        lastOffset += dexFile.readSmallUint(codeOffset + CodeItem.INSTRUCTION_COUNT_OFFSET) * 2;
+        lastOffset += getInstructionsCount() * 2;
 
         //read any exception handlers and move code_item offset to the end
         for (DexBackedTryBlock tryBlock: getTryBlocks()) {
@@ -181,3 +294,29 @@ public class DexBackedMethodImplementation implements MethodImplementation {
         return debugSize + (lastOffset - codeOffset);
     }
 }
+
+// ===== CodeItem format =====
+// [Standard dex]
+//   uint16_t registers_size_;            // the number of registers used by this code
+//   //   (locals + parameters)
+//   uint16_t ins_size_;                  // the number of words of incoming arguments to the method
+//   //   that this code is for
+//   uint16_t outs_size_;                 // the number of words of outgoing argument space required
+//   //   by this code for method invocation
+//   uint16_t tries_size_;                // the number of try_items for this instance. If non-zero,
+//   //   then these appear as the tries array just after the
+//   //   insns in this instance.
+//   uint32_t debug_info_off_;            // Holds file offset to debug info stream.
+//
+//   uint32_t insns_size_in_code_units_;  // size of the insns array, in 2 byte code units
+//   uint16_t insns_[1];                  // actual array of bytecode.
+//
+// [Compact dex]
+//   // Packed code item data, 4 bits each: [registers_size, ins_size, outs_size, tries_size]
+//   uint16_t fields_;
+//
+//   // 5 bits for if either of the fields required preheader extension, 11 bits for the number of
+//   // instruction code units.
+//   uint16_t insns_count_and_flags_;
+//
+//   uint16_t insns_[1];                  // actual array of bytecode.

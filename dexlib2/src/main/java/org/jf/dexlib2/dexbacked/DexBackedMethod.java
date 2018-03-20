@@ -43,7 +43,6 @@ import org.jf.dexlib2.dexbacked.util.FixedSizeList;
 import org.jf.dexlib2.dexbacked.util.ParameterIterator;
 import org.jf.dexlib2.iface.Annotation;
 import org.jf.dexlib2.iface.Method;
-import org.jf.dexlib2.iface.MethodImplementation;
 import org.jf.dexlib2.iface.MethodParameter;
 import org.jf.util.AbstractForwardSequentialList;
 
@@ -82,7 +81,7 @@ public class DexBackedMethod extends BaseMethodReference implements Method {
         int methodIndexDiff = reader.readLargeUleb128();
         this.methodIndex = methodIndexDiff + previousMethodIndex;
         this.accessFlags = reader.readSmallUleb128();
-        this.codeOffset = reader.readSmallUleb128();
+        this.codeOffset = reader.readSmallUleb128() + dexFile.compactDataOffset;
 
         this.methodAnnotationSetOffset = 0;
         this.parameterAnnotationSetListOffset = 0;
@@ -102,7 +101,7 @@ public class DexBackedMethod extends BaseMethodReference implements Method {
         int methodIndexDiff = reader.readLargeUleb128();
         this.methodIndex = methodIndexDiff + previousMethodIndex;
         this.accessFlags = reader.readSmallUleb128();
-        this.codeOffset = reader.readSmallUleb128();
+        this.codeOffset = reader.readSmallUleb128() + dexFile.compactDataOffset;
 
         this.methodAnnotationSetOffset = methodAnnotationIterator.seekTo(methodIndex);
         this.parameterAnnotationSetListOffset = paramaterAnnotationIterator.seekTo(methodIndex);
@@ -211,7 +210,8 @@ public class DexBackedMethod extends BaseMethodReference implements Method {
 
     private int getParametersOffset() {
         if (parametersOffset == -1) {
-            parametersOffset = dexFile.readSmallUint(getProtoIdItemOffset() + ProtoIdItem.PARAMETERS_OFFSET);
+            parametersOffset = dexFile.readSmallUintPlusDataOffset(
+                    getProtoIdItemOffset() + ProtoIdItem.PARAMETERS_OFFSET);
         }
         return parametersOffset;
     }

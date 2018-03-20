@@ -75,7 +75,8 @@ public class DexBackedClassDef extends BaseTypeReference implements ClassDef {
         this.dexFile = dexFile;
         this.classDefOffset = classDefOffset;
 
-        int classDataOffset = dexFile.readSmallUint(classDefOffset + ClassDefItem.CLASS_DATA_OFFSET);
+        int classDataOffset = dexFile.readSmallUintPlusDataOffset(
+                classDefOffset + ClassDefItem.CLASS_DATA_OFFSET);
         if (classDataOffset == 0) {
             staticFieldsOffset = -1;
             staticFieldCount = 0;
@@ -119,7 +120,8 @@ public class DexBackedClassDef extends BaseTypeReference implements ClassDef {
     @Nonnull
     @Override
     public List<String> getInterfaces() {
-        final int interfacesOffset = dexFile.readSmallUint(classDefOffset + ClassDefItem.INTERFACES_OFFSET);
+        final int interfacesOffset = dexFile.readSmallUintPlusDataOffset(
+                classDefOffset + ClassDefItem.INTERFACES_OFFSET);
         if (interfacesOffset > 0) {
             final int size = dexFile.readSmallUint(interfacesOffset);
             return new AbstractList<String>() {
@@ -153,8 +155,8 @@ public class DexBackedClassDef extends BaseTypeReference implements ClassDef {
             DexReader reader = dexFile.readerAt(staticFieldsOffset);
 
             final AnnotationsDirectory annotationsDirectory = getAnnotationsDirectory();
-            final int staticInitialValuesOffset =
-                    dexFile.readSmallUint(classDefOffset + ClassDefItem.STATIC_VALUES_OFFSET);
+            final int staticInitialValuesOffset = dexFile.readSmallUintPlusDataOffset(
+                    classDefOffset + ClassDefItem.STATIC_VALUES_OFFSET);
             final int fieldsStartOffset = reader.getOffset();
 
             return new Iterable<DexBackedField>() {
@@ -401,6 +403,9 @@ public class DexBackedClassDef extends BaseTypeReference implements ClassDef {
     private AnnotationsDirectory getAnnotationsDirectory() {
         if (annotationsDirectory == null) {
             int annotationsDirectoryOffset = dexFile.readSmallUint(classDefOffset + ClassDefItem.ANNOTATIONS_OFFSET);
+            if (annotationsDirectoryOffset != 0 && dexFile.isCompact) {
+                annotationsDirectoryOffset += dexFile.compactDataOffset;
+            }
             annotationsDirectory = AnnotationsDirectory.newOrEmpty(dexFile, annotationsDirectoryOffset);
         }
         return annotationsDirectory;
