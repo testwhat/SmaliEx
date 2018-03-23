@@ -69,11 +69,14 @@ public class MiscUtil {
     @Nonnull
     public static File[] getFiles(String path, String extensionsStr) {
         File dir = new File(path);
+        if (dir.isFile()) {
+            return new File[] { dir };
+        }
         final String[] extensions = extensionsStr.split(";");
         for (int i = 0; i < extensions.length; i++) {
             extensions[i] = extensions[i].toLowerCase();
         }
-        File[] files =  dir.listFiles((dir1, name) -> {
+        File[] files = dir.listFiles((dir1, name) -> {
             for (String ext : extensions) {
                 if (name.toLowerCase().endsWith(ext)) {
                     return true;

@@ -40,7 +40,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class DexUtil {
     public static int DEFAULT_API_LEVEL = 20;
-    public static int API_N = 24;
+    public static final int API_N = 24;
     public static Opcodes DEFAULT_OPCODES;
 
     private static final ConcurrentHashMap<Integer, SoftReference<Opcodes>> opCodesCache =

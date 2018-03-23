@@ -64,9 +64,11 @@ public class ClassProto implements TypeProto {
 
     @Nonnull protected final ClassPath classPath;
     @Nonnull protected final String type;
+    @Nonnull final Supplier<SparseArray<FieldReference>> instanceFieldsSupplier;
 
     protected boolean vtableFullyResolved = true;
     protected boolean interfacesFullyResolved = true;
+    protected int objectSize; // For legacy art
 
     protected Set<String> unresolvedInterfaces = null;
 
@@ -76,6 +78,16 @@ public class ClassProto implements TypeProto {
         }
         this.classPath = classPath;
         this.type = type;
+
+        if (classPath.isArt()) {
+            if (classPath.oatVersion <= 64) {
+                instanceFieldsSupplier = Suppliers.memoize(new LegacyArtInstanceFieldsSupplier(this));
+            } else {
+                instanceFieldsSupplier = artInstanceFieldsSupplier;
+            }
+        } else {
+            instanceFieldsSupplier = dalvikInstanceFieldsSupplier;
+        }
     }
 
     @Override public String toString() { return type; }
@@ -546,11 +558,7 @@ public class ClassProto implements TypeProto {
     }
 
     @Nonnull public SparseArray<FieldReference> getInstanceFields() {
-        if (classPath.isArt()) {
-            return artInstanceFieldsSupplier.get();
-        } else {
-            return dalvikInstanceFieldsSupplier.get();
-        }
+        return instanceFieldsSupplier.get();
     }
 
     @Nonnull private final Supplier<SparseArray<FieldReference>> dalvikInstanceFieldsSupplier =

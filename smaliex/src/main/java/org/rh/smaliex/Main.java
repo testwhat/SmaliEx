@@ -152,8 +152,8 @@ public class Main {
         return input;
     }
 
-    final static int TYPE_ODEX = 1;
-    final static int TYPE_OAT = 2;
+    static final int TYPE_ODEX = 1;
+    static final int TYPE_OAT = 2;
 
     static int getInputType(File input) {
         if (input.isDirectory()) {

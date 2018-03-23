@@ -419,7 +419,7 @@ public class MethodAnalyzer {
         for (int i = start; i <= end; i++) {
             AnalyzedInstruction pInstr = analyzedInstructions.valueAt(i);
             ex.addContext(" [" + i + "] " + instructionToString(pInstr.originalInstruction)
-                + (i == current ? " <-----" : ""));
+                    + (i == current ? " <-----" : ""));
         }
     }
 
@@ -1431,7 +1431,7 @@ public class MethodAnalyzer {
             TypeProto commonSuperclass = newType.type.getCommonSuperclass(originalType.type);
             if (commonSuperclass.getType().equals(originalType.type.getType())) {
                 return true;
-        }
+            }
             if (commonSuperclass.getType().equals(newType.type.getType())) {
                 return false;
             }
@@ -2226,7 +2226,7 @@ public class MethodAnalyzer {
 
     @Nonnull
     private RegisterType findRegisterType(AnalyzedInstruction unaInstr, int reg,
-            int fieldOffset, int methodOffset) {
+                                          int fieldOffset, int methodOffset) {
         if (debug) println(">>findRegisterType "
                 + method.getDefiningClass() + "->" + method.getName()
                 + " " + toString(unaInstr) + " reg=" + toRegString(reg) + "(" + reg + ")"
@@ -2511,7 +2511,7 @@ public class MethodAnalyzer {
         TypeProto objectRegisterTypeProto = objectRegisterType.type;
 
         if (!verifyType(objectRegisterType, analyzedInstruction, -1, methodIndex)) {
-             // For register is used after ".end local"
+            // For register is used after ".end local"
             int instrAddress = getInstructionAddress(analyzedInstruction);
             objectRegisterTypeProto = findTypeByAddress(instrAddress, objectRegister);
             if (objectRegisterTypeProto != null) {

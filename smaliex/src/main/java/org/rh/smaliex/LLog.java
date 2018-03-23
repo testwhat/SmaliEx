@@ -23,8 +23,8 @@ import java.util.Date;
 
 public class LLog {
 
-    private final static SimpleDateFormat sdf = new SimpleDateFormat("MM-dd kk:mm:ss:SSS");
-    private final static Date date = new Date();
+    private static final SimpleDateFormat sdf = new SimpleDateFormat("MM-dd kk:mm:ss:SSS");
+    private static final Date date = new Date();
     public static boolean VERBOSE = false;
 
     private synchronized static String time() {
