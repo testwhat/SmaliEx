@@ -68,7 +68,8 @@ public class DexBackedMethodReference extends BaseMethodReference {
     @Override
     public List<String> getParameterTypes() {
         int protoIdItemOffset = getProtoIdItemOffset();
-        final int parametersOffset = dexFile.readSmallUint(protoIdItemOffset + ProtoIdItem.PARAMETERS_OFFSET);
+        final int parametersOffset = dexFile.readSmallUintPlusDataOffset(
+                protoIdItemOffset + ProtoIdItem.PARAMETERS_OFFSET);
         if (parametersOffset > 0) {
             final int parameterCount = dexFile.readSmallUint(parametersOffset + TypeListItem.SIZE_OFFSET);
             final int paramListStart = parametersOffset + TypeListItem.LIST_OFFSET;

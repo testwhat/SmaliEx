@@ -104,7 +104,8 @@ public abstract class AnnotationsDirectory {
                 @Nonnull
                 @Override
                 public DexBackedAnnotation readItem(int index) {
-                    int annotationOffset = dexFile.readSmallUint(annotationSetOffset + 4 + (4*index));
+                    int annotationOffset = dexFile.readSmallUintPlusDataOffset(
+                            annotationSetOffset + 4 + (4 * index));
                     return new DexBackedAnnotation(dexFile, annotationOffset);
                 }
 
@@ -125,7 +126,8 @@ public abstract class AnnotationsDirectory {
                 @Nonnull
                 @Override
                 public Set<? extends DexBackedAnnotation> readItem(int index) {
-                    int annotationSetOffset = dexFile.readSmallUint(annotationSetListOffset + 4 + index * 4);
+                    int annotationSetOffset = dexFile.readSmallUintPlusDataOffset(
+                            annotationSetListOffset + 4 + index * 4);
                     return getAnnotations(dexFile, annotationSetOffset);
                 }
 
@@ -169,7 +171,7 @@ public abstract class AnnotationsDirectory {
 
         @Nonnull
         public Set<? extends DexBackedAnnotation> getClassAnnotations() {
-            return getAnnotations(dexFile, dexFile.readSmallUint(directoryOffset));
+            return getAnnotations(dexFile, dexFile.readSmallUintPlusDataOffset(directoryOffset));
         }
 
         @Nonnull
@@ -227,7 +229,7 @@ public abstract class AnnotationsDirectory {
                 }
 
                 if (currentItemIndex == itemIndex) {
-                    return dexFile.readSmallUint(startOffset + (currentIndex*8)+4);
+                    return dexFile.readSmallUintPlusDataOffset(startOffset + (currentIndex*8)+4);
                 }
                 return 0;
             }

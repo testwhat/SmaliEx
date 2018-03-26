@@ -402,9 +402,10 @@ public class DexBackedClassDef extends BaseTypeReference implements ClassDef {
 
     private AnnotationsDirectory getAnnotationsDirectory() {
         if (annotationsDirectory == null) {
-            int annotationsDirectoryOffset = dexFile.readSmallUint(classDefOffset + ClassDefItem.ANNOTATIONS_OFFSET);
-            if (annotationsDirectoryOffset != 0 && dexFile.isCompact) {
-                annotationsDirectoryOffset += dexFile.compactDataOffset;
+            int annotationsDirectoryOffset = dexFile.readSmallUintPlusDataOffset(
+                    classDefOffset + ClassDefItem.ANNOTATIONS_OFFSET);
+            if (annotationsDirectoryOffset == dexFile.compactDataOffset) {
+                annotationsDirectoryOffset = 0; // No annotations
             }
             annotationsDirectory = AnnotationsDirectory.newOrEmpty(dexFile, annotationsDirectoryOffset);
         }

@@ -39,6 +39,7 @@ import org.jf.dexlib2.dexbacked.reference.DexBackedFieldReference;
 import org.jf.dexlib2.dexbacked.reference.DexBackedMethodReference;
 import org.jf.dexlib2.dexbacked.reference.DexBackedStringReference;
 import org.jf.dexlib2.dexbacked.reference.DexBackedTypeReference;
+import org.jf.dexlib2.dexbacked.util.CompactOffsetTable;
 import org.jf.dexlib2.dexbacked.util.FixedSizeSet;
 import org.jf.dexlib2.iface.DexFile;
 import org.jf.dexlib2.iface.reference.Reference;
@@ -69,12 +70,35 @@ public class DexBackedDexFile extends BaseDexBuffer implements DexFile {
     private final int classCount;
     private final int classStartOffset;
 
-    final int fileSize;
-    final int dataSize;
+    public final int fileSize;
+    public final int dataSize;
     final int dataOffset;
-    /** 0 if this is not compact dex. */
-    final int compactDataOffset;
+
+    static class CompactInfo { // libdexfile/dex/compact_dex_file.h
+        final int featureFlags;
+
+        // Position in the compact dex file for the debug info table data starts.
+        final int debugInfoOffsetsPos;
+
+        // Offset into the debug info table data where the lookup table is.
+        final int debugInfoOffsetsTableOffset;
+
+        // Base offset of where debug info starts in the dex file.
+        final int debugInfoBase;
+
+        CompactInfo(DexBackedDexFile dexFile) {
+            featureFlags = dexFile.readSmallUint(HeaderItem.ITEM_SIZE);
+            debugInfoOffsetsPos = dexFile.readSmallUint(HeaderItem.ITEM_SIZE + 4);
+            debugInfoOffsetsTableOffset = dexFile.readSmallUint(HeaderItem.ITEM_SIZE + 8);
+            debugInfoBase = dexFile.readSmallUint(HeaderItem.ITEM_SIZE + 12);
+        }
+    }
+
     public final boolean isCompact;
+    // The value of compact fields are 0, null if this is not a compact dex.
+    public final int compactDataOffset;
+    final CompactInfo compactInfo;
+    final CompactOffsetTable debugInfoOffsets;
 
     protected DexBackedDexFile(@Nonnull Opcodes opcodes, @Nonnull byte[] buf, int offset, boolean verifyMagic) {
         super(buf, offset);
@@ -105,7 +129,17 @@ public class DexBackedDexFile extends BaseDexBuffer implements DexFile {
         // See https://android.googlesource.com/platform/art/+/c3a22aa19bbe35ff8447460b29e07d42937a39de
         // Shared separate data section for compact dex.
         isCompact = dataOffset >= fileSize;
-        compactDataOffset = isCompact ? dataOffset : 0;
+        if (isCompact) {
+            compactDataOffset = dataOffset;
+            compactInfo = new CompactInfo(this);
+            debugInfoOffsets = new CompactOffsetTable(this,
+                    dataOffset + compactInfo.debugInfoOffsetsPos,
+                    compactInfo.debugInfoBase, compactInfo.debugInfoOffsetsTableOffset);
+        } else {
+            compactDataOffset = 0;
+            compactInfo = null;
+            debugInfoOffsets = null;
+        }
     }
 
     public DexBackedDexFile(@Nonnull Opcodes opcodes, @Nonnull BaseDexBuffer buf) {

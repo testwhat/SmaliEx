@@ -54,18 +54,18 @@ public class DexBackedMethodImplementation implements MethodImplementation {
     @Nonnull public final DexBackedMethod method;
     private final int codeOffset;
 
-    private final static int SIZEOF_UINT16 = 2;
-    private final static int kRegistersSizeShift = 12;
-    private final static int kInsSizeShift = 8;
-    private final static int kOutsSizeShift = 4;
-    private final static int kInsnsSizeShift = 5;
+    private static final int SIZEOF_UINT16 = 2;
+    private static final int kRegistersSizeShift = 12;
+    private static final int kInsSizeShift = 8;
+    private static final int kOutsSizeShift = 4;
+    private static final int kInsnsSizeShift = 5;
 
-    private final static int kFlagPreHeaderRegisterSize = 0x1;
-    private final static int kFlagPreHeaderInsSize = 0x1 << 1;
-    private final static int kFlagPreHeaderOutsSize = 0x1 << 2;
-    private final static int kFlagPreHeaderTriesSize = 0x1 << 3;
-    private final static int kFlagPreHeaderInsnsSize = 0x1 << 4;
-    private final static int kFlagPreHeaderCombined =
+    private static final int kFlagPreHeaderRegisterSize = 0x1;
+    private static final int kFlagPreHeaderInsSize = 0x1 << 1;
+    private static final int kFlagPreHeaderOutsSize = 0x1 << 2;
+    private static final int kFlagPreHeaderTriesSize = 0x1 << 3;
+    private static final int kFlagPreHeaderInsnsSize = 0x1 << 4;
+    private static final int kFlagPreHeaderCombined =
                     kFlagPreHeaderRegisterSize |
                     kFlagPreHeaderInsSize |
                     kFlagPreHeaderOutsSize |
@@ -214,8 +214,7 @@ public class DexBackedMethodImplementation implements MethodImplementation {
         final int triesSize = getTriesSize();
         if (triesSize > 0) {
             final int triesStartOffset = AlignmentUtils.alignOffset(
-                    codeOffset + CodeItem.INSTRUCTION_START_OFFSET
-                            + getInstructionsCount() * 2, 4);
+                    getInstructionstartOffset() + getInstructionsCount() * 2, 4);
             final int handlersStartOffset = triesStartOffset + triesSize*CodeItem.TryItem.ITEM_SIZE;
 
             return new FixedSizeList<DexBackedTryBlock>() {
@@ -236,19 +235,26 @@ public class DexBackedMethodImplementation implements MethodImplementation {
         return ImmutableList.of();
     }
 
+    public int getDebugInfoOffset() {
+        if (dexFile.debugInfoOffsets != null) {
+            return dexFile.debugInfoOffsets.getOffset(method.methodIndex);
+        }
+        return dexFile.readInt(codeOffset + CodeItem.DEBUG_INFO_OFFSET);
+    }
+
     @Nonnull
     private DebugInfo getDebugInfo() {
-        int debugOffset = dexFile.readInt(codeOffset + CodeItem.DEBUG_INFO_OFFSET);
+        final int debugOffset = getDebugInfoOffset();
 
         if (debugOffset == -1 || debugOffset == 0) {
             return DebugInfo.newOrEmpty(dexFile, 0, this);
         }
         if (debugOffset < 0) {
-            System.err.println(String.format("%s: Invalid debug offset", method));
+            System.err.println(String.format("%s: Invalid debug offset %d", method, debugOffset));
             return DebugInfo.newOrEmpty(dexFile, 0, this);
         }
         if (debugOffset >= dexFile.buf.length) {
-            System.err.println(String.format("%s: Invalid debug offset", method));
+            System.err.println(String.format("%s: Invalid debug offset %d", method, debugOffset));
             return DebugInfo.newOrEmpty(dexFile, 0, this);
         }
         return DebugInfo.newOrEmpty(dexFile, debugOffset, this);

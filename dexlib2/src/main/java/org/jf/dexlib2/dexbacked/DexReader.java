@@ -57,14 +57,54 @@ public class DexReader extends BaseDexReader<DexBackedDexFile> {
                     cur = buf[end++] & 0xff;
                     result |= (cur & 0x7f) << 21;
                     if (cur > 0x7f) {
-                        cur = buf[end++];
                         // Note: We don't check to see if cur is out of range here,
                         // meaning we tolerate garbage in the four high-order bits.
+                        cur = buf[end++];
                         result |= cur << 28;
                     }
                 }
             }
         }
+        setOffset(end - dexBuf.baseOffset);
+        return result;
+    }
+
+    @Override
+    public int readSleb128() {
+        if (!dexBuf.isCompact) {
+            return super.readSmallUleb128();
+        }
+        // See art/libartbase/base/leb128.h
+        final byte[] buf = dexBuf.buf;
+        int end = dexBuf.baseOffset + getOffset();
+        int result = buf[end++] & 0xff;
+        if (result <= 0x7f) {
+            result = (result << 25) >> 25;
+        } else {
+            int cur = buf[end++] & 0xff;
+            result = (result & 0x7f) | ((cur & 0x7f) << 7);
+            if (cur <= 0x7f) {
+                result = (result << 18) >> 18;
+            } else {
+                cur = buf[end++] & 0xff;
+                result |= (cur & 0x7f) << 14;
+                if (cur <= 0x7f) {
+                    result = (result << 11) >> 11;
+                } else {
+                    cur = buf[end++] & 0xff;
+                    result |= (cur & 0x7f) << 21;
+                    if (cur <= 0x7f) {
+                        result = (result << 4) >> 4;
+                    } else {
+                        // Note: We don't check to see if cur is out of range here,
+                        // meaning we tolerate garbage in the four high-order bits.
+                        cur = buf[end++] & 0xff;
+                        result |= cur << 28;
+                    }
+                }
+            }
+        }
+
         setOffset(end - dexBuf.baseOffset);
         return result;
     }
