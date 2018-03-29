@@ -496,15 +496,16 @@ public class DexBackedClassDef extends BaseTypeReference implements ClassDef {
         }
 
         //static values and/or metadata
-        int staticInitialValuesOffset =
-            dexFile.readSmallUint(classDefOffset + ClassDefItem.STATIC_VALUES_OFFSET);
+        final int staticInitialValuesOffset = dexFile.readSmallUintPlusDataOffset(
+                classDefOffset + ClassDefItem.STATIC_VALUES_OFFSET);
         if (staticInitialValuesOffset != 0) {
             DexReader reader = dexFile.readerAt(staticInitialValuesOffset);
             size += reader.peekSmallUleb128Size(); //encoded_array size field
         }
 
         //class_data_item
-        int classDataOffset = dexFile.readSmallUint(classDefOffset + ClassDefItem.CLASS_DATA_OFFSET);
+        final int classDataOffset = dexFile.readSmallUintPlusDataOffset(
+                classDefOffset + ClassDefItem.CLASS_DATA_OFFSET);
         if (classDataOffset > 0) {
             DexReader reader = dexFile.readerAt(classDataOffset);
             reader.readSmallUleb128(); //staticFieldCount

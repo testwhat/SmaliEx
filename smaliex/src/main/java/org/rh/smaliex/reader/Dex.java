@@ -13,6 +13,9 @@ import java.io.IOException;
 public class Dex {
 
     public static class Header {
+        static final String MAGIC_DEX = "dex";
+        static final String MAGIC_COMPACT_DEX = "cdex";
+
         @DumpFormat(type = DumpFormat.TYPE_CHAR, isString = true)
         final char[] magic_ = new char[4];
         @DumpFormat(type = DumpFormat.TYPE_CHAR, isString = true)
@@ -40,20 +43,25 @@ public class Dex {
         final int class_defs_size_;
         final int class_defs_off_;
         final int data_size_;
-        final int data_off_;
+        public final int data_off_;
+
+        final String magic;
+        final String version;
+        final boolean isCompactDex;
 
         public Header(DataReader r) {
             r.readBytes(magic_);
-            if (magic_[0] != 'd' || magic_[1] != 'e' || magic_[2] != 'x') {
-                LLog.e(String.format("Invalid dex magic '%c%c%c'",
-                        magic_[0], magic_[1], magic_[2]));
+            magic = new String(magic_).trim();
+            isCompactDex = magic.equals(MAGIC_COMPACT_DEX);
+            if (!magic.equals(MAGIC_DEX) && !isCompactDex) {
+                LLog.e(String.format("Invalid dex magic '%s'", magic));
             }
             r.readBytes(version_);
-            checksum_= r.readInt();
-            if (version_[0] != '0' || version_[1] != '3' || version_[2] < '5') {
-                LLog.e(String.format("Invalid dex version '%c%c%c'",
-                        version_[0], version_[1], version_[2]));
+            version = new String(version_).trim();
+            if (!isCompactDex && version.compareTo("035") < 0) {
+                LLog.e(String.format("Invalid dex version '%s'", version));
             }
+            checksum_= r.readInt();
             r.readBytes(signature_);
             file_size_ = r.readInt();
             header_size_ = r.readInt();
@@ -80,17 +88,19 @@ public class Dex {
 
     private final DataReader mReader;
     public final int dexPosition;
+    public final int dataEnd;
     public final Header header;
 
     public Dex(DataReader r) {
         dexPosition = r.position();
         mReader = r;
         header = new Header(r);
+        dataEnd = header.isCompactDex ? header.data_off_ + header.data_size_ : header.file_size_;
     }
 
     @Nonnull
     public byte[] getBytes() {
-        final byte[] dexBytes = new byte[header.file_size_];
+        final byte[] dexBytes = new byte[dataEnd];
         mReader.position(dexPosition);
         mReader.readBytes(dexBytes);
         return dexBytes;
@@ -98,7 +108,7 @@ public class Dex {
 
     public void saveTo(@Nonnull File outputFile) throws IOException {
         try (FileOutputStream output = new FileOutputStream(outputFile)) {
-            mReader.getChannel().transferTo(dexPosition, header.file_size_, output.getChannel());
+            mReader.getChannel().transferTo(dexPosition, dataEnd, output.getChannel());
         }
     }
 }

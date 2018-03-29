@@ -18,13 +18,20 @@ package org.rh.smaliex.reader;
 
 import static org.rh.smaliex.MiscUtil.DumpFormat;
 
+import org.jf.dexlib2.dexbacked.BaseDexBuffer;
+import org.jf.dexlib2.dexbacked.util.CompactOffsetTable;
 import org.rh.smaliex.LLog;
+import org.rh.smaliex.MiscUtil;
 
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
 
 // See art/runtime/vdex_file.cc
 public class Vdex {
+
+    static final int VERSION_OREO_006 = 6;
+    static final int VERSION_OREO_MR1_010 = 10;
+    static final int VERSION_P_018 = 18;
 
     public static class Header {
 
@@ -34,11 +41,12 @@ public class Vdex {
         final char[] version_ = new char[4];
         public final int number_of_dex_files_;
         final int dex_size_;
+        final int dex_shared_data_size_;
         final int verifier_deps_size_;
         final int quickening_info_size_;
 
         final int[] vdexCheckSums;
-        public final String version;
+        public final int version;
 
         public Header(DataReader r) {
             r.readBytes(magic_);
@@ -48,9 +56,10 @@ public class Vdex {
             }
 
             r.readBytes(version_);
-            version = new String(version_);
+            version = MiscUtil.toInt(new String(version_));
             number_of_dex_files_ = r.readInt();
             dex_size_ = r.readInt();
+            dex_shared_data_size_ = versionNears(VERSION_P_018) ? r.readInt() : 0;
             verifier_deps_size_ = r.readInt();
             quickening_info_size_ = r.readInt();
 
@@ -58,6 +67,10 @@ public class Vdex {
             for (int i = 0; i < vdexCheckSums.length; i++) {
                 vdexCheckSums[i] = r.readInt();
             }
+        }
+
+        public boolean versionNears(int version) {
+            return Math.abs(this.version - version) <= 1;
         }
     }
 
@@ -104,7 +117,7 @@ public class Vdex {
     }
 
     public static abstract class QuickeningInfoReader {
-        Header header;
+        Vdex vdex;
         int begin;
         int end;
 
@@ -135,7 +148,7 @@ public class Vdex {
                 return mGroupList;
             }
             mGroupList = new QuickeningGroupList(16, true);
-            r.seek(begin);
+            r.position(begin);
             while (r.position() < end) {
                 final int groupByteSize = r.readInt();
                 final int groupEnd = r.position() + groupByteSize;
@@ -174,21 +187,21 @@ public class Vdex {
     static class QuickeningInfoReaderV10 extends QuickeningInfoReader {
         @Override
         public QuickeningGroupList read(DataReader r, int dexIndex) {
-            final int dexIndicesPos = end - Integer.BYTES * header.number_of_dex_files_;
-            r.seek(dexIndicesPos + Integer.BYTES * dexIndex);
+            final int dexIndicesPos = end - Integer.BYTES * vdex.header.number_of_dex_files_;
+            r.position(dexIndicesPos + Integer.BYTES * dexIndex);
             final int offsetStartPos = r.readInt();
             final int codeItemEnd;
-            if (dexIndex == header.number_of_dex_files_ - 1) {
+            if (dexIndex == vdex.header.number_of_dex_files_ - 1) {
                 codeItemEnd = dexIndicesPos;
             } else {
-                r.seek(dexIndicesPos + Integer.BYTES * (dexIndex + 1));
+                r.position(dexIndicesPos + Integer.BYTES * (dexIndex + 1));
                 codeItemEnd = begin + r.readInt();
             }
             LLog.i("QuickeningGroup dexIndex=" + dexIndex
                     + " offsetBegin=" + (begin + offsetStartPos)
                     + " offsetEnd=" + codeItemEnd);
             final ArrayList<QuickeningInfoV10.GroupOffsetInfo> offsetInfoList = new ArrayList<>();
-            r.seek(begin + offsetStartPos);
+            r.position(begin + offsetStartPos);
             while (r.position() < codeItemEnd) {
                 offsetInfoList.add(new QuickeningInfoV10.GroupOffsetInfo(r));
             }
@@ -196,7 +209,7 @@ public class Vdex {
             final QuickeningGroupList groupList = new QuickeningGroupList(
                     offsetInfoList.size(), false);
             for (QuickeningInfoV10.GroupOffsetInfo info : offsetInfoList) {
-                r.seek(begin + info.sizeOffset);
+                r.position(begin + info.sizeOffset);
                 final int groupByteSize = r.readInt();
                 final int groupEnd = r.position() + groupByteSize;
                 final QuickeningInfoList infoList = new QuickeningInfoList(
@@ -208,6 +221,53 @@ public class Vdex {
                 groupList.add(infoList);
             }
             return groupList;
+        }
+    }
+
+    static class QuickeningInfoReaderV18 extends QuickeningInfoReader {
+        static class CompactOffsetReader implements CompactOffsetTable.DataReader {
+            final DataReader reader;
+
+            CompactOffsetReader(DataReader reader) {
+                this.reader = reader;
+            }
+
+            @Override
+            public void setOffset(int offset) {
+                reader.position(offset);
+            }
+
+            @Override
+            public int readInt(int offset) {
+                reader.position(offset);
+                return reader.readInt();
+            }
+
+            @Override
+            public int readUbyte(int offset) {
+                reader.position(offset);
+                return reader.readByte();
+            }
+
+            @Override
+            public int readSmallUint(int offset) {
+                reader.position(offset);
+                return reader.readInt();
+            }
+
+            @Override
+            public int readSmallUleb128() {
+                return reader.readUleb128();
+            }
+        }
+
+        @Override
+        QuickeningGroupList read(DataReader r, int dexIndex) {
+            CompactOffsetTable table = new CompactOffsetTable(new CompactOffsetReader(r),
+                    begin + vdex.quickeningTableOffsets[dexIndex]);
+            // TODO wait formal release
+            final QuickeningGroupList empty = new QuickeningGroupList(0, false);
+            return empty;
         }
     }
 
@@ -224,6 +284,7 @@ public class Vdex {
 
     public final Header header;
     public final QuickenDex[] dexFiles;
+    public final int[] quickeningTableOffsets;
     public final int dexBegin;
     public final int verifierDepsDataBegin;
     public final int quickeningInfoBegin;
@@ -231,12 +292,14 @@ public class Vdex {
 
     protected QuickeningInfoReader createQuickeningInfoReader() {
         final QuickeningInfoReader reader;
-        if ("006".equals(header.version.trim())) {
-            reader = new QuickeningInfoReaderV6(); // Oreo
+        if (header.versionNears(VERSION_OREO_006)) {
+            reader = new QuickeningInfoReaderV6();
+        } else if (header.versionNears(VERSION_OREO_MR1_010)) {
+            reader = new QuickeningInfoReaderV10();
         } else {
-            reader = new QuickeningInfoReaderV10(); // Oreo MR1
+            reader = new QuickeningInfoReaderV18();
         }
-        reader.header = header;
+        reader.vdex = this;
         reader.begin = quickeningInfoBegin;
         reader.end = quickeningInfoBegin + header.quickening_info_size_;
         return reader;
@@ -245,15 +308,20 @@ public class Vdex {
     public Vdex(@Nonnull DataReader r) {
         header = new Header(r);
         dexBegin = r.position();
-        verifierDepsDataBegin = dexBegin + header.dex_size_;
+        verifierDepsDataBegin = dexBegin + header.dex_size_ + header.dex_shared_data_size_;
         quickeningInfoBegin = verifierDepsDataBegin + header.verifier_deps_size_;
 
         final QuickeningInfoReader infoReader = createQuickeningInfoReader();
-        isSingleQuickeningInfo = infoReader instanceof QuickeningInfoReaderV6;
+        isSingleQuickeningInfo = header.versionNears(VERSION_OREO_006);
 
         r.position(dexBegin);
+        quickeningTableOffsets = header.versionNears(VERSION_P_018)
+                ? new int[header.number_of_dex_files_] : null;
         dexFiles = new QuickenDex[header.number_of_dex_files_];
         for (int i = 0; i < header.number_of_dex_files_; i++) {
+            if (quickeningTableOffsets != null) {
+                quickeningTableOffsets[i] = r.readInt();
+            }
             final QuickenDex dex = new QuickenDex(r, i, infoReader);
             dexFiles[i] = dex;
             r.position(dex.dexPosition + dex.header.file_size_);
@@ -261,3 +329,49 @@ public class Vdex {
     }
 
 }
+
+// From https://android.googlesource.com/platform/art/+/ ...
+// ==========================================================
+// [Oreo][006][oreo-release/runtime/vdex_file.h]
+// File format:
+//   VdexFile::Header    fixed-length header
+//
+//   DEX[0]              array of the input DEX files
+//   DEX[1]              the bytecode may have been quickened
+//   ...
+//   DEX[D]
+//
+// ==========================================================
+// [Oreo MR1][010][oreo-mr1-release/runtime/vdex_file.h]
+// File format:
+//   VdexFile::Header    fixed-length header
+//
+//   DEX[0]              array of the input DEX files
+//   DEX[1]              the bytecode may have been quickened
+//   ...
+//   DEX[D]
+//   QuickeningInfo
+//     uint8[]                     quickening data
+//     unaligned_uint32_t[2][]     table of offsets pair:
+//                                    uint32_t[0] contains code_item_offset
+//                                    uint32_t[1] contains quickening data offset from the start
+//                                                of QuickeningInfo
+//     unalgined_uint32_t[D]       start offsets (from the start of QuickeningInfo) in previous
+//
+// ==========================================================
+// [P][018][p*-release/runtime/vdex_file.h]
+// File format:
+//   VdexFile::Header    fixed-length header
+//
+//   quicken_table_off[0]  offset into QuickeningInfo section for offset table for DEX[0].
+//   DEX[0]                array of the input DEX files, the bytecode may have been quickened.
+//   quicken_table_off[1]
+//   DEX[1]
+//   ...
+//   DEX[D]
+//   VerifierDeps
+//      uint8[D][]                 verification dependencies
+//   QuickeningInfo
+//     uint8[D][]                  quickening data
+//     uint32[D][]                 quickening data offset tables
+// ==========================================================

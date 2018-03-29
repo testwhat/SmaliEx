@@ -70,7 +70,7 @@ public class VdexDecompiler {
         for (int i = 0; i < mDeodexedFiles.length; i++) {
             final VdexRewriterModule rewriterModule;
             if (vdex.isSingleQuickeningInfo && previousModule != null) {
-                // All dex share the same iterator.
+                // All dex files share the same iterator.
                 rewriterModule = new VdexRewriterModule(vdex.dexFiles[i], previousModule);
             } else {
                 rewriterModule = new VdexRewriterModule(vdex.dexFiles[i], opcodes);
@@ -145,7 +145,7 @@ public class VdexDecompiler {
                 return null;
             }
             final int refIndex = ni.getIndex();
-            if (refIndex == kDexNoIndex16) { // For vdex ver 010
+            if (refIndex == kDexNoIndex16) { // For vdex ver >= 010
                 return null;
             }
             if (!ni.matchDexPc(mDexPc)) { // For vdex ver 006

@@ -132,7 +132,7 @@ public class DexBackedDexFile extends BaseDexBuffer implements DexFile {
         if (isCompact) {
             compactDataOffset = dataOffset;
             compactInfo = new CompactInfo(this);
-            debugInfoOffsets = new CompactOffsetTable(this,
+            debugInfoOffsets = new CompactOffsetTable(new CompactOffsetTable.DexReader(this),
                     dataOffset + compactInfo.debugInfoOffsetsPos,
                     compactInfo.debugInfoBase, compactInfo.debugInfoOffsetsTableOffset);
         } else {

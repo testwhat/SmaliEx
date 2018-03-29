@@ -166,7 +166,7 @@ public class DexBackedMethodImplementation implements MethodImplementation {
         return dexFile.readSmallUint(codeOffset + CodeItem.INSTRUCTION_COUNT_OFFSET);
     }
 
-    public int getInstructionstartOffset() {
+    public int getInstructionStartOffset() {
         if (codeItemInfo != null) {
             return codeOffset + 2 * SIZEOF_UINT16;
         }
@@ -181,7 +181,7 @@ public class DexBackedMethodImplementation implements MethodImplementation {
     }
 
     @Nonnull @Override public Iterable<? extends Instruction> getInstructions() {
-        final int instructionsStartOffset = getInstructionstartOffset();
+        final int instructionsStartOffset = getInstructionStartOffset();
         final int endOffset = instructionsStartOffset + (getInstructionsCount() * 2);
         return new Iterable<Instruction>() {
             @Override
@@ -214,7 +214,7 @@ public class DexBackedMethodImplementation implements MethodImplementation {
         final int triesSize = getTriesSize();
         if (triesSize > 0) {
             final int triesStartOffset = AlignmentUtils.alignOffset(
-                    getInstructionstartOffset() + getInstructionsCount() * 2, 4);
+                    getInstructionStartOffset() + getInstructionsCount() * 2, 4);
             final int handlersStartOffset = triesStartOffset + triesSize*CodeItem.TryItem.ITEM_SIZE;
 
             return new FixedSizeList<DexBackedTryBlock>() {
@@ -237,7 +237,11 @@ public class DexBackedMethodImplementation implements MethodImplementation {
 
     public int getDebugInfoOffset() {
         if (dexFile.debugInfoOffsets != null) {
-            return dexFile.debugInfoOffsets.getOffset(method.methodIndex);
+            int offset = dexFile.debugInfoOffsets.getOffset(method.methodIndex);
+            if (offset != 0) {
+                offset += dexFile.compactDataOffset;
+            }
+            return offset;
         }
         return dexFile.readInt(codeOffset + CodeItem.DEBUG_INFO_OFFSET);
     }
@@ -281,7 +285,7 @@ public class DexBackedMethodImplementation implements MethodImplementation {
         int debugSize = getDebugInfo().getSize();
 
         //set last offset just before bytecode instructions (after insns_size)
-        int lastOffset = codeOffset + CodeItem.INSTRUCTION_START_OFFSET;
+        int lastOffset = getInstructionStartOffset();
 
         //set code_item ending offset to the end of instructions list (insns_size * ushort)
         lastOffset += getInstructionsCount() * 2;
