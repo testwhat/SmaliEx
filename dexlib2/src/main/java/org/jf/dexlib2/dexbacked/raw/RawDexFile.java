@@ -57,6 +57,11 @@ public class RawDexFile extends DexBackedDexFile {
         this.headerItem = new HeaderItem(this);
     }
 
+    public RawDexFile(@Nonnull Opcodes opcodes, @Nonnull byte[] buf, int offset) {
+        super(opcodes, buf, offset);
+        this.headerItem = new HeaderItem(this);
+    }
+
     @Nonnull
     public byte[] readByteRange(int start, int length) {
         return Arrays.copyOfRange(getBuf(), getBaseOffset() + start, getBaseOffset() + start + length);

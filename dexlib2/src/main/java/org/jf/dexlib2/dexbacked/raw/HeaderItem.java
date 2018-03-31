@@ -101,7 +101,7 @@ public class HeaderItem {
     }
 
     public int getMapOffset() {
-        return dexFile.readSmallUint(MAP_OFFSET);
+        return dexFile.readSmallUintPlusDataOffset(MAP_OFFSET);
     }
 
     public int getHeaderSize() {
@@ -210,7 +210,12 @@ public class HeaderItem {
                 out.annotate(4, "data_size: %d", dexFile.readInt(out.getCursor()));
                 out.annotate(4, "data_off: 0x%x", dexFile.readInt(out.getCursor()));
 
-                if (headerSize > ITEM_SIZE) {
+                if (dexFile.isCompact) {
+                    out.annotate(4, "feature_flags: %d", dexFile.readInt(out.getCursor()));
+                    out.annotate(4, "debug_info_offsets_pos: %d", dexFile.readInt(out.getCursor()));
+                    out.annotate(4, "debug_info_offsets_table_offset: %d", dexFile.readInt(out.getCursor()));
+                    out.annotate(4, "debug_info_base: %d", dexFile.readInt(out.getCursor()));
+                } else  if (headerSize > ITEM_SIZE) {
                     out.annotateTo(headerSize, "header padding");
                 }
             }

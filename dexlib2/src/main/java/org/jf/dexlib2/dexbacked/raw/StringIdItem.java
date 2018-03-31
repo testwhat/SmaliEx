@@ -51,7 +51,7 @@ public class StringIdItem {
 
             @Override
             public void annotateItem(@Nonnull AnnotatedBytes out, int itemIndex, @Nullable String itemIdentity) {
-                int stringDataOffset = dexFile.readSmallUint(out.getCursor());
+                final int stringDataOffset = dexFile.readSmallUintPlusDataOffset(out.getCursor());
                 try {
                     String stringValue = dexFile.getString(itemIndex);
                     out.annotate(4, "string_data_item[0x%x]: \"%s\"", stringDataOffset,

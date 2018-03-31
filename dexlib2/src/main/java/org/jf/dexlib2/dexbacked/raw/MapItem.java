@@ -67,7 +67,7 @@ public class MapItem {
     }
 
     public int getOffset() {
-        return dexFile.readSmallUint(offset + OFFSET_OFFSET);
+        return dexFile.readSmallUintPlusDataOffset(offset + OFFSET_OFFSET);
     }
 
     @Nonnull

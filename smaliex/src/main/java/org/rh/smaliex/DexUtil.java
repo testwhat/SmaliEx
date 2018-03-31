@@ -22,6 +22,8 @@ import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.VersionMap;
 import org.jf.dexlib2.analysis.ClassPath;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile;
+import org.jf.dexlib2.dexbacked.raw.HeaderItem;
+import org.jf.dexlib2.dexbacked.raw.MapItem;
 import org.rh.smaliex.reader.DataReader;
 import org.rh.smaliex.reader.Dex;
 import org.rh.smaliex.reader.Elf;
@@ -87,18 +89,16 @@ public class DexUtil {
 
     // If return false, the dex may be customized format or encrypted.
     public static boolean verifyStringOffset(@Nonnull DexBackedDexFile dex) {
-        final int strIdsStartOffset = dex.readSmallUint(
-                org.jf.dexlib2.dexbacked.raw.HeaderItem.STRING_START_OFFSET);
+        final int strIdsStartOffset = dex.readSmallUint(HeaderItem.STRING_START_OFFSET);
         final int strStartOffset = dex.readInt(strIdsStartOffset);
-        final int mapOffset = dex.readSmallUint(org.jf.dexlib2.dexbacked.raw.HeaderItem.MAP_OFFSET);
+        final int mapOffset = dex.readSmallUintPlusDataOffset(HeaderItem.MAP_OFFSET);
         final int mapSize = dex.readSmallUint(mapOffset);
         for (int i = 0; i < mapSize; i++) {
-            final int mapItemOffset = mapOffset + 4 +
-                    i * org.jf.dexlib2.dexbacked.raw.MapItem.ITEM_SIZE;
+            final int mapItemOffset = mapOffset + 4 + i * MapItem.ITEM_SIZE;
             if (dex.readUshort(mapItemOffset)
                     == org.jf.dexlib2.dexbacked.raw.ItemType.STRING_DATA_ITEM) {
                 final int realStrStartOffset = dex.readSmallUint(
-                        mapItemOffset + org.jf.dexlib2.dexbacked.raw.MapItem.OFFSET_OFFSET);
+                        mapItemOffset + MapItem.OFFSET_OFFSET);
                 if (strStartOffset != realStrStartOffset) {
                     return false;
                 }

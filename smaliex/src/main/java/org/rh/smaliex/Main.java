@@ -120,13 +120,11 @@ public class Main {
             final String bootPath = args[1];
             final File input = checkExist(inputPath);
             checkExist(bootPath);
-            int type = getInputType(input);
-            if (type > 0) {
-                if (type == TYPE_ODEX) {
-                    OdexUtil.odex2dex(inputPath, bootPath, outputPath, apiLevel);
-                } else if (type == TYPE_OAT) {
-                    OatUtil.oat2dex(inputPath, bootPath, outputPath);
-                }
+            final int type = getInputType(input);
+            if (type == TYPE_ODEX) {
+                OdexUtil.odex2dex(inputPath, bootPath, outputPath, apiLevel);
+            } else if (type == TYPE_OAT) {
+                OatUtil.oat2dex(inputPath, bootPath, outputPath);
             } else {
                 exit("Unknown input file type: " + input);
             }

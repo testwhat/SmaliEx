@@ -72,7 +72,7 @@ public class DexReader extends BaseDexReader<DexBackedDexFile> {
     @Override
     public int readSleb128() {
         if (!dexBuf.isCompact) {
-            return super.readSmallUleb128();
+            return super.readSleb128();
         }
         // See art/libartbase/base/leb128.h
         final byte[] buf = dexBuf.buf;
