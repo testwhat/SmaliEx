@@ -2324,6 +2324,20 @@ public class MethodAnalyzer {
                 }
             }
         }
+
+        if (type.category != RegisterType.REFERENCE) {
+            // e.g. method parameter is reassigned then lost original type during propagation.
+            if (debug) {
+                println("  @@3 search predecessors reg=" + reg);
+            }
+            AnalyzedInstruction curInstr = unaInstr;
+            do {
+                AnalyzedInstruction prevInstr = curInstr.predecessors.first();
+                type = prevInstr.getPreInstructionRegisterType(reg);
+                curInstr = prevInstr;
+            } while (type.category != RegisterType.REFERENCE && !curInstr.predecessors.isEmpty());
+        }
+
         if (debug) {
             println("<<findRegisterType " + type);
         }
