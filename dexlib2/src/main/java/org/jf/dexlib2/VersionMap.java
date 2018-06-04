@@ -34,11 +34,31 @@ package org.jf.dexlib2;
 public class VersionMap {
     public static final int NO_VERSION = -1;
 
+    public static int mapDexVersionToApi(int dexVersion) {
+        if (dexVersion == 35) {
+            return 23;
+        }
+        if (dexVersion == 37) {
+            return 25;
+        }
+        if (dexVersion == 38) {
+            return 27;
+        }
+        if (dexVersion == 39) {
+            return 28;
+        }
+        throw new RuntimeException("Unsupported dex version " + dexVersion);
+    }
+
     public static int mapArtVersionToApi(int artVersion) {
-        // NOTE: Art version 87 and api level 26 do not correspond to any
-        // particular android release and represent the current (as of
-        // October 2016) state of aosp/master.
-        if (artVersion >= 87) {
+        // 144 is the current version in the master branch of AOSP as of 2018-05-22
+        if (artVersion >= 144) {
+            return 28;
+        }
+        if (artVersion >= 131) {
+            return 27;
+        }
+        if (artVersion >= 124) {
             return 26;
         }
         if (artVersion >= 79) {
@@ -70,13 +90,20 @@ public class VersionMap {
             case 24:
             case 25:
                 return 79;
+            case 26:
+                return 124;
+            case 27:
+                return 131;
+            case 28:
+                // 144 is the current version in the master branch of AOSP as of 2018-05-22
+                return 144;
         }
 
-        // NOTE: Art version 87 and api level 26 do not correspond to any
+        // NOTE: Art version 143 and api level 27 do not correspond to any
         // particular android release and represent the current (as of
-        // October 2016) state of aosp/master.
-        if (api > 25) {
-            return 87;
+        // May 2018) state of aosp/master.
+        if (api > 26) {
+            return 143;
         }
         return NO_VERSION;
     }

@@ -67,7 +67,7 @@ import java.util.zip.ZipFile;
 public final class DexFileFactory {
 
     @Nonnull
-    public static DexBackedDexFile loadDexFile(@Nonnull String path, @Nonnull Opcodes opcodes) throws IOException {
+    public static DexBackedDexFile loadDexFile(@Nonnull String path, @Nullable Opcodes opcodes) throws IOException {
         return loadDexFile(new File(path), opcodes);
     }
 
@@ -88,7 +88,7 @@ public final class DexFileFactory {
      * in a zip file is not a valid dex file
      */
     @Nonnull
-    public static DexBackedDexFile loadDexFile(@Nonnull File file, @Nonnull Opcodes opcodes) throws IOException {
+    public static DexBackedDexFile loadDexFile(@Nonnull File file, @Nullable Opcodes opcodes) throws IOException {
         if (!file.exists()) {
             throw new DexFileNotFoundException("%s does not exist", file.getName());
         }
@@ -273,7 +273,7 @@ public final class DexFileFactory {
      * @throws MultipleMatchingDexEntriesException If multiple entries match the given dexEntry
      */
     public static DexBackedDexFile loadDexEntry(@Nonnull File file, @Nonnull String dexEntry,
-                                                boolean exactMatch, @Nonnull Opcodes opcodes) throws IOException {
+                                                boolean exactMatch, @Nullable Opcodes opcodes) throws IOException {
         if (!file.exists()) {
             throw new DexFileNotFoundException("Container file %s does not exist", file.getName());
         }
@@ -552,10 +552,6 @@ public final class DexFileFactory {
                 return dexFile;
             }
             return null;
-        }
-
-        @Nonnull @Override public Opcodes getOpcodes() {
-            return dexFile.getOpcodes();
         }
     }
 

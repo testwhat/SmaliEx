@@ -34,6 +34,7 @@ package org.jf.dexlib2.writer.builder;
 import org.jf.dexlib2.base.value.*;
 import org.jf.dexlib2.iface.value.EncodedValue;
 import org.jf.dexlib2.immutable.value.*;
+import org.jf.dexlib2.writer.DexWriter;
 import org.jf.util.ExceptionWithContext;
 
 import javax.annotation.Nonnull;
@@ -66,6 +67,7 @@ public abstract class BuilderEncodedValues {
 
     public static class BuilderArrayEncodedValue extends BaseArrayEncodedValue implements BuilderEncodedValue {
         @Nonnull final List<? extends BuilderEncodedValue> elements;
+        int offset = DexWriter.NO_OFFSET;
 
         BuilderArrayEncodedValue(@Nonnull List<? extends BuilderEncodedValue> elements) {
             this.elements = elements;
@@ -238,5 +240,27 @@ public abstract class BuilderEncodedValues {
         @Nonnull @Override public String getValue() {
             return typeReference.getType();
         }
+    }
+
+    public static class BuilderMethodTypeEncodedValue extends BaseMethodTypeEncodedValue
+            implements BuilderEncodedValue {
+        @Nonnull final BuilderMethodProtoReference methodProtoReference;
+
+        public BuilderMethodTypeEncodedValue(@Nonnull BuilderMethodProtoReference methodProtoReference) {
+            this.methodProtoReference = methodProtoReference;
+        }
+
+        @Nonnull @Override public BuilderMethodProtoReference getValue() { return methodProtoReference; }
+    }
+
+    public static class BuilderMethodHandleEncodedValue extends BaseMethodHandleEncodedValue
+            implements BuilderEncodedValue {
+        @Nonnull final BuilderMethodHandleReference methodHandleReference;
+
+        public BuilderMethodHandleEncodedValue(@Nonnull BuilderMethodHandleReference methodHandleReference) {
+            this.methodHandleReference = methodHandleReference;
+        }
+
+        @Nonnull @Override public BuilderMethodHandleReference getValue() { return methodHandleReference; }
     }
 }

@@ -40,6 +40,7 @@ import org.jf.dexlib2.dexbacked.reference.DexBackedMethodReference;
 import org.jf.dexlib2.dexbacked.reference.DexBackedStringReference;
 import org.jf.dexlib2.dexbacked.reference.DexBackedTypeReference;
 import org.jf.dexlib2.dexbacked.util.CompactOffsetTable;
+import org.jf.dexlib2.dexbacked.util.FixedSizeList;
 import org.jf.dexlib2.dexbacked.util.FixedSizeSet;
 import org.jf.dexlib2.iface.DexFile;
 import org.jf.dexlib2.iface.reference.Reference;
@@ -69,6 +70,7 @@ public class DexBackedDexFile extends BaseDexBuffer implements DexFile {
     private final int methodStartOffset;
     private final int classCount;
     private final int classStartOffset;
+    private final int mapOffset;
 
     public final int fileSize;
     public final int dataSize;
@@ -100,13 +102,20 @@ public class DexBackedDexFile extends BaseDexBuffer implements DexFile {
     final CompactInfo compactInfo;
     final CompactOffsetTable debugInfoOffsets;
 
-    protected DexBackedDexFile(@Nonnull Opcodes opcodes, @Nonnull byte[] buf, int offset, boolean verifyMagic) {
+    protected DexBackedDexFile(@Nullable Opcodes opcodes, @Nonnull byte[] buf, int offset, boolean verifyMagic) {
         super(buf, offset);
 
-        this.opcodes = opcodes;
-
+        int dexVersion;
         if (verifyMagic) {
-            DexUtil.verifyDexHeader(buf, offset);
+            dexVersion = DexUtil.verifyDexHeader(buf, offset);
+        } else {
+            dexVersion = HeaderItem.getVersion(buf, offset);
+        }
+
+        if (opcodes == null) {
+            this.opcodes = Opcodes.forDexVersion(dexVersion);
+        } else {
+            this.opcodes = opcodes;
         }
 
         fileSize = readSmallUint(HeaderItem.FILE_SIZE_OFFSET);
@@ -122,6 +131,7 @@ public class DexBackedDexFile extends BaseDexBuffer implements DexFile {
         methodStartOffset = readSmallUint(HeaderItem.METHOD_START_OFFSET);
         classCount = readSmallUint(HeaderItem.CLASS_COUNT_OFFSET);
         classStartOffset = readSmallUint(HeaderItem.CLASS_START_OFFSET);
+        mapOffset = readSmallUint(HeaderItem.MAP_OFFSET);
 
         dataSize = readSmallUint(HeaderItem.DATA_SIZE);
         dataOffset = readSmallUint(HeaderItem.DATA_OFFSET);
@@ -142,20 +152,20 @@ public class DexBackedDexFile extends BaseDexBuffer implements DexFile {
         }
     }
 
-    public DexBackedDexFile(@Nonnull Opcodes opcodes, @Nonnull BaseDexBuffer buf) {
+    public DexBackedDexFile(@Nullable Opcodes opcodes, @Nonnull BaseDexBuffer buf) {
         this(opcodes, buf.buf, buf.baseOffset);
     }
 
-    public DexBackedDexFile(@Nonnull Opcodes opcodes, @Nonnull byte[] buf, int offset) {
+    public DexBackedDexFile(@Nullable Opcodes opcodes, @Nonnull byte[] buf, int offset) {
         this(opcodes, buf, offset, false);
     }
 
-    public DexBackedDexFile(@Nonnull Opcodes opcodes, @Nonnull byte[] buf) {
+    public DexBackedDexFile(@Nullable Opcodes opcodes, @Nonnull byte[] buf) {
         this(opcodes, buf, 0, true);
     }
 
     @Nonnull
-    public static DexBackedDexFile fromInputStream(@Nonnull Opcodes opcodes, @Nonnull InputStream is)
+    public static DexBackedDexFile fromInputStream(@Nullable Opcodes opcodes, @Nonnull InputStream is)
             throws IOException {
         DexUtil.verifyDexHeader(is);
 
@@ -236,6 +246,22 @@ public class DexBackedDexFile extends BaseDexBuffer implements DexFile {
         return classStartOffset + classIndex*ClassDefItem.ITEM_SIZE;
     }
 
+    public int getCallSiteIdItemOffset(int callSiteIndex) {
+        MapItem mapItem = getMapItemForSection(ItemType.CALL_SITE_ID_ITEM);
+        if (mapItem == null || callSiteIndex >= mapItem.getItemCount()) {
+            throw new InvalidItemIndex(callSiteIndex, "Call site index out of bounds: %d", callSiteIndex);
+        }
+        return mapItem.getOffset() + callSiteIndex * CallSiteIdItem.ITEM_SIZE;
+    }
+
+    public int getMethodHandleItemOffset(int methodHandleIndex) {
+        MapItem mapItem = getMapItemForSection(ItemType.METHOD_HANDLE_ITEM);
+        if (mapItem == null || methodHandleIndex >= mapItem.getItemCount()) {
+            throw new InvalidItemIndex(methodHandleIndex , "Method handle index out of bounds: %d", methodHandleIndex);
+        }
+        return mapItem.getOffset() + methodHandleIndex * MethodHandleItem.ITEM_SIZE;
+    }
+
     public int getClassCount() {
         return classCount;
     }
@@ -258,6 +284,22 @@ public class DexBackedDexFile extends BaseDexBuffer implements DexFile {
 
     public int getMethodCount() {
         return methodCount;
+    }
+
+    public int getCallSiteCount() {
+        MapItem mapItem = getMapItemForSection(ItemType.CALL_SITE_ID_ITEM);
+        if (mapItem == null) {
+            return 0;
+        }
+        return mapItem.getItemCount();
+    }
+
+    public int getMethodHandleCount() {
+        MapItem mapItem = getMapItemForSection(ItemType.METHOD_HANDLE_ITEM);
+        if (mapItem == null) {
+            return 0;
+        }
+        return mapItem.getItemCount();
     }
 
     @Nonnull
@@ -375,6 +417,32 @@ public class DexBackedDexFile extends BaseDexBuffer implements DexFile {
 
     public int readSmallUintPlusDataOffset(int offset) {
         return super.readSmallUint(offset) + compactDataOffset;
+    }
+
+    public List<MapItem> getMapItems() {
+        final int mapSize = readSmallUint(mapOffset);
+
+        return new FixedSizeList<MapItem>() {
+            @Override
+            public MapItem readItem(int index) {
+                int mapItemOffset = mapOffset + 4 + index * MapItem.ITEM_SIZE;
+                return new MapItem(DexBackedDexFile.this, mapItemOffset);
+            }
+
+            @Override public int size() {
+                return mapSize;
+            }
+        };
+    }
+
+    @Nullable
+    public MapItem getMapItemForSection(int itemType) {
+        for (MapItem mapItem: getMapItems()) {
+            if (mapItem.getType() == itemType) {
+                return mapItem;
+            }
+        }
+        return null;
     }
 
     public static class NotADexFile extends RuntimeException {
