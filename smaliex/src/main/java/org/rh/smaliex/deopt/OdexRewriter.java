@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import org.jf.dexlib2.Opcodes;
+import org.jf.dexlib2.VersionMap;
 import org.jf.dexlib2.analysis.AnalysisException;
 import org.jf.dexlib2.analysis.ClassPath;
 import org.jf.dexlib2.analysis.MethodAnalyzer;
@@ -116,7 +117,7 @@ public class OdexRewriter extends org.jf.dexlib2.rewriter.DexRewriter {
         @Nonnull
         @Override
         public Opcodes getOpcodes() {
-            return DexUtil.getDefaultOpCodes(null);
+            return DexUtil.getDefaultOpCodes();
         }
     }
 
@@ -145,7 +146,7 @@ public class OdexRewriter extends org.jf.dexlib2.rewriter.DexRewriter {
             }
             if (availableClasses.get("Ljava/lang/Class;") == null) {
                 final DexFile basicClasses = new ImmutableDexFile(
-                        DexUtil.getOpcodes(DexUtil.DEFAULT_API_LEVEL),
+                        DexUtil.getOpcodes(VersionMap.mapArtVersionToApi(oatVersion)),
                         ImmutableSet.of(
                                 new ReflectionClassDef(Class.class),
                                 new ReflectionClassDef(Cloneable.class),

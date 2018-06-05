@@ -19,6 +19,7 @@ package org.rh.smaliex;
 import org.jf.baksmali.BaksmaliOptions;
 import org.jf.dexlib2.MultiDex;
 import org.jf.dexlib2.Opcodes;
+import org.jf.dexlib2.VersionMap;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile;
 import org.jf.dexlib2.iface.DexFile;
 import org.jf.dexlib2.writer.pool.DexPool;
@@ -40,7 +41,7 @@ public class OdexUtil {
 
     public static void vdex2dex(@Nonnull String vdex,
                                 @Nullable String outPath) throws IOException {
-        odex2dex(vdex, NO_NEED_BOOT_CLASSPATH, outPath, -1);
+        odex2dex(vdex, NO_NEED_BOOT_CLASSPATH, outPath, VersionMap.NO_VERSION);
     }
 
     public static void odex2dex(@Nonnull String odex,
@@ -65,11 +66,12 @@ public class OdexUtil {
                 }
             } else throw new IOException("Not a vdex file: " + input);
         } else {
-            if (MiscUtil.checkFourBytes(input, 4, 0x30333700) && apiLevel < DexUtil.API_N) {
-                LLog.i("The input has dex version 037, suggest to use api level " + DexUtil.API_N);
+            Opcodes opcodes = apiLevel != VersionMap.NO_VERSION
+                    ? DexUtil.getOpcodes(apiLevel) : null;
+            final DexBackedDexFile odexFile = DexUtil.loadSingleDex(input, opcodes);
+            if (opcodes == null) {
+                opcodes = odexFile.getOpcodes();
             }
-            final Opcodes opcodes = DexUtil.getOpcodes(apiLevel);
-            final DexFile odexFile = DexUtil.loadSingleDex(input, opcodes);
             final OdexRewriter rewriter = OdexRewriter.get(
                     bootClassPath, opcodes, outputFolder.getAbsolutePath());
             final File outputFile = MiscUtil.changeExt(

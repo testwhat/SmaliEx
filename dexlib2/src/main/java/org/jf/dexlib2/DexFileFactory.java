@@ -147,7 +147,7 @@ public final class DexFileFactory {
     @Nonnull
     public static List<DexBackedDexFile> loadDexFiles(@Nonnull File file,
                                                       @Nullable String dexEntry,
-                                                      @Nonnull Opcodes opcodes) throws IOException {
+                                                      @Nullable Opcodes opcodes) throws IOException {
         int dotPos = dexEntry == null ? -1 : dexEntry.lastIndexOf('.');
         String prefix = dotPos > 0 ? dexEntry.substring(0, dotPos) : "classes";
         List<DexBackedDexFile> dexFiles = Lists.newArrayList();

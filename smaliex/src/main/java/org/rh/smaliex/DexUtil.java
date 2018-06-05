@@ -41,16 +41,14 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class DexUtil {
-    public static int DEFAULT_API_LEVEL = 20;
-    public static final int API_N = 24;
-    public static Opcodes DEFAULT_OPCODES;
+    private static Opcodes DEFAULT_OPCODES;
 
     private static final ConcurrentHashMap<Integer, SoftReference<Opcodes>> opCodesCache =
             new ConcurrentHashMap<>();
 
     public static Opcodes getOpcodes(int apiLevel) {
         if (apiLevel <= 0) {
-            apiLevel = DEFAULT_API_LEVEL;
+            return getDefaultOpCodes();
         }
         Opcodes opcodes = MiscUtil.getCache(opCodesCache, apiLevel);
         if (opcodes == null) {
@@ -61,26 +59,23 @@ public class DexUtil {
     }
 
     @Nonnull
-    public static Opcodes getDefaultOpCodes(@Nullable Opcodes opc) {
-        if (opc == null) {
-            if (DEFAULT_OPCODES == null) {
-                DEFAULT_OPCODES = Opcodes.getDefault();
-            }
-            opc = DEFAULT_OPCODES;
+    public static Opcodes getDefaultOpCodes() {
+        if (DEFAULT_OPCODES == null) {
+            DEFAULT_OPCODES = Opcodes.getDefault();
         }
-        return opc;
+        return DEFAULT_OPCODES;
     }
 
     @Nonnull
     public static DexBackedDexFile loadSingleDex(@Nonnull File file,
                                                  @Nullable Opcodes opc) throws IOException {
-        return DexFileFactory.loadDexFile(file, getDefaultOpCodes(opc));
+        return DexFileFactory.loadDexFile(file, opc);
     }
 
     @Nonnull
     public static List<DexBackedDexFile> loadMultiDex(@Nonnull File file, @Nullable Opcodes opc) {
         try {
-            return DexFileFactory.loadDexFiles(file, null, getDefaultOpCodes(opc));
+            return DexFileFactory.loadDexFiles(file, null, opc);
         } catch (IOException ex) {
             LLog.ex(ex);
         }

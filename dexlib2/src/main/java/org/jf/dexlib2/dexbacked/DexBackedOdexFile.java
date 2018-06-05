@@ -38,6 +38,7 @@ import org.jf.dexlib2.dexbacked.util.VariableSizeList;
 import org.jf.dexlib2.util.DexUtil;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
@@ -49,7 +50,7 @@ public class DexBackedOdexFile extends DexBackedDexFile {
 
     private final byte[] odexBuf;
 
-    public DexBackedOdexFile(@Nonnull Opcodes opcodes, @Nonnull byte[] odexBuf, byte[] dexBuf) {
+    public DexBackedOdexFile(@Nullable Opcodes opcodes, @Nonnull byte[] odexBuf, byte[] dexBuf) {
         super(opcodes, dexBuf);
 
         this.odexBuf = odexBuf;
@@ -84,7 +85,7 @@ public class DexBackedOdexFile extends DexBackedDexFile {
         };
     }
 
-    @Nonnull public static DexBackedOdexFile fromInputStream(@Nonnull Opcodes opcodes, @Nonnull InputStream is)
+    @Nonnull public static DexBackedOdexFile fromInputStream(@Nullable Opcodes opcodes, @Nonnull InputStream is)
             throws IOException {
         DexUtil.verifyOdexHeader(is);
 

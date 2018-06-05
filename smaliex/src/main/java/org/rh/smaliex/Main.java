@@ -16,6 +16,8 @@
 
 package org.rh.smaliex;
 
+import org.jf.dexlib2.VersionMap;
+
 import java.io.File;
 import java.io.IOException;
 
@@ -48,7 +50,7 @@ public class Main {
 
     public static void mainImpl(String[] args) throws IOException {
         String outputPath = null;
-        int apiLevel = DexUtil.DEFAULT_API_LEVEL;
+        int apiLevel = VersionMap.NO_VERSION;
         if (args.length > 2) {
             String opt = args[0];
             while (opt.length() > 1 && opt.charAt(0) == '-') {
