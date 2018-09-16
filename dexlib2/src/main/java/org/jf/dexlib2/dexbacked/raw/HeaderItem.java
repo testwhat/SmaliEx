@@ -31,6 +31,7 @@
 
 package org.jf.dexlib2.dexbacked.raw;
 
+import org.jf.dexlib2.VersionMap;
 import org.jf.dexlib2.dexbacked.BaseDexBuffer;
 import org.jf.dexlib2.dexbacked.raw.util.DexAnnotator;
 import org.jf.dexlib2.util.AnnotatedBytes;
@@ -43,7 +44,6 @@ public class HeaderItem {
     public static final int ITEM_SIZE = 0x70;
 
     private static final byte[] MAGIC_VALUE = new byte[] { 0x64, 0x65, 0x78, 0x0a, 0x00, 0x00, 0x00, 0x00 };
-    private static final int[] SUPPORTED_DEX_VERSIONS = new int[] { 35, 37, 38, 39 };
 
     public static final int LITTLE_ENDIAN_TAG = 0x12345678;
     public static final int BIG_ENDIAN_TAG = 0x78563412;
@@ -237,17 +237,7 @@ public class HeaderItem {
      * @return The dex file magic number
      */
     public static byte[] getMagicForApi(int api) {
-        if (api < 24) {
-            // Prior to Android N we only support dex version 035.
-            return getMagicForDexVersion(35);
-        } if (api < 26) {
-            // On android N and later we support dex version 037.
-            return getMagicForDexVersion(37);
-        } else if (api < 28) {
-            return getMagicForDexVersion(38);
-        } else {
-            return getMagicForDexVersion(39);
-        }
+        return getMagicForDexVersion(VersionMap.mapApiToDexVersion(api));
     }
 
     public static byte[] getMagicForDexVersion(int dexVersion) {
@@ -320,12 +310,7 @@ public class HeaderItem {
     }
 
     public static boolean isSupportedDexVersion(int version) {
-        for (int i=0; i<SUPPORTED_DEX_VERSIONS.length; i++) {
-            if (SUPPORTED_DEX_VERSIONS[i] == version) {
-                return true;
-            }
-        }
-        return false;
+        return VersionMap.mapDexVersionToApi(version) != VersionMap.NO_VERSION;
     }
 
     public static int getEndian(byte[] buf, int offset) {

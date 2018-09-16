@@ -8,57 +8,77 @@ import java.util.Arrays;
 
 public class MemoryDataStore implements DexDataStore {
     private byte[] buf;
-    private int dataLength;
+    private int size = 0;
 
     public MemoryDataStore() {
-        this(1024 * 1024);
+        this(0);
     }
 
     public MemoryDataStore(int initialCapacity) {
         buf = new byte[initialCapacity];
     }
 
-    public byte[] getData() {
+    public byte[] getBuffer() {
         return buf;
     }
 
-    private void updateDataLength(int position) {
-        if (position > dataLength) {
-            dataLength = position;
+    private void updateSize(int position) {
+        if (position > size) {
+            size = position;
         }
     }
 
+    public int getSize() {
+        return size;
+    }
+
+    public byte[] getData() {
+        return Arrays.copyOf(buf, size);
+    }
+
     @Nonnull @Override public OutputStream outputAt(final int offset) {
+        if (offset < 0) throw new IllegalArgumentException();
         return new OutputStream() {
             private int position = offset;
             @Override public void write(int b) throws IOException {
-                growBufferIfNeeded(position);
+                growBufferIfNeeded(position + 1);
                 buf[position++] = (byte)b;
-                updateDataLength(position);
+                updateSize(position);
             }
 
             @Override public void write(@Nonnull byte[] b, int off, int len) throws IOException {
                 growBufferIfNeeded(position + len);
                 System.arraycopy(b, off, buf, position, len);
                 position += len;
-                updateDataLength(position);
+                updateSize(position);
             }
         };
     }
 
-    private void growBufferIfNeeded(int index) {
-        if (index < buf.length) {
-            return;
+    private void growBufferIfNeeded(int minSize) {
+        if (minSize > size) {
+            if (minSize > buf.length) {
+                int newSize = getNewBufferSize(buf.length, minSize);
+                if (newSize < minSize) throw new IndexOutOfBoundsException();
+                buf = Arrays.copyOf(buf, newSize);
+            }
+            size = minSize;
         }
-        buf = Arrays.copyOf(buf, index + (index >> 1));
+    }
+
+    protected int getNewBufferSize(int currentSize, int newMinSize) {
+        final int MIN_GROWTH_STEP = 256 * 1024;
+        return Math.max(newMinSize + (newMinSize >> 2), currentSize + MIN_GROWTH_STEP);
     }
 
     @Nonnull @Override public InputStream readAt(final int offset) {
+        if (offset < 0) throw new IllegalArgumentException();
         return new InputStream() {
             private int position = offset;
+            private int mark = offset;
 
             @Override public int read() throws IOException {
-                if (position >= dataLength) {
+                if (position >= size) {
                     return -1;
                 }
                 return buf[position++];
@@ -66,7 +86,7 @@ public class MemoryDataStore implements DexDataStore {
 
             @Override public int read(@Nonnull byte[] b, int off, int len) throws IOException {
                 int remain = available();
-                if (remain == 0 || position >= dataLength) {
+                if (remain == 0 || position >= size) {
                     return -1;
                 }
                 int readLength = Math.min(len, remain);
@@ -82,13 +102,25 @@ public class MemoryDataStore implements DexDataStore {
             }
 
             @Override public int available() throws IOException {
-                return dataLength - position;
+                return size - position;
+            }
+
+            @Override public void mark(int i) {
+                mark = position;
+            }
+
+            @Override public void reset() throws IOException {
+                position = mark;
+            }
+
+            @Override public boolean markSupported() {
+                return true;
             }
         };
     }
 
     public void writeTo(OutputStream os) throws IOException {
-        os.write(buf, 0, dataLength);
+        os.write(buf, 0, size);
     }
 
     @Override public void close() throws IOException {
