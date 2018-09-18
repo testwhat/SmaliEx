@@ -107,6 +107,8 @@ public abstract class DexWriter<
     public static final int NO_INDEX = -1;
     public static final int NO_OFFSET = 0;
 
+    public static final int MAX_POOL_SIZE = (1 << 16);
+
     protected final Opcodes opcodes;
 
     protected int stringIndexSectionOffset = NO_OFFSET;
@@ -136,6 +138,10 @@ public abstract class DexWriter<
     protected int numCodeItemItems = 0;
     protected int numClassDataItems = 0;
 
+    // The sections defined here must be kept in sync with these section arrays:
+    // - DexWriter.overflowableSections
+    // - DexPool.sections
+
     public final StringSectionType stringSection;
     public final TypeSectionType typeSection;
     public final ProtoSectionType protoSection;
@@ -149,6 +155,8 @@ public abstract class DexWriter<
     public final AnnotationSectionType annotationSection;
     public final AnnotationSetSectionType annotationSetSection;
     public final EncodedArraySectionType encodedArraySection;
+
+    private final IndexSection<?>[] overflowableSections;
 
     protected DexWriter(Opcodes opcodes) {
         this.opcodes = opcodes;
@@ -166,6 +174,17 @@ public abstract class DexWriter<
         this.annotationSection = sectionProvider.getAnnotationSection();
         this.annotationSetSection = sectionProvider.getAnnotationSetSection();
         this.encodedArraySection = sectionProvider.getEncodedArraySection();
+
+        overflowableSections = new IndexSection<?>[] {
+                //stringSection,            // supports jumbo indexes
+                typeSection,
+                protoSection,
+                fieldSection,
+                methodSection,
+                //classSection,             // redundant check: cannot be larger than typeSection
+                callSiteSection,
+                methodHandleSection,
+        };
     }
 
     @Nonnull protected abstract SectionProvider getSectionProvider();
@@ -250,19 +269,28 @@ public abstract class DexWriter<
     }
 
     /**
-     * Checks whether any of the size-sensitive constant pools have overflowed.
-     *
-     * This checks whether the type, method, field pools are larger than 64k entries.
+     * Checks whether any of the size-sensitive constant pools have overflowed and have more than 64Ki entries.
      *
      * Note that even if this returns true, it may still be possible to successfully write the dex file, if the
-     * overflowed items are not referenced anywhere that uses a 16-bit index
+     * overflowed items are not referenced anywhere that uses a 16-bit index.
      *
      * @return true if any of the size-sensitive constant pools have overflowed
      */
     public boolean hasOverflowed() {
-        return methodSection.getItemCount() > (1 << 16) ||
-                typeSection.getItemCount() > (1 << 16) ||
-                fieldSection.getItemCount() > (1 << 16);
+        return hasOverflowed(MAX_POOL_SIZE);
+    }
+
+    /**
+     * Checks whether any of the size-sensitive constant pools have more than the supplied maximum number of entries.
+     *
+     * @param maxPoolSize the maximum number of entries allowed in any of the size-sensitive constant pools
+     * @return true if any of the size-sensitive constant pools have overflowed the supplied size limit
+     */
+    public boolean hasOverflowed(int maxPoolSize) {
+        for (IndexSection section: overflowableSections) {
+            if (section.getItemCount() > maxPoolSize) return true;
+        }
+        return false;
     }
 
     public void writeTo(@Nonnull DexDataStore dest) throws IOException {
@@ -581,15 +609,18 @@ public abstract class DexWriter<
             writer.writeUshort(0);
             int memberIndex;
             switch (methodHandleReference.getMethodHandleType()) {
-                case MethodHandleType.INSTANCE_GET:
-                case MethodHandleType.INSTANCE_PUT:
-                case MethodHandleType.STATIC_GET:
                 case MethodHandleType.STATIC_PUT:
+                case MethodHandleType.STATIC_GET:
+                case MethodHandleType.INSTANCE_PUT:
+                case MethodHandleType.INSTANCE_GET:
                     memberIndex = fieldSection.getItemIndex(
                             methodHandleSection.getFieldReference(methodHandleReference));
                     break;
-                case MethodHandleType.INSTANCE_INVOKE:
-                case MethodHandleType.STATIC_INVOKE:
+                case MethodHandleType.INVOKE_STATIC:
+                case MethodHandleType.INVOKE_INSTANCE:
+                case MethodHandleType.INVOKE_CONSTRUCTOR:
+                case MethodHandleType.INVOKE_DIRECT:
+                case MethodHandleType.INVOKE_INTERFACE:
                     memberIndex = methodSection.getItemIndex(
                             methodHandleSection.getMethodReference(methodHandleReference));
                     break;

@@ -31,7 +31,7 @@
 
 apply plugin: 'idea'
 
-version = '2.2.3'
+version = '2.2.5'
 def jcommanderVersion = ''
 
 if (!('release' in gradle.startParameter.taskNames)) {
@@ -64,7 +64,7 @@ if (!('release' in gradle.startParameter.taskNames)) {
 task release() {
 }
 
-task(install) << {
+task(install).doLast {
     println "Installing version: ${version}"
 }
 
@@ -95,7 +95,7 @@ subprojects {
                 antlr: 'org.antlr:antlr:3.5.2',
                 stringtemplate: 'org.antlr:stringtemplate:3.2.1',
                 jflex_plugin: 'org.xbib.gradle.plugin:gradle-plugin-jflex:1.1.0',
-                proguard_gradle: 'net.sf.proguard:proguard-gradle:5.2.1',
+                proguard_gradle: 'net.sf.proguard:proguard-gradle:6.0.3',
                 dx: 'com.google.android.tools:dx:1.7',
                 gson: 'com.google.code.gson:gson:2.3.1',
                 jcommander: jcommanderVersion
@@ -186,6 +186,6 @@ buildscript {
 }
 
 task wrapper(type: Wrapper) {
-    gradleVersion = '3.5'
+    gradleVersion = '4.6'
     distributionType = Wrapper.DistributionType.ALL
 }
