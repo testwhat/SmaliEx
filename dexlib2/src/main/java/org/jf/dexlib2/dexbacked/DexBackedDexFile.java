@@ -150,6 +150,16 @@ public class DexBackedDexFile extends BaseDexBuffer implements DexFile {
             compactInfo = null;
             debugInfoOffsets = null;
         }
+
+        if (dexVersion >= 41) {
+            // Non-trivial dex container (i.e. multiples dex files in the same physical file).
+            int container_off = readSmallUint(HeaderItem.CONTAINER_OFF_OFFSET);
+            int container_size = readSmallUint(HeaderItem.CONTAINER_SIZE_OFFSET);
+            int file_size = readSmallUint(HeaderItem.FILE_SIZE_OFFSET);
+            if (container_off != 0 || container_size != file_size) {
+                System.out.println("Found dex container");
+            }
+        }
     }
 
     public DexBackedDexFile(@Nullable Opcodes opcodes, @Nonnull BaseDexBuffer buf) {

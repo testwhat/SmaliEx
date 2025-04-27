@@ -44,27 +44,46 @@ public class VersionMap {
                 return 27;
             case 39:
                 return 28;
+            case 40:
+                return 34;
+            case 41:
+                return 35;
             default:
                 return NO_VERSION;
         }
     }
 
     public static int mapApiToDexVersion(int api) {
-        if (api <= 23) {
+        if (api <= 23) {  // Android M/6
             return 35;
         }
-        if (api <= 25) {
-            return 37;
+        switch (api) {
+            case 24:  // Android N/7
+            case 25:  // Android N/7.1
+                return 37;
+            case 26:  // Android O/8
+            case 27:  // Android O/8.1
+                return 38;
+            case 28:  // Android P/9
+                return 39;
+            case 29:  // Android Q/10
+            case 30:  // Android R/11
+            case 31:  // Android S/12
+            case 32:  // Android S/12.1
+            case 33:  // Android T/13
+            case 34:  // Android U/14
+                return 40;
+            case 35:  // Android V/15
+                return 41;
         }
-        if (api <= 27) {
-            return 38;
-        }
-        return 39;
+        return NO_VERSION;
     }
 
     public static int mapArtVersionToApi(int artVersion) {
-        // 144 is the current version in the master branch of AOSP as of 2018-05-22
-        if (artVersion >= 144) {
+        if (artVersion >= 170) {
+            return 29;
+        }
+        if (artVersion >= 138) {
             return 28;
         }
         if (artVersion >= 131) {
@@ -89,10 +108,6 @@ public class VersionMap {
     }
 
     public static int mapApiToArtVersion(int api) {
-        if (api < 19) {
-            return NO_VERSION;
-        }
-
         switch (api) {
             case 19:
             case 20:
@@ -110,9 +125,17 @@ public class VersionMap {
                 return 124;
             case 27:
                 return 131;
-            default:
+            case 28:
                 // 144 is the current version in the master branch of AOSP as of 2018-05-22
                 return 144;
         }
+
+        // NOTE: Art version 143 and api level 27 do not correspond to any
+        // particular android release and represent the current (as of
+        // May 2018) state of aosp/master.
+        if (api > 26) {
+            return 143;
+        }
+        return NO_VERSION;
     }
 }
