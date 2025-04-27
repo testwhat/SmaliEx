@@ -52,6 +52,7 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.AbstractList;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -75,6 +76,9 @@ public class DexBackedDexFile extends BaseDexBuffer implements DexFile {
     public final int fileSize;
     public final int dataSize;
     final int dataOffset;
+
+    public final int headerOffset;
+    public final int nextContainerOffset;
 
     static class CompactInfo { // libdexfile/dex/compact_dex_file.h
         final int featureFlags;
@@ -102,7 +106,13 @@ public class DexBackedDexFile extends BaseDexBuffer implements DexFile {
     final CompactInfo compactInfo;
     final CompactOffsetTable debugInfoOffsets;
 
-    protected DexBackedDexFile(@Nullable Opcodes opcodes, @Nonnull byte[] buf, int offset, boolean verifyMagic) {
+    protected DexBackedDexFile(@Nullable Opcodes opcodes, @Nonnull byte[] buf, int offset,
+            boolean verifyMagic) {
+        this(opcodes, buf, offset, 0, verifyMagic);
+    }
+
+    protected DexBackedDexFile(@Nullable Opcodes opcodes, @Nonnull byte[] buf, int offset,
+            int headerOffset, boolean verifyMagic) {
         super(buf, offset);
 
         int dexVersion;
@@ -118,23 +128,24 @@ public class DexBackedDexFile extends BaseDexBuffer implements DexFile {
             this.opcodes = opcodes;
         }
 
-        fileSize = readSmallUint(HeaderItem.FILE_SIZE_OFFSET);
-        stringCount = readSmallUint(HeaderItem.STRING_COUNT_OFFSET);
-        stringStartOffset = readSmallUint(HeaderItem.STRING_START_OFFSET);
-        typeCount = readSmallUint(HeaderItem.TYPE_COUNT_OFFSET);
-        typeStartOffset = readSmallUint(HeaderItem.TYPE_START_OFFSET);
-        protoCount = readSmallUint(HeaderItem.PROTO_COUNT_OFFSET);
-        protoStartOffset = readSmallUint(HeaderItem.PROTO_START_OFFSET);
-        fieldCount = readSmallUint(HeaderItem.FIELD_COUNT_OFFSET);
-        fieldStartOffset = readSmallUint(HeaderItem.FIELD_START_OFFSET);
-        methodCount = readSmallUint(HeaderItem.METHOD_COUNT_OFFSET);
-        methodStartOffset = readSmallUint(HeaderItem.METHOD_START_OFFSET);
-        classCount = readSmallUint(HeaderItem.CLASS_COUNT_OFFSET);
-        classStartOffset = readSmallUint(HeaderItem.CLASS_START_OFFSET);
-        mapOffset = readSmallUint(HeaderItem.MAP_OFFSET);
+        this.headerOffset = headerOffset;
+        fileSize = readHeaderItem(HeaderItem.FILE_SIZE_OFFSET);
+        stringCount = readHeaderItem(HeaderItem.STRING_COUNT_OFFSET);
+        stringStartOffset = readHeaderItem(HeaderItem.STRING_START_OFFSET);
+        typeCount = readHeaderItem(HeaderItem.TYPE_COUNT_OFFSET);
+        typeStartOffset = readHeaderItem(HeaderItem.TYPE_START_OFFSET);
+        protoCount = readHeaderItem(HeaderItem.PROTO_COUNT_OFFSET);
+        protoStartOffset = readHeaderItem(HeaderItem.PROTO_START_OFFSET);
+        fieldCount = readHeaderItem(HeaderItem.FIELD_COUNT_OFFSET);
+        fieldStartOffset = readHeaderItem(HeaderItem.FIELD_START_OFFSET);
+        methodCount = readHeaderItem(HeaderItem.METHOD_COUNT_OFFSET);
+        methodStartOffset = readHeaderItem(HeaderItem.METHOD_START_OFFSET);
+        classCount = readHeaderItem(HeaderItem.CLASS_COUNT_OFFSET);
+        classStartOffset = readHeaderItem(HeaderItem.CLASS_START_OFFSET);
+        mapOffset = readHeaderItem(HeaderItem.MAP_OFFSET);
 
-        dataSize = readSmallUint(HeaderItem.DATA_SIZE);
-        dataOffset = readSmallUint(HeaderItem.DATA_OFFSET);
+        dataSize = readHeaderItem(HeaderItem.DATA_SIZE);
+        dataOffset = readHeaderItem(HeaderItem.DATA_OFFSET);
 
         // See https://android.googlesource.com/platform/art/+/c3a22aa19bbe35ff8447460b29e07d42937a39de
         // Shared separate data section for compact dex.
@@ -151,15 +162,44 @@ public class DexBackedDexFile extends BaseDexBuffer implements DexFile {
             debugInfoOffsets = null;
         }
 
+        // https://android-review.git.corp.google.com/c/platform/art/+/2834452
         if (dexVersion >= 41) {
             // Non-trivial dex container (i.e. multiples dex files in the same physical file).
-            int container_off = readSmallUint(HeaderItem.CONTAINER_OFF_OFFSET);
-            int container_size = readSmallUint(HeaderItem.CONTAINER_SIZE_OFFSET);
-            int file_size = readSmallUint(HeaderItem.FILE_SIZE_OFFSET);
-            if (container_off != 0 || container_size != file_size) {
-                System.out.println("Found dex container");
+            final int containerOffset = readHeaderItem(HeaderItem.CONTAINER_OFF_OFFSET);
+            final int containerSize = readHeaderItem(HeaderItem.CONTAINER_SIZE_OFFSET);
+            final int nextHeaderOffset = containerOffset + fileSize;
+            if (nextHeaderOffset < containerSize) {
+                nextContainerOffset = nextHeaderOffset;
+            } else {
+                nextContainerOffset = 0;
             }
+            if (containerOffset != 0 || containerSize != fileSize) {
+                System.out.println("Found dex container: containerOffset=" + containerOffset
+                        + " container_size=" + containerSize + " file_size=" + fileSize
+                        + " nextContainerOffset=" + nextContainerOffset);
+            }
+        } else {
+            nextContainerOffset = 0;
         }
+    }
+
+    public List<DexBackedDexFile> getContainedDexFiles() {
+        final ArrayList<DexBackedDexFile> dexFiles = new ArrayList<>();
+        if (nextContainerOffset == 0) {
+            return dexFiles;
+        }
+        int nextOffset = nextContainerOffset;
+        do {
+            final DexBackedDexFile dex = new DexBackedDexFile(opcodes, buf,
+                    baseOffset, nextOffset, false);
+            nextOffset = dex.nextContainerOffset;
+            dexFiles.add(dex);
+        } while (nextOffset > 0);
+        return dexFiles;
+    }
+
+    private int readHeaderItem(int offset) {
+        return readSmallUint(headerOffset + offset);
     }
 
     public DexBackedDexFile(@Nullable Opcodes opcodes, @Nonnull BaseDexBuffer buf) {

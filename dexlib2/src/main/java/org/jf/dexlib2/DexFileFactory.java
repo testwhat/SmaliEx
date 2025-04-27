@@ -165,7 +165,9 @@ public final class DexFileFactory {
                     }
                     byte[] dexBytes = new byte[fileLength];
                     ByteStreams.readFully(zipFile.getInputStream(zipEntry), dexBytes);
-                    dexFiles.add(new DexBackedDexFile(opcodes, dexBytes));
+                    DexBackedDexFile dexFile = new DexBackedDexFile(opcodes, dexBytes);
+                    dexFiles.add(dexFile);
+                    dexFiles.addAll(dexFile.getContainedDexFiles());
                 }
             }
             return dexFiles;
