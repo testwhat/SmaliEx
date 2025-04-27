@@ -64,8 +64,10 @@ if (!('release' in gradle.startParameter.taskNames)) {
 task release() {
 }
 
-task(install).doLast {
-    println "Installing version: ${version}"
+task(install) {
+    doLast {
+        println "Installing version: ${version}"
+    }
 }
 
 // The projects that get pushed to maven
@@ -95,7 +97,7 @@ subprojects {
                 antlr: 'org.antlr:antlr:3.5.2',
                 stringtemplate: 'org.antlr:stringtemplate:3.2.1',
                 jflex_plugin: 'org.xbib.gradle.plugin:gradle-plugin-jflex:1.1.0',
-                proguard_gradle: 'net.sf.proguard:proguard-gradle:6.0.3',
+                proguard_gradle: 'com.guardsquare:proguard-gradle:7.6.1',
                 dx: 'com.google.android.tools:dx:1.7',
                 gson: 'com.google.code.gson:gson:2.3.1',
                 jcommander: jcommanderVersion
@@ -107,18 +109,18 @@ subprojects {
     }
 
     if (project.name in maven_release_projects) {
-        apply plugin: 'maven'
+        apply plugin: 'maven-publish'
         apply plugin: 'signing'
 
         group = 'org.smali'
 
         task javadocJar(type: Jar, dependsOn: javadoc) {
-            classifier = 'javadoc'
+            archiveClassifier = 'javadoc'
             from 'build/docs/javadoc'
         }
 
         task sourcesJar(type: Jar) {
-            classifier = 'sources'
+            archiveClassifier = 'sources'
             from sourceSets.main.allJava
         }
 
@@ -128,51 +130,50 @@ subprojects {
         }
 
         signing {
-            required { gradle.taskGraph.hasTask('uploadArchives') }
+            required { gradle.taskGraph.hasTask('publishing') }
             sign configurations.archives
         }
 
-        uploadArchives {
-            repositories.mavenDeployer {
-                configuration = configurations.archives
+        publishing  {
+            publications {
+                mavenJava(MavenPublication) {
 
-                beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
-
-                if (rootProject.hasProperty('sonatypeUsername') && rootProject.hasProperty('sonatypePassword')) {
-                    repository(url: 'https://oss.sonatype.org/service/local/staging/deploy/maven2/') {
-                        authentication(userName: sonatypeUsername, password: sonatypePassword)
-                    }
-                }
-
-                pom.artifactId = project.name
-
-                pom.project {
-                    name project.name
-                    url 'http://smali.org'
-                    packaging 'jar'
-                    licenses {
-                        license {
-                            name 'The BSD 3-Clause License'
-                            url 'http://opensource.org/licenses/BSD-3-Clause'
-                            distribution 'repo'
+                    if (rootProject.hasProperty('sonatypeUsername') && rootProject.hasProperty('sonatypePassword')) {
+                        repository(url: 'https://oss.sonatype.org/service/local/staging/deploy/maven2/') {
+                            authentication(userName: sonatypeUsername, password: sonatypePassword)
                         }
                     }
-                    scm {
-                        connection 'scm:git:git://github.com/JesusFreke/smali.git'
-                        developerConnection 'scm:git:git@github.com:JesusFreke/smali.git'
-                    }
-                    developers {
-                        developer {
-                            id 'jesusfreke'
-                            name 'Ben Gruver'
-                            email 'jesusfreke@jesusfreke.com'
+
+                    artifactId = project.name
+
+                    pom {
+                        name = project.name
+                        url = 'http://smali.org'
+                        packaging = 'jar'
+                        licenses {
+                            license {
+                                name = 'The BSD 3-Clause License'
+                                url = 'http://opensource.org/licenses/BSD-3-Clause'
+                                distribution = 'repo'
+                            }
+                        }
+                        scm {
+                            connection = 'scm:git:git://github.com/JesusFreke/smali.git'
+                            developerConnection = 'scm:git:git@github.com:JesusFreke/smali.git'
+                        }
+                        developers {
+                            developer {
+                                id = 'jesusfreke'
+                                name = 'Ben Gruver'
+                                email = 'jesusfreke@jesusfreke.com'
+                            }
                         }
                     }
                 }
             }
         }
 
-        tasks.getByPath(':release').dependsOn(uploadArchives)
+        tasks.getByPath(':release').dependsOn(publishing)
     }
 }
 
@@ -183,9 +184,4 @@ buildscript {
     dependencies {
         classpath 'org.eclipse.jgit:org.eclipse.jgit:2.0.0.201206130900-r'
     }
-}
-
-task wrapper(type: Wrapper) {
-    gradleVersion = '4.6'
-    distributionType = Wrapper.DistributionType.ALL
 }

@@ -10,8 +10,12 @@ buildscript {
 assert JavaVersion.current().isJava7Compatible()
 
 dependencies {
-    compile project(':smali')
-    compile project(':baksmali')
+    implementation project(':dexlib2')
+    implementation project(':smali')
+    implementation project(':baksmali')
+    implementation project(':util')
+    implementation depends.findbugs
+    implementation depends.guava
 }
 
 tasks.withType(JavaCompile) {
@@ -20,8 +24,9 @@ tasks.withType(JavaCompile) {
 
 // Build a separate jar that contains all dependencies
 task fatJar(type: Jar, dependsOn: jar) {
+    dependsOn(':smali:fatJar')
     from sourceSets.main.output
-    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
 
     manifest {
         attributes("Main-Class": "org.rh.smaliex.Main")
@@ -30,10 +35,13 @@ task fatJar(type: Jar, dependsOn: jar) {
 tasks.getByPath('build').dependsOn(fatJar)
 
 task proguard(type: proguard.gradle.ProGuardTask, dependsOn: fatJar) {
-    def outFile = fatJar.destinationDir.getPath() + '/' + fatJar.baseName + '-' + fatJar.version + '-small' + '.' + fatJar.extension
+    def outFile = fatJar.destinationDirectory.get().toString() +
+            '/' + fatJar.archiveBaseName.get() +
+            '-' + fatJar.archiveVersion.get() +
+            '-smallex' + '.' + fatJar.archiveExtension.get()
     project.ext.set("outFile", outFile)
 
-    injars fatJar.archivePath
+    injars fatJar.archiveFile
     outjars outFile
 
     libraryjars "${System.properties['java.home']}/lib/rt.jar"

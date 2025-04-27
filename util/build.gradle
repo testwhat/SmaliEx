@@ -30,19 +30,20 @@
  */
 
 dependencies {
-    compile project(':dexlib2')
-    compile depends.findbugs
-    compile depends.guava
-    compile depends.jcommander
-    testCompile depends.junit
+    implementation depends.findbugs
+    implementation depends.guava
+    implementation depends.jcommander
+    testImplementation depends.junit
 }
 
-uploadArchives {
-    repositories.mavenDeployer {
-        pom.project {
-            description 'This library contains random utilities used by smali/baksmali/dexlib2'
-            scm {
-                url 'https://github.com/JesusFreke/smali/tree/master/util'
+publishing  {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                description = 'This library contains random utilities used by smali/baksmali/dexlib2'
+                scm {
+                    url = 'https://github.com/JesusFreke/smali/tree/master/util'
+                }
             }
         }
     }

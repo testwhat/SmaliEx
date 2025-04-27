@@ -73,26 +73,31 @@ idea {
 }
 
 dependencies {
-    compile project(':util')
-    compile project(':dexlib2')
-    compile depends.antlr_runtime
-    compile depends.jcommander
-    compile depends.stringtemplate
+    implementation project(':util')
+    implementation project(':dexlib2')
+    implementation depends.antlr_runtime
+    implementation depends.jcommander
+    implementation depends.stringtemplate
+    implementation depends.findbugs
+    implementation depends.guava
 
-    testCompile depends.junit
+    testImplementation depends.junit
 
     antlr depends.antlr
 }
 
-processResources.inputs.property('version', version)
-processResources.expand('version': version)
+processResources {
+    dependsOn(':smali:generateGrammarSource')
+    inputs.property('version', version)
+    expand('version': version)
+}
 
 // Build a separate jar that contains all dependencies
 task fatJar(type: Jar, dependsOn: jar) {
     from sourceSets.main.output
-    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
 
-    classifier = 'fat'
+    archiveClassifier = 'fat'
 
     manifest {
         attributes('Main-Class': 'org.jf.smali.Main')
@@ -118,23 +123,28 @@ jflex {
     generateDir = new File(generateDir, 'org/jf/smali')
 }
 
-uploadArchives {
-    repositories.mavenDeployer {
-        pom.project {
-            description 'smali is an assembler for dalvik bytecode'
-            scm {
-                url 'https://github.com/JesusFreke/smali/tree/master/smali'
+publishing  {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                description = 'smali is an assembler for dalvik bytecode'
+                scm {
+                    url = 'https://github.com/JesusFreke/smali/tree/master/smali'
+                }
             }
         }
     }
 }
 
 task proguard(type: proguard.gradle.ProGuardTask, dependsOn: fatJar) {
-    def outFile = fatJar.destinationDir.getPath() + '/' + fatJar.baseName + '-' +
-            fatJar.version + '-small' + '.' + fatJar.extension
+    project.logger.info('CCCC ' + fatJar.destinationDirectory.get().toString())
+    def outFile = fatJar.destinationDirectory.get().toString() +
+            '/' + fatJar.archiveBaseName.get() +
+            '-' + fatJar.archiveVersion.get() +
+            '-small' + '.' + fatJar.archiveExtension.get()
     project.ext.set("outFile", outFile)
 
-    injars fatJar.archivePath
+    injars fatJar.archiveFile
     outjars outFile
 
     libraryjars "${System.properties['java.home']}/lib/rt.jar"

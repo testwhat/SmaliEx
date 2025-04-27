@@ -39,13 +39,14 @@ buildscript {
 }
 
 dependencies {
-    compile project(':util')
-    compile project(':dexlib2')
-    compile depends.guava
-    compile depends.jcommander
+    implementation project(':util')
+    implementation project(':dexlib2')
+    implementation depends.guava
+    implementation depends.jcommander
+    implementation depends.findbugs
 
-    testCompile depends.junit
-    testCompile project(':smali')
+    testImplementation depends.junit
+    testImplementation project(':smali')
 }
 
 processResources.inputs.property('version', version)
@@ -54,9 +55,9 @@ processResources.expand('version': version)
 // Build a separate jar that contains all dependencies
 task fatJar(type: Jar) {
     from sourceSets.main.output
-    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
 
-    classifier = 'fat'
+    archiveClassifier = 'fat'
 
     manifest {
         attributes('Main-Class': 'org.jf.baksmali.Main')
@@ -70,22 +71,27 @@ task fatJar(type: Jar) {
 }
 tasks.getByPath('build').dependsOn(fatJar)
 
-uploadArchives {
-    repositories.mavenDeployer {
-        pom.project {
-            description 'baksmali is a disassembler for dalvik bytecode'
-            scm {
-                url 'https://github.com/JesusFreke/smali/tree/master/baksmali'
+publishing  {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                description = 'baksmali is a disassembler for dalvik bytecode'
+                scm {
+                    url = 'https://github.com/JesusFreke/smali/tree/master/baksmali'
+                }
             }
         }
     }
 }
 
 task proguard(type: proguard.gradle.ProGuardTask, dependsOn: fatJar) {
-    def outFile = fatJar.destinationDir.getPath() + '/' + fatJar.baseName + '-' + fatJar.version + '-small' + '.' + fatJar.extension
+    def outFile = fatJar.destinationDirectory.get().toString() +
+            '/' + fatJar.archiveBaseName +
+            '-' + fatJar.archiveVersion +
+            '-baksmall' + '.' + fatJar.archiveExtension
     project.ext.set("outFile", outFile)
 
-    injars fatJar.archivePath
+    injars fatJar.archiveFile
     outjars outFile
 
     libraryjars "${System.properties['java.home']}/lib/rt.jar"

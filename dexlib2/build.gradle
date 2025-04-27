@@ -46,12 +46,13 @@ configurations {
 }
 
 dependencies {
-    compile depends.findbugs
-    compile depends.guava
+    implementation project(':util')
+    implementation depends.findbugs
+    implementation depends.guava
 
-    testCompile depends.junit
-    testCompile depends.mockito
-
+    testImplementation depends.junit
+    testImplementation depends.mockito
+    testImplementation depends.jcommander
     accessorTestGenerator project('accessorTestGenerator')
 
     dx depends.dx
@@ -81,7 +82,7 @@ task generateAccessorTestDex(type: JavaExec, dependsOn: compileAccessorTestJava)
     def outputDex = file('src/test/resources/accessorTest.dex')
     file(outputDex.parent).mkdirs()
 
-    inputs.dir(project.sourceSets.accessorTest.output.classesDir)
+    inputs.dir(project.sourceSets.accessorTest.output)
     outputs.file outputDex
 
     main 'com.android.dx.command.Main'
@@ -90,15 +91,17 @@ task generateAccessorTestDex(type: JavaExec, dependsOn: compileAccessorTestJava)
     args '--dex'
     args '--no-strict'
     args "--output=${outputDex}"
-    args sourceSets.accessorTest.output.classesDir
+    args sourceSets.accessorTest.output
 }
 
-uploadArchives {
-    repositories.mavenDeployer {
-        pom.project {
-            description 'dexlib2 is a library for reading/modifying/writing Android dex files'
-            scm {
-                url 'https://github.com/JesusFreke/smali/tree/master/dexlib2'
+publishing  {
+    publications {
+        mavenJava(MavenPublication) {
+            pom {
+                description = 'dexlib2 is a library for reading/modifying/writing Android dex files'
+                scm {
+                    url = 'https://github.com/JesusFreke/smali/tree/master/dexlib2'
+                }
             }
         }
     }
